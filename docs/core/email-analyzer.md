@@ -121,10 +121,10 @@ Assembly, once validation passes:
 - `category` / `priority`: parsed directly from the answered option/level (the option
   keys are the domain enums' own snake_case strings).
 - `action_required` / `possible_change`: `true` iff the corresponding `p_yes >= FLAG_THRESHOLD` (0.5).
-- `university_id`: the account's `default_university_id` if set; else, if the
-  `university` question was asked, its answer (`unknown` → `None`, `u{id}` → `Some(id)`);
-  else (the catalog had no universities, so no `university` question) the chosen
-  course's `university_id`, if a course was chosen.
+- `university_id`: the account's `default_university_id` if set; else the chosen
+  course's `university_id`, if a course was chosen (a course is more specific than a
+  university answer); else, if the `university` question was asked, its answer
+  (`unknown` → `None`, `u{id}` → `Some(id)`); else `None`.
 - `course_id`: the `course` answer (`none` → `None`, `c{id}` → `Some(id)`) when the
   `course` question was asked; otherwise `None`.
 - `dates`: one `ResultDate` per date candidate whose answer is not `not_relevant`,

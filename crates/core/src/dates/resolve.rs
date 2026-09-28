@@ -6,27 +6,24 @@ use chrono::{Datelike, Duration, NaiveDate, Weekday};
 /// Resolves a day/month with no explicit year: tries the three candidate years
 /// `received.year() - 1 ..= received.year() + 1` (spec §6.3), keeping the
 /// calendar-valid candidate closest to `received` among those that fall on or
-/// after `received - 30 days`. Falls back to the closest calendar-valid candidate
-/// outside that window when none qualify, and returns `None` only when the
-/// day/month combination is invalid in all three candidate years (e.g. 29
-/// February against three non-leap years).
+/// after `received - 30 days`. Returns `None` when no candidate qualifies —
+/// either the day/month combination is invalid in all three candidate years
+/// (e.g. 29 February against three non-leap years), or every calendar-valid
+/// candidate falls more than 30 days before `received` (spec §6.3: never
+/// earlier than that).
 pub(super) fn infer_year(day: u32, month: u32, received: NaiveDate) -> Option<NaiveDate> {
     let cutoff = received - Duration::days(30);
     let mut within_cutoff: Option<NaiveDate> = None;
-    let mut any: Option<NaiveDate> = None;
 
     for year in [received.year() - 1, received.year(), received.year() + 1] {
         let Some(candidate) = NaiveDate::from_ymd_opt(year, month, day) else {
             continue;
         };
-        if is_closer(candidate, any, received) {
-            any = Some(candidate);
-        }
         if candidate >= cutoff && is_closer(candidate, within_cutoff, received) {
             within_cutoff = Some(candidate);
         }
     }
-    within_cutoff.or(any)
+    within_cutoff
 }
 
 fn is_closer(candidate: NaiveDate, current_best: Option<NaiveDate>, received: NaiveDate) -> bool {

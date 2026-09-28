@@ -13,9 +13,11 @@ pub(super) struct TimeMatch {
 
 /// Looks for a time expression starting within 20 characters after `after` (a
 /// byte offset into `text`, the end of the date match it would attach to — spec
-/// §6.3). Returns the one starting earliest, or `None`.
-pub(super) fn attach(text: &str, after: usize) -> Option<TimeMatch> {
-    let window_end = char_offset(text, after, 40);
+/// §6.3). The search never crosses `boundary` (the start of the next raw date
+/// match, or `text.len()` when there is none), so a time meant for a later date
+/// is never attached to this one. Returns the one starting earliest, or `None`.
+pub(super) fn attach(text: &str, after: usize, boundary: usize) -> Option<TimeMatch> {
+    let window_end = char_offset(text, after, 40).min(boundary);
     let window = &text[after..window_end];
 
     let mut candidates = Vec::new();

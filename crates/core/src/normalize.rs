@@ -15,21 +15,26 @@ pub const MAX_BODY_CHARS: usize = 12_000;
 /// Wide enough that ordinary email paragraphs are not hard-wrapped mid-sentence.
 const HTML_RENDER_WIDTH: usize = 2_000;
 
-/// Number of lines to look ahead of a `De:` line for a matching `Enviado:` line when
-/// detecting an Outlook-style quoted header block.
+/// Number of lines to look ahead of a `De:`/`From:` line for a matching
+/// `Enviado:`/`Sent:` line when detecting an Outlook-style quoted header block.
 const DE_ENVIADO_LOOKAHEAD: usize = 5;
 
 static ON_WROTE_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^on .+ wrote:\s*$").expect("valid regex"));
 static EL_ESCRIBIO_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^el .+ escribi[oó]:\s*$").expect("valid regex"));
+/// Collapses each run of one or more spaces/tabs (but not newlines) to a single
+/// space, so a lone tab is normalized the same as a run of several spaces.
+static WHITESPACE_RUN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[ \t]+").expect("valid regex"));
 
 /// Converts an [`EmailBody`] to plain text, strips quoted replies and signatures,
 /// collapses whitespace and truncates to [`MAX_BODY_CHARS`].
 ///
 /// Steps, in order: HTML→text (if needed) → drop quoted-reply lines/blocks → drop the
-/// signature (everything from a line equal to `-- ` onward) → collapse whitespace (at
-/// most one consecutive blank line, no trailing spaces) → truncate by `char` count.
+/// signature (everything from a line equal to `-- ` onward) → collapse whitespace
+/// (runs of spaces/tabs within a line to one space, at most one consecutive blank
+/// line, no trailing spaces) → truncate by `char` count.
 pub fn normalize_body(body: &EmailBody) -> String {
     let text = match body {
         EmailBody::Text(text) => text.clone(),
@@ -62,7 +67,8 @@ fn html_to_text(html: &str) -> String {
 
 /// Drops lines starting with `>` and everything from the first quote-block marker
 /// (`-----Original Message-----`, `On … wrote:`, `El … escribió:`, an Outlook
-/// `De:`/`Enviado:` header block) onward.
+/// `De:`/`Enviado:` or `From:`/`Sent:` header block — matched even when
+/// `html2text` has rendered the labels as bold Markdown, e.g. `**De:**`) onward.
 fn strip_quoted_reply(text: &str) -> String {
     let lines: Vec<&str> = text.lines().collect();
     let cutoff = find_quote_cutoff(&lines).unwrap_or(lines.len());
@@ -84,20 +90,30 @@ fn find_quote_cutoff(lines: &[&str]) -> Option<usize> {
 }
 
 fn is_quote_marker(lines: &[&str], idx: usize, line: &str) -> bool {
-    let trimmed = line.trim();
+    let trimmed = strip_bold_markers(line.trim());
     if trimmed.eq_ignore_ascii_case("-----Original Message-----") {
         return true;
     }
-    if ON_WROTE_RE.is_match(trimmed) || EL_ESCRIBIO_RE.is_match(trimmed) {
+    if ON_WROTE_RE.is_match(&trimmed) || EL_ESCRIBIO_RE.is_match(&trimmed) {
         return true;
     }
-    if trimmed.to_lowercase().starts_with("de:") {
+    let lower = trimmed.to_lowercase();
+    if lower.starts_with("de:") || lower.starts_with("from:") {
         let lookahead_end = (idx + 1 + DE_ENVIADO_LOOKAHEAD).min(lines.len());
-        return lines[idx + 1..lookahead_end]
-            .iter()
-            .any(|candidate| candidate.trim().to_lowercase().starts_with("enviado:"));
+        return lines[idx + 1..lookahead_end].iter().any(|candidate| {
+            let candidate = strip_bold_markers(candidate.trim()).to_lowercase();
+            candidate.starts_with("enviado:")
+                || candidate.starts_with("enviado el:")
+                || candidate.starts_with("sent:")
+        });
     }
     false
+}
+
+/// Removes Markdown bold markers (`**`) that `html2text` uses to render bold HTML
+/// text, so a bold-rendered header label (`**De:**`) is still recognized as `De:`.
+fn strip_bold_markers(line: &str) -> String {
+    line.replace("**", "")
 }
 
 /// Drops everything from (and including) a line that is exactly `-- ` onward.
@@ -109,13 +125,15 @@ fn strip_signature(text: &str) -> String {
     }
 }
 
-/// Trims trailing whitespace on every line and collapses runs of blank lines to at
+/// Collapses each run of spaces/tabs within each line (including a lone tab) to a
+/// single space, trims trailing whitespace and collapses runs of blank lines to at
 /// most one, then trims the leading/trailing blank lines of the whole text.
 fn collapse_whitespace(text: &str) -> String {
     let mut out = String::new();
     let mut previous_blank = false;
     for line in text.lines() {
-        let trimmed = line.trim_end();
+        let collapsed = WHITESPACE_RUN_RE.replace_all(line, " ");
+        let trimmed = collapsed.trim_end();
         if trimmed.trim().is_empty() {
             if !previous_blank {
                 out.push('\n');
@@ -203,6 +221,40 @@ mod tests {
     }
 
     #[test]
+    fn cuts_at_outlook_de_enviado_el_block() {
+        let body = text(
+            "Contenido nuevo.\n\nDe: Remitente Original <original@uv.es>\nEnviado el: lunes, 1 de septiembre de 2025 10:00\nPara: Usuario <usuario@uv.es>\nAsunto: RE: Algo\n\nContenido citado.",
+        );
+        assert_eq!(normalize_body(&body), "Contenido nuevo.");
+    }
+
+    #[test]
+    fn cuts_at_english_from_sent_block() {
+        let body = text(
+            "New content.\n\nFrom: Original Sender <original@uv.es>\nSent: Monday, September 1, 2025 10:00 AM\nTo: User <user@uv.es>\nSubject: RE: Something\n\nQuoted content.",
+        );
+        assert_eq!(normalize_body(&body), "New content.");
+    }
+
+    #[test]
+    fn cuts_at_bold_markdown_de_enviado_block() {
+        // html2text renders a bold Outlook header label (from `<b>De:</b>`) as
+        // Markdown bold, e.g. `**De:**`.
+        let body = text(
+            "Contenido nuevo.\n\n**De:** Remitente Original <original@uv.es>\n**Enviado:** lunes, 1 de septiembre de 2025 10:00\n**Para:** Usuario <usuario@uv.es>\n**Asunto:** RE: Algo\n\nContenido citado.",
+        );
+        assert_eq!(normalize_body(&body), "Contenido nuevo.");
+    }
+
+    #[test]
+    fn cuts_at_bold_markdown_from_sent_block() {
+        let body = text(
+            "New content.\n\n**From:** Original Sender <original@uv.es>\n**Sent:** Monday, September 1, 2025 10:00 AM\n**To:** User <user@uv.es>\n**Subject:** RE: Something\n\nQuoted content.",
+        );
+        assert_eq!(normalize_body(&body), "New content.");
+    }
+
+    #[test]
     fn signature_after_double_dash_is_removed() {
         let body = text(&format!(
             "Hola,\n\nGracias por la informacion.\n\n{}\nJuan Perez\nUniversidad",
@@ -221,6 +273,12 @@ mod tests {
             normalize_body(&body),
             "Linea uno.\n\nLinea dos.\n\nLinea tres."
         );
+    }
+
+    #[test]
+    fn collapses_runs_of_spaces_and_tabs_within_a_line() {
+        let body = text("Linea   con    varios\tespacios\t\ty tabs.");
+        assert_eq!(normalize_body(&body), "Linea con varios espacios y tabs.");
     }
 
     #[test]
