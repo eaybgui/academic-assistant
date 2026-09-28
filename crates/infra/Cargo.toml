@@ -10,6 +10,7 @@ keyring.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
 async-imap.workspace = true
+futures-util.workspace = true
 tokio-rustls.workspace = true
 webpki-roots.workspace = true
 mail-parser.workspace = true

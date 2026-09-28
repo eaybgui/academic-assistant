@@ -21,6 +21,7 @@ reqwest = { version = "0.13.5", default-features = false, features = ["json", "r
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 keyring = { version = "3.6.3", features = ["windows-native"] }
 async-imap = { version = "0.11.3", default-features = false, features = ["runtime-tokio"] }
+futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 tokio-rustls = "0.26.6"
 webpki-roots = "1.0.9"
 mail-parser = "0.11.9"

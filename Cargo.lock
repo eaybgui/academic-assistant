@@ -46,6 +46,7 @@ dependencies = [
  "async-trait",
  "base64 0.23.1",
  "chrono",
+ "futures-util",
  "indexmap 2.14.2",
  "keyring",
  "mail-parser",
