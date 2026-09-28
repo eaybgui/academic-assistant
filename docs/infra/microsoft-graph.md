@@ -146,11 +146,6 @@ Microsoft's own `error_description` text, which carry no secrets, are included).
   directly from a cursor link; `@removed` entries ignored; the 200-message cap
   (asserting the *unfetched* `nextLink` becomes the cursor); the 400-without-filter
   fallback with client-side discarding of older messages; a 401 mapped to `Auth`.
-- `crates/infra/tests/graph_support/mod.rs` holds `FakeSecretStore`, a minimal
-  in-memory `SecretStore` used only because `academic_infra::secrets::InMemorySecretStore`
-  (Task T7) was implemented in a parallel worktree and unavailable while this task
-  was written. Once T7 is merged, these tests can switch to the real
-  `InMemorySecretStore` and this fake can be deleted.
 - `crates/infra/tests/fixtures/graph/` holds a realistic message payload
   (`message_exam_change.json`, a Spanish exam-reschedule notice) and a token
   response (`token_response.json`, unused by the current tests but kept for future
