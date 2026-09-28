@@ -1,0 +1,18 @@
+From: "Coordinacion" <coordinacion@uv.es>
+To: alumno@uv.es
+Subject: Cambio de aula para el examen
+Date: Wed, 6 Mar 2024 12:00:00 +0100
+Message-ID: <cambio-aula-20240306@uv.es>
+Content-Type: multipart/alternative; boundary="BOUNDARY123"
+
+--BOUNDARY123
+Content-Type: text/plain; charset=UTF-8
+
+El examen de la asignatura cambia de aula. Consulta el aula virtual.
+
+--BOUNDARY123
+Content-Type: text/html; charset=UTF-8
+
+<html><body><p>El <b>examen</b> cambia de aula.</p></body></html>
+
+--BOUNDARY123--
