@@ -2,8 +2,6 @@
 //! token refresh/caching, `test_connection`, and the delta fetch/pagination logic
 //! (including the `$filter` 400 fallback) — all against `wiremock`.
 
-mod graph_support;
-
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
@@ -12,17 +10,16 @@ use wiremock::matchers::{headers, method, path, query_param_contains, query_para
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use academic_core::domain::{account_refresh_token_key, AccountId, SyncCursor, MAX_BATCH};
-use academic_core::ports::{EmailProvider, ProviderError};
+use academic_core::ports::{EmailProvider, ProviderError, SecretStore};
 use academic_infra::graph::{MicrosoftGraphEmailProvider, OAuthConfig};
-
-use graph_support::FakeSecretStore;
+use academic_infra::secrets::InMemorySecretStore;
 
 const ACCOUNT_ID: AccountId = 1;
 const FOLDER: &str = "inbox";
 
 const MESSAGE_FIXTURE: &str = include_str!("fixtures/graph/message_exam_change.json");
 
-fn provider(server: &MockServer, secrets: Arc<FakeSecretStore>) -> MicrosoftGraphEmailProvider {
+fn provider(server: &MockServer, secrets: Arc<InMemorySecretStore>) -> MicrosoftGraphEmailProvider {
     let oauth = OAuthConfig {
         client_id: "test-client-id".into(),
         tenant: "organizations".into(),
@@ -66,8 +63,10 @@ fn message(id: &str, received_at: &str) -> Value {
 #[tokio::test]
 async fn test_connection_refreshes_the_token_and_calls_me() {
     let server = MockServer::start().await;
-    let secrets = Arc::new(FakeSecretStore::new());
-    secrets.seed(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token");
+    let secrets = Arc::new(InMemorySecretStore::default());
+    secrets
+        .set(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token")
+        .unwrap();
 
     mount_token_endpoint(&server, "access-1", "rotated-refresh-token").await;
     Mock::given(method("GET"))
@@ -83,7 +82,7 @@ async fn test_connection_refreshes_the_token_and_calls_me() {
         .expect("test_connection should succeed");
 
     assert_eq!(
-        secrets.get_value(&account_refresh_token_key(ACCOUNT_ID)),
+        secrets.get(&account_refresh_token_key(ACCOUNT_ID)).unwrap(),
         Some("rotated-refresh-token".to_string())
     );
 }
@@ -91,7 +90,7 @@ async fn test_connection_refreshes_the_token_and_calls_me() {
 #[tokio::test]
 async fn test_connection_fails_when_no_refresh_token_is_stored() {
     let server = MockServer::start().await;
-    let secrets = Arc::new(FakeSecretStore::new());
+    let secrets = Arc::new(InMemorySecretStore::default());
 
     let provider = provider(&server, secrets);
     let err = provider
@@ -105,8 +104,10 @@ async fn test_connection_fails_when_no_refresh_token_is_stored() {
 #[tokio::test]
 async fn access_token_is_cached_and_not_refreshed_on_every_call() {
     let server = MockServer::start().await;
-    let secrets = Arc::new(FakeSecretStore::new());
-    secrets.seed(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token");
+    let secrets = Arc::new(InMemorySecretStore::default());
+    secrets
+        .set(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token")
+        .unwrap();
 
     Mock::given(method("POST"))
         .and(path("/organizations/oauth2/v2.0/token"))
@@ -138,8 +139,10 @@ fn since() -> DateTime<Utc> {
 #[tokio::test]
 async fn fetch_new_first_request_has_filter_and_prefer_header_and_maps_the_message() {
     let server = MockServer::start().await;
-    let secrets = Arc::new(FakeSecretStore::new());
-    secrets.seed(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token");
+    let secrets = Arc::new(InMemorySecretStore::default());
+    secrets
+        .set(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token")
+        .unwrap();
     mount_token_endpoint(&server, "access-1", "refresh-2").await;
 
     let fixture_message: Value = serde_json::from_str(MESSAGE_FIXTURE).unwrap();
@@ -185,8 +188,10 @@ async fn fetch_new_first_request_has_filter_and_prefer_header_and_maps_the_messa
 #[tokio::test]
 async fn fetch_new_follows_next_link_until_delta_link() {
     let server = MockServer::start().await;
-    let secrets = Arc::new(FakeSecretStore::new());
-    secrets.seed(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token");
+    let secrets = Arc::new(InMemorySecretStore::default());
+    secrets
+        .set(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token")
+        .unwrap();
     mount_token_endpoint(&server, "access-1", "refresh-2").await;
 
     let next_link = format!(
@@ -230,8 +235,10 @@ async fn fetch_new_follows_next_link_until_delta_link() {
 #[tokio::test]
 async fn fetch_new_resumes_directly_from_a_cursor_link_without_adding_filter() {
     let server = MockServer::start().await;
-    let secrets = Arc::new(FakeSecretStore::new());
-    secrets.seed(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token");
+    let secrets = Arc::new(InMemorySecretStore::default());
+    secrets
+        .set(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token")
+        .unwrap();
     mount_token_endpoint(&server, "access-1", "refresh-2").await;
 
     let cursor_link = format!(
@@ -267,8 +274,10 @@ async fn fetch_new_resumes_directly_from_a_cursor_link_without_adding_filter() {
 #[tokio::test]
 async fn fetch_new_ignores_removed_entries() {
     let server = MockServer::start().await;
-    let secrets = Arc::new(FakeSecretStore::new());
-    secrets.seed(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token");
+    let secrets = Arc::new(InMemorySecretStore::default());
+    secrets
+        .set(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token")
+        .unwrap();
     mount_token_endpoint(&server, "access-1", "refresh-2").await;
 
     let delta_link = format!(
@@ -296,8 +305,10 @@ async fn fetch_new_ignores_removed_entries() {
 #[tokio::test]
 async fn fetch_new_stops_at_max_batch_and_returns_the_next_link_as_cursor() {
     let server = MockServer::start().await;
-    let secrets = Arc::new(FakeSecretStore::new());
-    secrets.seed(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token");
+    let secrets = Arc::new(InMemorySecretStore::default());
+    secrets
+        .set(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token")
+        .unwrap();
     mount_token_endpoint(&server, "access-1", "refresh-2").await;
 
     let messages: Vec<Value> = (0..MAX_BATCH)
@@ -330,8 +341,10 @@ async fn fetch_new_stops_at_max_batch_and_returns_the_next_link_as_cursor() {
 #[tokio::test]
 async fn fetch_new_retries_without_filter_on_400_and_discards_older_messages() {
     let server = MockServer::start().await;
-    let secrets = Arc::new(FakeSecretStore::new());
-    secrets.seed(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token");
+    let secrets = Arc::new(InMemorySecretStore::default());
+    secrets
+        .set(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token")
+        .unwrap();
     mount_token_endpoint(&server, "access-1", "refresh-2").await;
 
     let delta_link = format!(
@@ -371,8 +384,10 @@ async fn fetch_new_retries_without_filter_on_400_and_discards_older_messages() {
 #[tokio::test]
 async fn fetch_new_maps_401_to_auth() {
     let server = MockServer::start().await;
-    let secrets = Arc::new(FakeSecretStore::new());
-    secrets.seed(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token");
+    let secrets = Arc::new(InMemorySecretStore::default());
+    secrets
+        .set(&account_refresh_token_key(ACCOUNT_ID), "seed-refresh-token")
+        .unwrap();
     mount_token_endpoint(&server, "access-1", "refresh-2").await;
 
     Mock::given(method("GET"))
