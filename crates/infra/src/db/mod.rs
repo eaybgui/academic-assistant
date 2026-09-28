@@ -19,6 +19,7 @@ use std::sync::Mutex;
 
 use academic_core::ports::RepoError;
 use chrono::Utc;
+use rusqlite::functions::FunctionFlags;
 use rusqlite::Connection;
 
 use util::map_err;
@@ -54,6 +55,7 @@ impl Database {
     fn from_connection(conn: Connection) -> Result<Self, RepoError> {
         conn.pragma_update(None, "foreign_keys", "ON")
             .map_err(map_err)?;
+        register_unicode_lower(&conn)?;
         apply_migrations(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
@@ -71,8 +73,28 @@ impl Database {
     }
 }
 
+/// Registers `unicode_lower(text)` on `conn`, used by `ResultRepository::query`'s
+/// `search` filter so it matches case-insensitively beyond ASCII (SQLite's built-in
+/// `LIKE` only case-folds `A`-`Z`). Deterministic: same input always yields the same
+/// output, letting SQLite cache/optimize calls. Passes a SQL `NULL` argument straight
+/// through as `NULL` (e.g. `ai_results.sender_name` is nullable) rather than erroring.
+fn register_unicode_lower(conn: &Connection) -> Result<(), RepoError> {
+    conn.create_scalar_function(
+        "unicode_lower",
+        1,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |ctx| {
+            let text = ctx.get::<Option<String>>(0)?;
+            Ok(text.map(|value| value.to_lowercase()))
+        },
+    )
+    .map_err(map_err)
+}
+
 /// Tracks which migrations have been applied, so reopening the same database file
-/// is idempotent.
+/// is idempotent. Applying a pending migration and recording it in
+/// `schema_migrations` happens in a single transaction, so a failure partway through
+/// never leaves the schema updated without the version recorded (or vice versa).
 fn apply_migrations(conn: &Connection) -> Result<(), RepoError> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (\
@@ -89,12 +111,17 @@ fn apply_migrations(conn: &Connection) -> Result<(), RepoError> {
         .map_err(map_err)?;
 
     if !already_applied {
-        conn.execute_batch(MIGRATION_0001).map_err(map_err)?;
-        conn.execute(
+        // `unchecked_transaction` is safe here: `from_connection` runs before the
+        // connection is shared behind its `Mutex`, so nothing else can be using it
+        // concurrently.
+        let tx = conn.unchecked_transaction().map_err(map_err)?;
+        tx.execute_batch(MIGRATION_0001).map_err(map_err)?;
+        tx.execute(
             "INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?1)",
             [Utc::now().to_rfc3339()],
         )
         .map_err(map_err)?;
+        tx.commit().map_err(map_err)?;
     }
 
     Ok(())

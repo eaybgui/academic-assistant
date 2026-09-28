@@ -4,14 +4,22 @@
 use academic_core::ports::RepoError;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 
-/// Maps a `rusqlite` error to the shared [`RepoError`] taxonomy: a constraint
-/// violation (`UNIQUE`, `FOREIGN KEY`, `CHECK`, ...) becomes `Conflict`, a query that
-/// unexpectedly returned no rows becomes `NotFound`, everything else becomes
-/// `Storage`. The underlying SQLite message never contains secrets (there are none
-/// in this database), so it is safe to surface directly.
+/// Maps a `rusqlite` error to the shared [`RepoError`] taxonomy: a query that
+/// unexpectedly returned no rows becomes `NotFound`. A `FOREIGN KEY` violation (e.g.
+/// inserting a course under a university id that doesn't exist) also becomes
+/// `NotFound`, since it means the referenced row is missing; a `UNIQUE` or `CHECK`
+/// violation becomes `Conflict`. Everything else becomes `Storage`. The underlying
+/// SQLite message never contains secrets (there are none in this database), so it is
+/// safe to surface directly.
 pub(crate) fn map_err(err: rusqlite::Error) -> RepoError {
     match &err {
         rusqlite::Error::QueryReturnedNoRows => RepoError::NotFound,
+        rusqlite::Error::SqliteFailure(sqlite_err, _)
+            if sqlite_err.code == rusqlite::ErrorCode::ConstraintViolation
+                && sqlite_err.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_FOREIGNKEY =>
+        {
+            RepoError::NotFound
+        }
         rusqlite::Error::SqliteFailure(sqlite_err, _)
             if sqlite_err.code == rusqlite::ErrorCode::ConstraintViolation =>
         {

@@ -60,6 +60,11 @@ header `Authorization: Bearer <api_key>`, JSON body:
 }
 ```
 
+The adapter decodes each answer according to the type of the *question* asked with the
+same id (`Question::Noul`/`Choice`/`Score` in the `QuestionSet` passed to `ask`) — it does
+not rely on the `"type"` field inside the answer object, since a real jev reply is not
+guaranteed to include one. An answer id that isn't in `questions` is ignored.
+
 - `noul` → `Answer::Noul { p_yes: noul, confidence }`.
 - `choice` → `Answer::Choice { choice, confidence }` (the `probabilities` object, if
   present, is not used — jev already resolved the argmax server-side).
@@ -71,13 +76,16 @@ header `Authorization: Bearer <api_key>`, JSON body:
 - `confidence` is `Option<f32>` on every variant; absent in the JSON → `None`.
 - Any top-level fields not listed above (`model`, `usage`, `legend`, `score` on a score
   answer) are read from the response but not surfaced in the `AnswerSet`.
+- Any other malformed answer for a known id (e.g. a `noul` question's answer missing its
+  `noul` field, or a `choice` answer whose `choice` isn't a string) fails the whole call
+  with `ModelError::InvalidResponse`, naming the offending question id.
 
 ### Errors and retries
 
 | Condition | Result |
 |---|---|
-| HTTP 401 | `ModelError::Auth`, no retry |
-| HTTP 422 | `ModelError::InvalidResponse`, no retry (request rejected as invalid) |
+| HTTP 401 or 403 | `ModelError::Auth`, no retry |
+| HTTP 422, or any other 4xx (400, 404, ...) | `ModelError::InvalidResponse`, no retry (request rejected as invalid) |
 | HTTP 429 | retried; `ModelError::RateLimited` if still failing after retries |
 | HTTP 529, any other 5xx, or a transport error (timeout, connection refused, ...) | retried; `ModelError::Unavailable` if still failing after retries |
 | 2xx with a body that isn't valid JSON matching the expected shape | `ModelError::InvalidResponse`, no retry |
@@ -150,9 +158,14 @@ doesn't match its question's type/options/range makes the whole call fail with
 ## Testing
 
 Both adapters are tested against `wiremock` in `crates/infra/tests/jev.rs` and
-`crates/infra/tests/ollama.rs`: request shape (body, headers, schema), response mapping,
-and every error path above, including jev's retry-then-succeed and retry-then-fail
-cases (with a near-zero retry base so the suite stays fast).
+`crates/infra/tests/ollama.rs`: request shape (body, headers, schema), response mapping
+(including a response whose answers omit the `"type"` field entirely), and every error
+path above, including jev's retry-then-succeed and retry-then-fail cases (with a
+near-zero retry base so the suite stays fast).
+
+`describe_transport_error` (turning a `reqwest::Error` into the short, generic message
+used above) is shared by both adapters via the crate-private `http_util` module
+(`crates/infra/src/http_util.rs`), rather than duplicated in each.
 
 Each file also has one `#[ignore]`d test against the real provider:
 - `jev.rs::live_jev_answers_a_simple_noul_question` — reads `JEV_API_KEY`; a no-op

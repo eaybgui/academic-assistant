@@ -186,6 +186,108 @@ async fn maps_noul_choice_and_score_answers_with_confidence() {
 }
 
 #[tokio::test]
+async fn maps_answers_that_have_no_type_field() {
+    // The adapter must decode each answer from the type of the question it answers,
+    // not from a `"type"` field in the response — which real jev replies may omit.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/systemone"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "model": "jev-1.13.0",
+            "answers": {
+                "relevant": { "noul": 0.6, "confidence": null },
+                "category": { "choice": "task", "confidence": null },
+                "priority": {
+                    "probabilities": { "0": 0.1, "1": 0.8, "2": 0.1, "3": 0.0 },
+                    "confidence": null
+                }
+            },
+            "usage": { "input_tokens": 1, "output_tokens": 1 },
+        })))
+        .mount(&server)
+        .await;
+
+    let answers = model_for(&server)
+        .ask(&sample_state(), &sample_questions())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        answers.get("relevant"),
+        Some(&Answer::Noul {
+            p_yes: 0.6,
+            confidence: None,
+        })
+    );
+    assert_eq!(
+        answers.get("category"),
+        Some(&Answer::Choice {
+            choice: "task".to_string(),
+            confidence: None,
+        })
+    );
+    assert_eq!(
+        answers.get("priority"),
+        Some(&Answer::Score {
+            level: 1,
+            confidence: None,
+        })
+    );
+}
+
+#[tokio::test]
+async fn answer_for_an_unknown_question_id_is_ignored() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/systemone"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "model": "jev-1.13.0",
+            "answers": {
+                "relevant": { "noul": 0.9, "confidence": null },
+                "not_asked": { "noul": 0.1, "confidence": null },
+            },
+            "usage": { "input_tokens": 1, "output_tokens": 1 },
+        })))
+        .mount(&server)
+        .await;
+
+    let answers = model_for(&server)
+        .ask(&sample_state(), &sample_questions())
+        .await
+        .unwrap();
+
+    assert_eq!(answers.len(), 1);
+    assert!(answers.contains_key("relevant"));
+    assert!(!answers.contains_key("not_asked"));
+}
+
+#[tokio::test]
+async fn malformed_answer_for_a_known_id_is_invalid_response_naming_it() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/systemone"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "model": "jev-1.13.0",
+            "answers": {
+                // "relevant" is a Noul question but the answer has no "noul" field.
+                "relevant": { "confidence": 0.5 },
+            },
+            "usage": { "input_tokens": 1, "output_tokens": 1 },
+        })))
+        .mount(&server)
+        .await;
+
+    let err = model_for(&server)
+        .ask(&sample_state(), &sample_questions())
+        .await
+        .unwrap_err();
+    match err {
+        ModelError::InvalidResponse(message) => assert!(message.contains("relevant")),
+        other => panic!("expected InvalidResponse, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn missing_answer_key_is_simply_absent_from_the_result() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -229,11 +331,45 @@ async fn status_401_maps_to_auth_without_retrying() {
 }
 
 #[tokio::test]
+async fn status_403_maps_to_auth_without_retrying() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/systemone"))
+        .respond_with(ResponseTemplate::new(403))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let err = model_for(&server)
+        .ask(&sample_state(), &sample_questions())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ModelError::Auth));
+}
+
+#[tokio::test]
 async fn status_422_maps_to_invalid_response_without_retrying() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/systemone"))
         .respond_with(ResponseTemplate::new(422))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let err = model_for(&server)
+        .ask(&sample_state(), &sample_questions())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ModelError::InvalidResponse(_)));
+}
+
+#[tokio::test]
+async fn status_404_maps_to_invalid_response_without_retrying() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/systemone"))
+        .respond_with(ResponseTemplate::new(404))
         .expect(1)
         .mount(&server)
         .await;

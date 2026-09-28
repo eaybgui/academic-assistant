@@ -5,6 +5,7 @@
 pub mod db;
 pub mod factory;
 pub mod graph;
+mod http_util;
 pub mod imap;
 pub mod jev;
 pub mod ollama;

@@ -172,6 +172,44 @@ fn query_filters_by_search_case_insensitive_substring() {
 }
 
 #[test]
+fn query_search_is_unicode_case_insensitive() {
+    let db = Database::open_in_memory().unwrap();
+    let account = insert_account(&db, "acc");
+    let run_id = insert_run(&db);
+    seed(
+        &db,
+        account.id,
+        run_id,
+        "1",
+        "Cambio de horario de ÁLGEBRA",
+        dt(2026, 9, 20),
+        Category::Change,
+        Priority::Medium,
+        vec![],
+    );
+    seed(
+        &db,
+        account.id,
+        run_id,
+        "2",
+        "Welcome newsletter",
+        dt(2026, 9, 21),
+        Category::Notice,
+        Priority::Low,
+        vec![],
+    );
+
+    // Lowercase, accented search term must match the accented uppercase subject.
+    let query = ResultQuery {
+        search: Some("álgebra".to_string()),
+        ..base_query()
+    };
+    let page = db.query(&query, today()).unwrap();
+    assert_eq!(page.items.len(), 1);
+    assert_eq!(page.items[0].subject, "Cambio de horario de ÁLGEBRA");
+}
+
+#[test]
 fn query_search_escapes_percent_and_underscore_wildcards() {
     let db = Database::open_in_memory().unwrap();
     let account = insert_account(&db, "acc");

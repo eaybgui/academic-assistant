@@ -12,6 +12,8 @@ use serde_json::{Map, Value};
 use academic_core::domain::ModelDescriptor;
 use academic_core::ports::{Answer, AnswerSet, ModelError, Question, QuestionSet, StructuredModel};
 
+use crate::http_util::describe_transport_error;
+
 const CHAT_PATH: &str = "/api/chat";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 const SYSTEM_PROMPT: &str =
@@ -79,16 +81,6 @@ impl StructuredModel for OllamaModel {
         })?;
 
         parse_answers(&parsed.message.content, questions)
-    }
-}
-
-fn describe_transport_error(err: &reqwest::Error) -> String {
-    if err.is_timeout() {
-        "request timed out".to_string()
-    } else if err.is_connect() {
-        "could not connect to the provider".to_string()
-    } else {
-        "request failed".to_string()
     }
 }
 
