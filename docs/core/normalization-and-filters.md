@@ -37,20 +37,24 @@ steps, always in this order:
    - A line matching `On .+ wrote:` (case-insensitive; English clients).
    - A line matching `El .+ escribi[oó]:` (case-insensitive; Spanish clients; accent on
      `escribió` optional).
-   - A line starting with `De:` (case-insensitive) that is followed, within the next 5
-     lines, by a line starting with `Enviado:` (case-insensitive) — an Outlook-style
-     forwarded/replied header block (`De:`/`Enviado:`/`Para:`/`Asunto:`).
-   These two removals combine correctly regardless of which marker appears first in the
+   - A line starting with `De:` or `From:` (case-insensitive) that is followed, within
+     the next 5 lines, by a line starting with `Enviado:`, `Enviado el:` or `Sent:`
+     (case-insensitive) — an Outlook-style forwarded/replied header block
+     (`De:`/`Enviado:`/`Para:`/`Asunto:` or `From:`/`Sent:`/`To:`/`Subject:`). Markdown
+     bold markers (`**`) are stripped from each line before matching, so a header block
+     `html2text` has rendered from bold HTML (e.g. `**De:**` / `**Enviado:**`) is still
+     recognized.
+   These removals combine correctly regardless of which marker appears first in the
    text, since each is a monotonic truncation (the result always keeps only the text
    before the earliest marker).
 3. **Strip signature.** Everything from a line that is *exactly* `-- ` (RFC 3676 sig
    delimiter: two dashes and a trailing space) onward is dropped. This runs on the
    output of step 2, before whitespace is collapsed, because collapsing would trim the
    delimiter's trailing space and make it unmatchable.
-4. **Collapse whitespace.** Trailing whitespace is trimmed from every line; runs of two
-   or more consecutive blank lines are collapsed to at most one blank line; the whole
-   result is trimmed of leading/trailing blank lines. Leading whitespace within a line
-   is preserved.
+4. **Collapse whitespace.** Every run of one or more consecutive spaces/tabs within a
+   line (leading, trailing or internal — including a lone tab) is collapsed to a single
+   space; runs of two or more consecutive blank lines are collapsed to at most one
+   blank line; the whole result is trimmed of leading/trailing blank lines.
 5. **Truncate.** The text is cut to at most `MAX_BODY_CHARS` (12,000) `char`s — counted
    as Unicode scalar values, never bytes, so a multibyte character is never split.
 
@@ -125,15 +129,18 @@ cargo test -p academic-core --lib filters
 ```
 
 Unit tests live in `#[cfg(test)] mod tests` at the bottom of each file and cover: HTML→
-text conversion; `>`-line removal; each of the four quote-block markers; signature
-removal; whitespace collapsing; multibyte-safe truncation at `MAX_BODY_CHARS`; hash
-stability/case-insensitivity/body-sensitivity; every `FilterReason`; the `Keep` case;
-domain-vs-subdomain matching; blank blocked-entry handling; and filter-order precedence.
+text conversion; `>`-line removal; each quote-block marker, including the Spanish
+`Enviado el:` spelling, the English `From:`/`Sent:` pair, and both `De:`/`Enviado:` and
+`From:`/`Sent:` rendered as bold Markdown; signature removal; whitespace collapsing
+(both blank-line runs and in-line space/tab runs); multibyte-safe truncation at
+`MAX_BODY_CHARS`; hash stability/case-insensitivity/body-sensitivity; every
+`FilterReason`; the `Keep` case; domain-vs-subdomain matching; blank blocked-entry
+handling; and filter-order precedence.
 
 ## Known limitations
 
 - Quote-block detection is line-pattern based, not a full email-thread parser; unusual
-  or localized mail-client reply headers other than the four listed patterns are not
+  or localized mail-client reply headers other than the patterns listed above are not
   recognized and their quoted content is not stripped (only bare `>`-prefixed lines
   within them are removed).
 - `html2text` rendering (e.g. how tables, links or emphasis are flattened to text) is
