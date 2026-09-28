@@ -274,6 +274,30 @@ fn time_not_attached_when_too_far_away() {
     assert_eq!(out[0].time, None);
 }
 
+#[test]
+fn time_attachment_does_not_swallow_the_next_date() {
+    let out = extract(
+        "",
+        "el 27 de octubre o el 28 de octubre a las 10:00",
+        received(),
+    );
+    assert_eq!(out.len(), 2);
+    assert_eq!(out[0].date, date(2026, 10, 27));
+    assert_eq!(out[0].time, None);
+    assert_eq!(out[1].date, date(2026, 10, 28));
+    assert_eq!(out[1].time, Some(time(10, 0)));
+}
+
+#[test]
+fn time_attachment_does_not_swallow_the_next_relative_date() {
+    let out = extract("", "hoy y mañana a las 10", received());
+    assert_eq!(out.len(), 2);
+    assert_eq!(out[0].date, date(2026, 9, 28));
+    assert_eq!(out[0].time, None);
+    assert_eq!(out[1].date, date(2026, 9, 29));
+    assert_eq!(out[1].time, Some(time(10, 0)));
+}
+
 // ---- Morning exclusions ("mañana" meaning "morning", not "tomorrow") --------
 
 #[test]
@@ -329,6 +353,21 @@ fn year_inference_stays_in_same_year_within_30_day_window() {
     let out = extract("", "Nos vemos el 1 de septiembre.", received());
     assert_eq!(out.len(), 1);
     assert_eq!(out[0].date, date(2026, 9, 1));
+}
+
+#[test]
+fn year_inference_drops_candidate_when_only_valid_year_is_more_than_30_days_before_received() {
+    // received.year() - 1 == 2024 (leap, so 29 February is valid there); 2025 and
+    // 2026 are not leap years, so that is the only calendar-valid candidate among
+    // the three tried — and it falls more than 30 days before `received`, so spec
+    // §6.3 ("never earlier than 30 days before received_at") requires dropping it
+    // rather than falling back to it.
+    let out = extract(
+        "",
+        "Nos vemos el 29 de febrero.",
+        received_at("2025-09-28T09:00:00+02:00"),
+    );
+    assert!(out.is_empty());
 }
 
 // ---- Invalid dates, duplicates, ordering, cap -----------------------------

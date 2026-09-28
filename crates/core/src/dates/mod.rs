@@ -97,7 +97,7 @@ fn extract_from_text(text: &str, received: NaiveDate, out: &mut Vec<DateCandidat
     raw.sort_by(|a, b| a.start.cmp(&b.start).then(b.end.cmp(&a.end)));
 
     let mut cursor = 0usize;
-    for m in raw {
+    for (i, m) in raw.iter().enumerate() {
         if m.start < cursor {
             continue; // overlaps a match already kept (or already ruled invalid)
         }
@@ -107,9 +107,17 @@ fn extract_from_text(text: &str, received: NaiveDate, out: &mut Vec<DateCandidat
             continue; // invalid calendar date (e.g. 31/02) — dropped, spec §6.3
         };
 
+        // A time may not be attached past the start of the next raw date match, so
+        // that a time meant for a later date is never stolen by this one (which
+        // would also make that later date look like it overlaps and get skipped).
+        let time_boundary = raw[i + 1..]
+            .iter()
+            .find(|next| next.start >= m.end)
+            .map_or(text.len(), |next| next.start);
+
         let mut span_end = m.end;
         let mut time: Option<NaiveTime> = None;
-        if let Some(found) = time::attach(text, m.end) {
+        if let Some(found) = time::attach(text, m.end, time_boundary) {
             time = Some(found.time);
             span_end = found.end;
         }

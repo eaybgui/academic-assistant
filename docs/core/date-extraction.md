@@ -26,7 +26,8 @@ capped at `MAX_CANDIDATES`.
 - `relative.rs` — `hoy`/`today`, `mañana`/`tomorrow`, `pasado mañana`,
   `(el) próximo|próxima <weekday>` / `next <weekday>`.
 - `time.rs` — time-of-day recognizer, attached to a date when it appears within
-  20 characters after it.
+  20 characters after it, never crossing into the start of the next raw date
+  match (so a time meant for a later date is never attached to this one).
 - `resolve.rs` — missing-year inference and "next weekday" computation.
 - `vocab.rs` — the Spanish/English month and weekday name tables shared by the
   recognizers above.
@@ -62,7 +63,11 @@ capped at `MAX_CANDIDATES`.
 `10:00`, `10.30`, `10h`, `10:00h`, `10:00 h`, `a las 10`, `a las 10:30`,
 English `10am` / `3 pm`. Hours 0–23, minutes 0–59 (12-hour `am`/`pm` forms use
 1–12). When present, the time is included in the candidate's `span` and in
-`DateCandidate.time`.
+`DateCandidate.time`. The 20-character window never crosses the start of the
+next raw date match in the text — e.g. in "el 27 de octubre o el 28 de
+octubre a las 10:00" the `10:00` attaches to 28 October, not 27 October, so
+27 October is still returned (with no time) instead of being swallowed into
+the first candidate's span and then dropped as a false overlap.
 
 ## Year resolution
 
@@ -71,12 +76,14 @@ English `10am` / `3 pm`. Hours 0–23, minutes 0–59 (12-hour `am`/`pm` forms u
 - When no year is given, the day/month is tried against the three candidate
   years `received_at.year() - 1 ..= received_at.year() + 1`. Among the
   calendar-valid candidates that fall on or after `received_at - 30 days`, the
-  one closest to `received_at` is kept. If none of the three years produce a
-  date on or after that cutoff (all calendar-valid candidates are further than
-  30 days in the past), the closest calendar-valid candidate is used instead,
-  ignoring the cutoff. The day/month is dropped entirely only when it is
-  invalid in all three candidate years (e.g. 29 February against three
-  non-leap years).
+  one closest to `received_at` is kept. The day/month is dropped entirely
+  (the candidate is discarded, not resolved) when no calendar-valid candidate
+  satisfies that cutoff — either because the day/month is invalid in all
+  three candidate years (e.g. 29 February against three non-leap years), or
+  because every calendar-valid candidate falls more than 30 days before
+  `received_at`. Spec §6.3 requires the resolved date to never be earlier
+  than 30 days before `received_at`, so there is no fallback outside the
+  cutoff window.
 
 ## Validation, ordering, deduplication
 
@@ -103,10 +110,14 @@ matches resolve to invalid dates, yields an empty `Vec`.
 `received_at = 2026-09-28T09:00:00+02:00`, a Monday, unless otherwise noted):
 every absolute format, the weekday-prefix span, every relative form (including
 both "próximo lunes" landing next week and "próximo viernes" landing this same
-week), every time form, all four `mañana`-as-morning exclusions, year inference
-wrapping forward and backward across a new year plus a same-year case, an
-invalid date being dropped, a duplicate date keeping the first span, capping at
-20 candidates with explicit-year dates, and subject being scanned before body.
+week), every time form (including two adjacent dates where a trailing time must
+attach only to the second one, for both absolute and relative dates), all four
+`mañana`-as-morning exclusions, year inference wrapping forward and backward
+across a new year, a same-year case, and a case where the only calendar-valid
+candidate falls outside the 30-day cutoff and must be dropped rather than
+returned; an invalid date being dropped, a duplicate date keeping the first
+span, capping at 20 candidates with explicit-year dates, and subject being
+scanned before body.
 Run with `cargo test -p academic-core dates::`.
 
 ## Known limitations
