@@ -249,7 +249,7 @@ The model only classifies candidates; it never computes dates.
 - Every asked question must have an answer of the matching type with a valid option/level; otherwise `ModelError::InvalidResponse`.
 - `relevant.p_yes < 0.4` → `Irrelevant`. Threshold constant `RELEVANCE_THRESHOLD = 0.4` (conservative).
 - `action_required`, `possible_change`: `p_yes ≥ 0.5`.
-- `university_id`: account default → else `university` choice (`unknown` → None) → else the chosen course's university.
+- `university_id`: account default → else the chosen course's university (a course is more specific than a university answer) → else `university` choice (`unknown` → None).
 - `course_id`: `course` choice (`none` → None).
 - Dates: candidates whose answer is `not_relevant` are dropped.
 - `confidence`: minimum of all present answer confidences; `None` when none are present.
@@ -260,7 +260,8 @@ The model only classifies candidates; it never computes dates.
 ### 7.1 JevModel
 - `POST https://api.typesafe.ai/v1/systemone`, header `Authorization: Bearer <key>` (key from `SecretStore`), JSON `{ "model": <setting, default "jev-latest">, "state": ..., "questions": { id: { "type", "instructions", "criteria" } } }`. Choice criteria = options object; Score criteria = levels array; Noul has no criteria.
 - Response mapping: noul → `answers[id].noul` as `p_yes`; choice → `answers[id].choice`; score → level = argmax of `answers[id].probabilities` (keys are string indices); `confidence` when present.
-- Errors: 401 → `Auth`; 422 → `InvalidResponse`; 429 → retry, then `RateLimited`; 529/5xx/network → retry, then `Unavailable`. 3 attempts, exponential backoff (1 s, 2 s, 4 s). Timeout 60 s.
+- Errors: 401/403 → `Auth`; 422 and other 4xx → `InvalidResponse` (no retry); 429 → retry, then `RateLimited`; 529/5xx/network → retry, then `Unavailable`. Up to 3 retries after the first request, exponential backoff (1 s, 2 s, 4 s). Timeout 60 s.
+- Answers are decoded according to the type of the question asked with the same id (the adapter does not rely on a `type` field in the response).
 
 ### 7.2 OllamaModel
 - `POST {base_url}/api/chat` (default `http://localhost:11434`), `stream: false`, `think: false`, `options.temperature: 0`, `format`: JSON schema object with one required property per question — Noul → `boolean`, Choice → string `enum` of option keys, Score → integer `enum` `[0..n-1]`.
