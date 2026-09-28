@@ -48,9 +48,17 @@ impl Database {
 `schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT)` table (created
 directly in `mod.rs`, not part of the migration file itself) tracks which
 migrations have run. `Database::open`/`open_in_memory` check whether version `1` is
-recorded; if not, they run `0001_init.sql` and record it. Reopening an
+recorded; if not, they run `0001_init.sql` and record it, both inside one
+`rusqlite` transaction (`Connection::unchecked_transaction`, safe here since this runs
+before the connection is shared behind its `Mutex`) — a failure partway through never
+leaves the schema applied without the version recorded, or vice versa. Reopening an
 already-migrated file is therefore a no-op beyond that check — safe to call on
 every app startup.
+
+`Database::open`/`open_in_memory` also register a `unicode_lower(text)` SQL scalar
+function on the connection (see "Behavior notes" below), independently of migrations —
+this requires the `rusqlite` crate's `functions` Cargo feature, enabled on the workspace
+dependency in the root `Cargo.toml`.
 
 ## Column encoding
 
@@ -75,8 +83,11 @@ every app startup.
 `util::map_err` is the single place that turns a `rusqlite::Error` into a
 `RepoError`:
 
-- `rusqlite::Error::SqliteFailure` with `ErrorCode::ConstraintViolation` (a
-  `UNIQUE`, `FOREIGN KEY` or `CHECK` violation) → `RepoError::Conflict(<sqlite
+- `rusqlite::Error::SqliteFailure` with `ErrorCode::ConstraintViolation` and extended
+  code `SQLITE_CONSTRAINT_FOREIGNKEY` (a `FOREIGN KEY` violation, e.g. `add_course` on a
+  `university_id` that doesn't exist) → `RepoError::NotFound`, since it means the row
+  the new row references is missing.
+- Any other `ConstraintViolation` (`UNIQUE` or `CHECK`) → `RepoError::Conflict(<sqlite
   message>)`. The SQLite message never contains secrets (there are none in this
   database), so it is safe to surface directly.
 - `rusqlite::Error::QueryReturnedNoRows` → `RepoError::NotFound`.
@@ -89,6 +100,14 @@ additionally check the affected-row count and return `RepoError::NotFound` when 
 is zero, since a `rusqlite::execute` with no matching row does not itself error.
 
 ## Behavior notes
+
+### `unicode_lower` SQL function
+
+`Database::open`/`open_in_memory` register a deterministic scalar function
+`unicode_lower(text)` on the connection (`db::register_unicode_lower`, in `mod.rs`),
+implemented with Rust's `str::to_lowercase`. It passes a SQL `NULL` argument straight
+through as `NULL` rather than erroring, since it's applied to nullable columns
+(`ai_results.sender_name`) in `ResultRepository::query`'s `search` filter (see below).
 
 ### Cascades
 
@@ -115,9 +134,12 @@ each other purely by both lacking a header.
 - Filters (`search`, `seen`, `category`, `account_id`, `course_id`) combine with
   `AND`; only the filters actually set in `ResultQuery` are applied.
 - `search` is a case-insensitive substring match over `subject`, `sender_name` and
-  `sender_email`, using `LIKE ... ESCAPE '\'` with the user's `%`, `_` and `\`
-  escaped first, so literal wildcard characters in the search term cannot expand
-  the match.
+  `sender_email`, using `unicode_lower(column) LIKE unicode_lower(?) ESCAPE '\'` (both
+  sides lowercased through the connection-registered `unicode_lower` scalar function —
+  see below) with the user's `%`, `_` and `\` escaped first, so literal wildcard
+  characters in the search term cannot expand the match. SQLite's built-in `LIKE` only
+  case-folds ASCII `A`-`Z`; `unicode_lower` uses Rust's `str::to_lowercase`, so e.g.
+  `"álgebra"` matches `"ÁLGEBRA"`.
 - `total` in the returned `Page` counts every match ignoring `limit`/`offset`.
 - Sort semantics:
   - `Upcoming`: a `LEFT JOIN` subquery computes each result's minimum

@@ -52,3 +52,25 @@ fn keyring_store_round_trips_a_value() {
     store.delete(&key).unwrap();
     assert_eq!(store.get(&key).unwrap(), None);
 }
+
+/// Touches the real Windows Credential Manager with a value around 2 KB, well past the
+/// 1280-char cap `keyring`'s UTF-16 `set_password` would impose (values are stored as
+/// raw UTF-8 bytes via `set_secret`/`get_secret` instead). Run explicitly with:
+/// `cargo test -p academic-infra --test secrets -- --ignored`.
+#[test]
+#[ignore]
+fn keyring_store_round_trips_a_large_value() {
+    let key = format!("academic-assistant/test/{:x}", rand::random::<u64>());
+    let store = KeyringSecretStore;
+    let value: String = "token-chunk-".repeat(160); // ~1.9 KB.
+
+    // Clean slate in case a previous failed run left this key behind.
+    store.delete(&key).unwrap();
+    assert_eq!(store.get(&key).unwrap(), None);
+
+    store.set(&key, &value).unwrap();
+    assert_eq!(store.get(&key).unwrap(), Some(value));
+
+    store.delete(&key).unwrap();
+    assert_eq!(store.get(&key).unwrap(), None);
+}

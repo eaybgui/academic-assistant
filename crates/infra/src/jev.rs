@@ -12,6 +12,8 @@ use serde_json::{Map, Value};
 use academic_core::domain::ModelDescriptor;
 use academic_core::ports::{Answer, AnswerSet, ModelError, Question, QuestionSet, StructuredModel};
 
+use crate::http_util::describe_transport_error;
+
 /// Base URL of the jev API.
 pub const JEV_BASE_URL: &str = "https://api.typesafe.ai";
 
@@ -71,7 +73,7 @@ impl StructuredModel for JevModel {
         let mut attempt: u32 = 0;
         loop {
             attempt += 1;
-            match send_once(&self.http, &url, &self.api_key, &body).await {
+            match send_once(&self.http, &url, &self.api_key, &body, questions).await {
                 Ok(answers) => return Ok(answers),
                 Err(Outcome::Fatal(err)) => return Err(err),
                 Err(Outcome::Retryable(err)) => {
@@ -98,6 +100,7 @@ async fn send_once(
     url: &str,
     api_key: &str,
     body: &Value,
+    questions: &QuestionSet,
 ) -> Result<AnswerSet, Outcome> {
     let response = http
         .post(url)
@@ -111,16 +114,19 @@ async fn send_once(
         })?;
 
     let status = response.status().as_u16();
-    if status == 401 {
+    if status == 401 || status == 403 {
         return Err(Outcome::Fatal(ModelError::Auth));
-    }
-    if status == 422 {
-        return Err(Outcome::Fatal(ModelError::InvalidResponse(
-            "the provider rejected the request as invalid".to_string(),
-        )));
     }
     if status == 429 {
         return Err(Outcome::Retryable(ModelError::RateLimited));
+    }
+    if (400..500).contains(&status) {
+        // 422 and any other 4xx (400, 404, ...) are treated as the provider rejecting
+        // the request as invalid and are not retried. 401/403/429 were already handled
+        // above.
+        return Err(Outcome::Fatal(ModelError::InvalidResponse(format!(
+            "the provider rejected the request as invalid (status {status})"
+        ))));
     }
     if !(200..300).contains(&status) {
         // 529 (overloaded), other 5xx and any other unexpected status are treated as a
@@ -140,21 +146,7 @@ async fn send_once(
         ))
     })?;
 
-    Ok(parsed
-        .answers
-        .into_iter()
-        .filter_map(|(id, raw)| convert_answer(raw).map(|answer| (id, answer)))
-        .collect())
-}
-
-fn describe_transport_error(err: &reqwest::Error) -> String {
-    if err.is_timeout() {
-        "request timed out".to_string()
-    } else if err.is_connect() {
-        "could not connect to the provider".to_string()
-    } else {
-        "request failed".to_string()
-    }
+    convert_answers(parsed.answers, questions).map_err(Outcome::Fatal)
 }
 
 fn build_request_body(model: &str, state: &Value, questions: &QuestionSet) -> Value {
@@ -197,41 +189,90 @@ fn question_to_json(question: &Question) -> Value {
 #[derive(Debug, Deserialize)]
 struct JevResponse {
     #[serde(default)]
-    answers: HashMap<String, RawAnswer>,
+    answers: HashMap<String, Value>,
 }
 
+/// Shape of a `noul` answer's fields, decoded without relying on a `"type"` tag.
 #[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum RawAnswer {
-    Noul {
-        noul: f32,
-        confidence: Option<f32>,
-    },
-    Choice {
-        choice: String,
-        confidence: Option<f32>,
-    },
-    Score {
-        #[serde(default)]
-        probabilities: HashMap<String, f32>,
-        confidence: Option<f32>,
-    },
+struct NoulRaw {
+    noul: f32,
+    confidence: Option<f32>,
 }
 
-/// Converts one raw answer into the domain `Answer`. Returns `None` when a `Score`
-/// answer's `probabilities` map has no parseable index (nothing sensible to report);
-/// the id is then simply absent from the returned `AnswerSet`, same as a missing key.
-fn convert_answer(raw: RawAnswer) -> Option<Answer> {
-    match raw {
-        RawAnswer::Noul { noul, confidence } => Some(Answer::Noul {
-            p_yes: noul,
-            confidence,
-        }),
-        RawAnswer::Choice { choice, confidence } => Some(Answer::Choice { choice, confidence }),
-        RawAnswer::Score {
-            probabilities,
-            confidence,
-        } => argmax_level(&probabilities).map(|level| Answer::Score { level, confidence }),
+/// Shape of a `choice` answer's fields, decoded without relying on a `"type"` tag.
+#[derive(Debug, Deserialize)]
+struct ChoiceRaw {
+    choice: String,
+    confidence: Option<f32>,
+}
+
+/// Shape of a `score` answer's fields, decoded without relying on a `"type"` tag.
+#[derive(Debug, Deserialize)]
+struct ScoreRaw {
+    #[serde(default)]
+    probabilities: HashMap<String, f32>,
+    confidence: Option<f32>,
+}
+
+/// Decodes the raw `answers` object into an [`AnswerSet`]. Each answer is decoded
+/// according to the type of the question that was asked with the same id — the jev
+/// response is not trusted to carry a reliable `"type"` field of its own. An id absent
+/// from `questions` is ignored; a malformed answer for a known id fails the whole call
+/// with `InvalidResponse` naming that id.
+fn convert_answers(
+    raw_answers: HashMap<String, Value>,
+    questions: &QuestionSet,
+) -> Result<AnswerSet, ModelError> {
+    let mut answers = AnswerSet::new();
+    for (id, raw) in raw_answers {
+        let Some(question) = questions.get(&id) else {
+            continue;
+        };
+        match decode_answer(question, raw) {
+            Ok(Some(answer)) => {
+                answers.insert(id, answer);
+            }
+            Ok(None) => {}
+            Err(()) => {
+                return Err(ModelError::InvalidResponse(format!(
+                    "answer for question \"{id}\" did not match the requested schema"
+                )));
+            }
+        }
+    }
+    Ok(answers)
+}
+
+/// Decodes one raw answer according to `question`'s type. Returns `Ok(None)` only for a
+/// `Score` answer whose `probabilities` map has no parseable index (malformed/empty) —
+/// nothing sensible to report, so that answer is dropped rather than failing the whole
+/// call. Any other shape mismatch (missing/wrong-typed field) is `Err(())`, surfaced by
+/// the caller as `InvalidResponse`.
+fn decode_answer(question: &Question, raw: Value) -> Result<Option<Answer>, ()> {
+    match question {
+        Question::Noul { .. } => {
+            let parsed: NoulRaw = serde_json::from_value(raw).map_err(|_| ())?;
+            Ok(Some(Answer::Noul {
+                p_yes: parsed.noul,
+                confidence: parsed.confidence,
+            }))
+        }
+        Question::Choice { .. } => {
+            let parsed: ChoiceRaw = serde_json::from_value(raw).map_err(|_| ())?;
+            Ok(Some(Answer::Choice {
+                choice: parsed.choice,
+                confidence: parsed.confidence,
+            }))
+        }
+        Question::Score { .. } => {
+            let parsed: ScoreRaw = serde_json::from_value(raw).map_err(|_| ())?;
+            Ok(
+                argmax_level(&parsed.probabilities).map(|level| Answer::Score {
+                    level,
+                    confidence: parsed.confidence,
+                }),
+            )
+        }
     }
 }
 

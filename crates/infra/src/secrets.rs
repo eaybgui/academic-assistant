@@ -15,16 +15,21 @@ pub struct KeyringSecretStore;
 
 impl SecretStore for KeyringSecretStore {
     fn get(&self, key: &str) -> Result<Option<String>, SecretError> {
-        match new_entry(key)?.get_password() {
-            Ok(value) => Ok(Some(value)),
+        match new_entry(key)?.get_secret() {
+            Ok(bytes) => String::from_utf8(bytes)
+                .map(Some)
+                .map_err(|_| SecretError("stored secret was not valid UTF-8".to_string())),
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(err) => Err(map_keyring_error(err)),
         }
     }
 
     fn set(&self, key: &str, value: &str) -> Result<(), SecretError> {
+        // Stored as raw UTF-8 bytes via `set_secret` rather than `set_password`, which
+        // re-encodes the value as UTF-16 and caps it at 1280 chars on Windows — too
+        // small for some Entra refresh tokens.
         new_entry(key)?
-            .set_password(value)
+            .set_secret(value.as_bytes())
             .map_err(map_keyring_error)
     }
 
@@ -42,8 +47,10 @@ fn new_entry(key: &str) -> Result<keyring::Entry, SecretError> {
 
 /// Never includes the secret value: a `keyring::Error` only describes the platform
 /// failure (e.g. "no matching entry"), never the credential that was stored or read.
+/// `SecretError`'s own `Display` already prefixes "Secure storage error: ", so the
+/// message here carries no prefix of its own.
 fn map_keyring_error(err: keyring::Error) -> SecretError {
-    SecretError(format!("secure storage error: {err}"))
+    SecretError(err.to_string())
 }
 
 /// In-memory [`SecretStore`], for tests. Used by this crate's own tests and by other

@@ -54,6 +54,15 @@ fn delete_missing_university_is_not_found() {
 }
 
 #[test]
+fn add_course_on_missing_university_is_not_found() {
+    let db = Database::open_in_memory().unwrap();
+    let err = db
+        .add_course(999, "Programacion", &[], Utc::now())
+        .unwrap_err();
+    assert!(matches!(err, RepoError::NotFound));
+}
+
+#[test]
 fn course_aliases_round_trip() {
     let db = Database::open_in_memory().unwrap();
     let uni = db.add_university("UV", Utc::now()).unwrap();

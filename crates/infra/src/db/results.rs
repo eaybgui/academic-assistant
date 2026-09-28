@@ -99,9 +99,11 @@ fn into_stored_result(raw: RawResultRow, dates: Vec<ResultDate>) -> RepoResult<S
 }
 
 /// Builds the `WHERE` clause shared by the count and page queries: every set filter
-/// combines with `AND`. `search` is a case-insensitive substring match (SQLite's
-/// default `LIKE` collation) over subject, sender name and sender email, with the
-/// user's input escaped so literal `%`/`_` are not treated as wildcards.
+/// combines with `AND`. `search` is a case-insensitive substring match over subject,
+/// sender name and sender email, using the `unicode_lower` scalar function (registered
+/// on every connection, see `db::register_unicode_lower`) on both sides so accented
+/// letters fold correctly too (SQLite's built-in `LIKE` only case-folds `A`-`Z`), with
+/// the user's input escaped so literal `%`/`_` are not treated as wildcards.
 fn build_where(query: &ResultQuery) -> (String, Vec<SqlParam>) {
     let mut clauses: Vec<String> = Vec::new();
     let mut params: Vec<SqlParam> = Vec::new();
@@ -109,9 +111,9 @@ fn build_where(query: &ResultQuery) -> (String, Vec<SqlParam>) {
     if let Some(search) = &query.search {
         let pattern = format!("%{}%", escape_like(search));
         clauses.push(
-            "(ai_results.subject LIKE ? ESCAPE '\\' \
-              OR ai_results.sender_name LIKE ? ESCAPE '\\' \
-              OR ai_results.sender_email LIKE ? ESCAPE '\\')"
+            "(unicode_lower(ai_results.subject) LIKE unicode_lower(?) ESCAPE '\\' \
+              OR unicode_lower(ai_results.sender_name) LIKE unicode_lower(?) ESCAPE '\\' \
+              OR unicode_lower(ai_results.sender_email) LIKE unicode_lower(?) ESCAPE '\\')"
                 .to_string(),
         );
         params.push(Box::new(pattern.clone()));
