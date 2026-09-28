@@ -99,8 +99,10 @@ course's `university_id` does not resolve to a catalog university (a dangling
 reference), the `"({university})"` part is omitted and the description is just the
 course name.
 
-**Date questions**: capped at 20, independent of (and without depending on)
-`core::dates::MAX_CANDIDATES` — see "Deviations" below.
+**Date questions**: capped at `core::dates::MAX_CANDIDATES` (20), one `date_i` question
+per date candidate in `AnalysisInput::date_candidates` (itself already capped at that
+same constant by `core::dates::extract`, so the `.take(...)` here is a defensive upper
+bound rather than a normally-reachable cap).
 
 ## Validation and assembly (spec §6.4)
 
@@ -165,14 +167,3 @@ Run with `cargo test -p academic-core analyzer::`.
   reference falls back to the bare course name (no `"(university)"` suffix) in `course`
   option descriptions. Neither case is expected in practice (both ids come from the
   same catalog) and neither is covered by a dedicated test.
-
-## Deviations from the plan
-
-- The date-question cap is a private `MAX_DATE_QUESTIONS: usize = 20` constant in
-  `questions.rs`, not a reference to `core::dates::MAX_CANDIDATES`. The analyzer's
-  contract (Task T5) does not list `MAX_CANDIDATES` among its own public constants, and
-  the task explicitly says not to call into `core::dates` (built in parallel by Task
-  T4). Importing `core::dates::MAX_CANDIDATES` would make `academic-core` fail to build
-  until T4 lands. The value (20) matches T4's contracted `MAX_CANDIDATES` exactly, so
-  behavior is identical; this is purely to avoid a build-order dependency between two
-  parallel tasks.

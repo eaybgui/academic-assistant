@@ -7,11 +7,6 @@ use crate::ports::{Question, QuestionSet};
 
 use super::{AnalysisInput, MAX_COURSE_OPTIONS};
 
-/// Cap on the number of `date_i` questions asked, independent of `core::dates`' own
-/// `MAX_CANDIDATES` (also 20): the analyzer does not call into `core::dates` (see the
-/// module doc on `analyzer::mod`), so it does not depend on that module's completion.
-const MAX_DATE_QUESTIONS: usize = 20;
-
 const RELEVANT_INSTRUCTIONS: &str = "This email is an academic communication relevant to a university student: courses, classes, exams, assignments, grades, schedules, tutoring or academic administrative procedures.";
 const ACTION_REQUIRED_INSTRUCTIONS: &str = "The email asks the student to do something: submit, register, reply, attend, prepare, pay or bring something.";
 const POSSIBLE_CHANGE_INSTRUCTIONS: &str = "The email changes information communicated before: a new date or time, a new room, a cancellation or new instructions.";
@@ -109,7 +104,7 @@ pub(super) fn build_questions(input: &AnalysisInput) -> QuestionSet {
     for (i, candidate) in input
         .date_candidates
         .iter()
-        .take(MAX_DATE_QUESTIONS)
+        .take(crate::dates::MAX_CANDIDATES)
         .enumerate()
     {
         questions.insert(
