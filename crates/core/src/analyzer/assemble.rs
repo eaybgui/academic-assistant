@@ -155,8 +155,9 @@ fn parse_course_choice(choice: &str) -> Option<i64> {
     }
 }
 
-/// `university_id`: account default -> else the `university` choice (`unknown` -> None)
-/// -> else the chosen course's university (spec §6.4).
+/// `university_id`: account default -> else the chosen course's university (a course
+/// is more specific than a university answer) -> else the `university` choice
+/// (`unknown` -> None) (spec §6.4).
 fn resolve_university_id(
     input: &AnalysisInput,
     answers: &AnswerSet,
@@ -166,17 +167,21 @@ fn resolve_university_id(
     if let Some(id) = input.account.default_university_id {
         return Some(id);
     }
-    if questions.contains_key("university") {
-        return parse_university_choice(answer_choice(answers, "university"));
-    }
-    course_id.and_then(|id| {
+    let course_university_id = course_id.and_then(|id| {
         input
             .catalog
             .courses
             .iter()
             .find(|c| c.id == id)
             .map(|c| c.university_id)
-    })
+    });
+    if let Some(id) = course_university_id {
+        return Some(id);
+    }
+    if questions.contains_key("university") {
+        return parse_university_choice(answer_choice(answers, "university"));
+    }
+    None
 }
 
 /// Candidates whose answer is `not_relevant` are dropped; the rest map to a
@@ -385,6 +390,62 @@ mod tests {
         let analysis = relevant_analysis(assemble(&input, &answers, model_descriptor()).unwrap());
 
         assert_eq!(analysis.university_id, Some(2));
+    }
+
+    #[test]
+    fn university_id_uses_course_university_when_choice_is_unknown() {
+        let email = test_support::email();
+        let account = test_support::account(None);
+        let catalog = test_support::catalog(
+            vec![
+                test_support::university(1, "UAH"),
+                test_support::university(2, "UCM"),
+            ],
+            vec![test_support::course(10, 1, "Algorithms", vec![])],
+        );
+        let input = AnalysisInput {
+            email: &email,
+            normalized_body: "b",
+            date_candidates: &[],
+            account: &account,
+            catalog: &catalog,
+        };
+        let mut answers = base_answers();
+        answers.insert("university".to_string(), choice("unknown"));
+        answers.insert("course".to_string(), choice("c10"));
+
+        let analysis = relevant_analysis(assemble(&input, &answers, model_descriptor()).unwrap());
+
+        assert_eq!(analysis.university_id, Some(1));
+        assert_eq!(analysis.course_id, Some(10));
+    }
+
+    #[test]
+    fn university_id_prefers_course_university_over_a_conflicting_choice() {
+        let email = test_support::email();
+        let account = test_support::account(None);
+        let catalog = test_support::catalog(
+            vec![
+                test_support::university(1, "UAH"),
+                test_support::university(2, "UCM"),
+            ],
+            vec![test_support::course(10, 2, "Algorithms", vec![])],
+        );
+        let input = AnalysisInput {
+            email: &email,
+            normalized_body: "b",
+            date_candidates: &[],
+            account: &account,
+            catalog: &catalog,
+        };
+        let mut answers = base_answers();
+        answers.insert("university".to_string(), choice("u1"));
+        answers.insert("course".to_string(), choice("c10"));
+
+        let analysis = relevant_analysis(assemble(&input, &answers, model_descriptor()).unwrap());
+
+        assert_eq!(analysis.university_id, Some(2));
+        assert_eq!(analysis.course_id, Some(10));
     }
 
     #[test]
