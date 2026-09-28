@@ -211,7 +211,7 @@ Counters per account and run: `found`, `filtered`, `analyzed` (sent to AI), `fai
 
 ## 6. AI analysis (`core::analyzer::EmailAnalyzer`)
 
-`EmailAnalyzer::analyze(email, normalized_body, account, catalog, model) -> Result<AnalysisOutcome, ModelError>`: builds one `QuestionSet`, calls `model.ask` once, validates and assembles.
+`analyzer::analyze(input: &AnalysisInput, model: &dyn StructuredModel) -> Result<AnalysisOutcome, ModelError>` where `AnalysisInput` carries the email, its normalized body, the date candidates (produced beforehand by `core::dates`), the account and the catalog: builds one `QuestionSet`, calls `model.ask` once, validates and assembles.
 
 ### 6.1 State
 
