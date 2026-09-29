@@ -85,7 +85,8 @@ happens while the run is executing does not affect it.
    fails, every account in `PreparedRun` is recorded as `Failed`/`ErrorKind::Internal`
    (one `runs.record_account` per account, so the run's history stays
    consistent with "one row per attempted account"), the run finishes `Failed`,
-   `observer.finished` fires once, and `execute` returns `RunStatus::Failed`.
+   and `execute` releases the lock, fires `observer.finished` once and returns
+   `RunStatus::Failed`.
    This is the one failure mode `execute` can hit before any account is
    processed; it is not explicitly itemized in the per-message table because it
    happens above the per-account loop.
@@ -99,10 +100,13 @@ happens while the run is executing does not affect it.
    `Some("<failed> of <accounts_processed> accounts failed")` whenever the
    status isn't `Success`, else `None`.
 4. `runs.finish(...)` is called with the final status/counters/summary,
-   `observer.finished(run_id, status)` fires exactly once, and the lock is
-   released (the guard, held inside the now-consumed `PreparedRun`, is dropped
-   when `execute`'s local bindings go out of scope — on every path, since Rust
-   always runs destructors on return).
+   the lock is released (the guard, held inside the now-consumed `PreparedRun`,
+   is explicitly dropped by `execute`), and only then does
+   `observer.finished(run_id, status)` fire, exactly once. Releasing first means
+   `running_run()` is already `None` when the observer is notified, so a
+   consumer that refetches state on that notification never sees the run as
+   still running. The guard is also released on any other exit (early return,
+   unwinding), since Rust always runs destructors.
 
 `execute` never panics on a provider or model error and always returns a
 `RunStatus` (never a `Result`): every failure mode below is captured in the

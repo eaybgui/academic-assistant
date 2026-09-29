@@ -11,18 +11,24 @@ Public client, no client secret.
   `TokenSet` (its `Debug` output redacts `access_token` and `refresh_token`), the shared
   60 s default HTTP request timeout (overridable per provider instance through the
   `#[doc(hidden)]` test hook `MicrosoftGraphEmailProvider::with_request_timeout`, which applies to
-  Graph pages, `/me` and token refreshes; the public `oauth::refresh` and `signed_in_email` always
-  use the default), and `signed_in_email` (`GET /me`, used both by
-  `MicrosoftGraphEmailProvider::test_connection` and right after sign-in to confirm
-  the token belongs to the expected account).
+  Graph pages, `/me` and token refreshes; the public `oauth::refresh` and `signed_in_identity` always
+  use the default), `SignedInIdentity { mail, user_principal_name }` (both optional,
+  blank values become `None`, at least one is present) and `signed_in_identity`
+  (`GET /me`, used both by `MicrosoftGraphEmailProvider::test_connection`, which only
+  needs the call to succeed, and right after sign-in to confirm the token belongs to the
+  expected account). A mailbox can be reported under either identifier (`mail` may be
+  an alias or empty while `userPrincipalName` is the login), so the caller accepts the
+  account when its address equals **either** of them, case-insensitively.
 - `oauth.rs` (`pub mod oauth`) — PKCE (`new_pkce`), `authorize_url`, `sign_in`
-  (interactive, loopback-based) and `refresh` (refresh-token exchange).
+  (interactive, loopback-based), `refresh` (refresh-token exchange) and
+  `is_valid_tenant` (the tenant rule below, also used by the app to validate a tenant
+  when an account is saved).
 - `loopback.rs` — a minimal HTTP/1.1 listener bound to `127.0.0.1:0`, used only as
   the OAuth redirect target during `sign_in`. Not part of the public API.
 - `provider.rs` — `MicrosoftGraphEmailProvider` (the `EmailProvider` impl): access
   token caching/refresh and the delta fetch/pagination logic.
 - `mapping.rs` — pure functions: Graph message JSON → `Email`, `GET /me` response →
-  email address, and HTTP/OAuth error responses → `ProviderError`. No I/O.
+  `SignedInIdentity`, and HTTP/OAuth error responses → `ProviderError`. No I/O.
 
 ## App registration (one-time, per deployment)
 
@@ -46,7 +52,7 @@ setting (`Settings::microsoft_client_id`); each account additionally has its own
 
 ## Sign-in flow (`oauth::sign_in`)
 
-0. The tenant is validated first (`^[A-Za-z0-9.-]+$`, non-empty); anything else fails with
+0. The tenant is validated first (`oauth::is_valid_tenant`: `^[A-Za-z0-9.-]+$`, non-empty; the app applies the same rule when an account is saved); anything else fails with
    `ProviderError::Auth("Invalid Microsoft tenant")` before any URL is built, listener
    started or browser opened. The same check guards the `/token` URL in `refresh` and the
    code exchange. `authorize_url` therefore assumes an already-validated tenant; it never
@@ -76,8 +82,8 @@ setting (`Settings::microsoft_client_id`); each account additionally has its own
    using the PKCE verifier.
 
 `sign_in` returns a `TokenSet`; **the caller is responsible** for calling
-`signed_in_email` to confirm the returned account's address matches the one the
-user picked, and for persisting `refresh_token` via
+`signed_in_identity` to confirm the returned account's address matches the one the
+user picked (see above), and for persisting `refresh_token` via
 `SecretStore::set(&account_refresh_token_key(id), ..)` (this module never touches
 the `SecretStore` during sign-in — only `MicrosoftGraphEmailProvider` does, during
 refresh).
@@ -164,7 +170,8 @@ Microsoft's own `error_description` text, which carry no secrets, are included).
   `redirect_uri`/`state` out of the authorize URL) against a mocked token endpoint;
   a mismatched-`state` case that must never reach the token endpoint.
 - `crates/infra/tests/graph_provider.rs` (wiremock): `test_connection` refreshing
-  and calling `/me`; the missing-refresh-token case; access-token caching across
+  and calling `/me`; `signed_in_identity` returning both `mail` and
+  `userPrincipalName` and mapping a 401 to `Auth`; the missing-refresh-token case; access-token caching across
   two calls (token endpoint hit once); a refresh without rotation leaving the stored
   token untouched (spy `SecretStore` counts `set` calls); an unmappable message skipped
   while the rest and the cursor are returned; a fallback-path cursor still dropping old

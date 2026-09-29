@@ -33,13 +33,23 @@ A failure in any step aborts startup: the `setup` hook returns the error and the
   written by a non-blocking worker (the guard must stay alive so buffered lines are
   flushed on exit).
 - In debug builds the same events are also written to stderr.
+- In release builds the directives `async_imap=warn`, `hyper=warn`, `reqwest=warn`,
+  `rustls=warn` and `tokio_rustls=warn` are appended to the filter, so `RUST_LOG` cannot
+  raise the protocol-level logging of the mail and HTTP dependencies (which can include
+  mail traffic) above `warn`.
 
 ### What is logged
 
 - Startup, interrupted-run recovery, event emission failures.
+- Run lifecycle at `info`: `check started` (run id) when `check_now` creates the run;
+  `account processed` (run id, account id, stage `done` or `failed`) as each account
+  ends; `check finished` (run id, status). A run whose execution task panics is logged at
+  `error` ("check run ended abnormally") and marked failed.
 - Every failed command at `warn`, with the command name, the error `kind`, the
   user-facing `message` and, for internal errors, the internal `detail` (for example the
-  SQLite error text). Command arguments are never logged.
+  SQLite error text). Command arguments are never logged. The Microsoft sign-in mismatch
+  error ("Signed in as <x>, expected <y>" for the user) is logged only as "signed-in
+  account mismatch", without the addresses.
 
 ### What is never logged
 
@@ -51,5 +61,8 @@ failures carry a generic message; the detail exists only in the log.
 ## Known limitations
 
 - Old log files are not deleted automatically.
-- `RUST_LOG` can raise verbosity (for example to `debug`); adapters do not log secrets at
-  any level, but the log directory should be treated as private.
+- `RUST_LOG` can raise verbosity (for example to `debug`) for the app's own code; adapters
+  do not log secrets at any level, but the log directory should be treated as private. In
+  release builds the dependency caps above apply to the crate targets themselves; a
+  `RUST_LOG` directive naming a deeper module of a capped crate (for example
+  `async_imap::proto=trace`) is more specific and is not capped.
