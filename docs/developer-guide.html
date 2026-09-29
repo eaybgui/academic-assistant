@@ -1,0 +1,1697 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Academic Assistant developer guide</title>
+<meta name="description" content="A functional guide for developers joining Academic Assistant: what each part does, how a check runs, how the AI analysis works and what the database holds.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:wght@600;700&display=swap">
+<style>
+/* Layout concept: sticky table of contents on the left, one readable column on the right;
+   diagrams, tables and code scroll inside their own containers. */
+:root {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #eceff4;
+  --fg: #172030;
+  --fg-soft: #37445a;
+  --muted: #58657a;
+  --line: #d9dfe8;
+  --line-strong: #aeb9c9;
+  --accent: #244fae;
+  --accent-soft: #e3ebfa;
+  --note: #244fae;
+  --note-bg: #eaf0fb;
+  --warn: #7c4f00;
+  --warn-bg: #fff3d6;
+  --priv: #0d6250;
+  --priv-bg: #e0f3ec;
+  --code-bg: #eaeef4;
+  --code-fg: #172030;
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1218;
+    --surface: #151b25;
+    --surface-2: #1c2431;
+    --fg: #e7ebf2;
+    --fg-soft: #c4ccd8;
+    --muted: #97a3b7;
+    --line: #273142;
+    --line-strong: #3d495c;
+    --accent: #8fb0f6;
+    --accent-soft: #1a2946;
+    --note: #9dbaf7;
+    --note-bg: #16233b;
+    --warn: #f0c56f;
+    --warn-bg: #2c2311;
+    --priv: #70d4b3;
+    --priv-bg: #0f2a20;
+    --code-bg: #10161f;
+    --code-fg: #dde3ee;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1218;
+  --surface: #151b25;
+  --surface-2: #1c2431;
+  --fg: #e7ebf2;
+  --fg-soft: #c4ccd8;
+  --muted: #97a3b7;
+  --line: #273142;
+  --line-strong: #3d495c;
+  --accent: #8fb0f6;
+  --accent-soft: #1a2946;
+  --note: #9dbaf7;
+  --note-bg: #16233b;
+  --warn: #f0c56f;
+  --warn-bg: #2c2311;
+  --priv: #70d4b3;
+  --priv-bg: #0f2a20;
+  --code-bg: #10161f;
+  --code-fg: #dde3ee;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-text-size-adjust: 100%;
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+a { color: var(--accent); text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+.page {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 56px;
+  max-width: 1240px;
+  margin-inline: auto;
+  padding-inline: 16px;
+  padding-block: 32px 96px;
+}
+.toc {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  font-size: 14px;
+  min-width: 0;
+}
+.toc summary { display: none; }
+.toc .brand {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.25;
+  margin: 0 0 4px;
+}
+.toc .brand-sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+.toc ol { list-style: none; margin: 0; padding: 0; }
+.toc li { margin: 0; }
+.toc a {
+  display: block;
+  padding: 5px 10px;
+  margin-left: -10px;
+  color: var(--fg-soft);
+  text-decoration: none;
+  border-radius: 5px;
+}
+.toc a:hover { background: var(--surface-2); }
+.toc a[aria-current="true"] { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+.toc .num { display: inline-block; width: 1.7em; color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+
+main { min-width: 0; }
+.hero { margin-bottom: 40px; }
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px;
+  font-weight: 500;
+}
+h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4.2vw, 2.9rem);
+  line-height: 1.12;
+  margin: 0 0 16px;
+  font-weight: 700;
+  text-wrap: balance;
+}
+.lede { font-size: 1.15rem; color: var(--fg-soft); max-width: 62ch; margin: 0 0 20px; }
+.meta-row { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 14px; color: var(--muted); }
+
+section { padding-top: 24px; margin-top: 40px; border-top: 1px solid var(--line); }
+section:first-of-type { border-top: 0; margin-top: 0; }
+h2 {
+  font-family: var(--font-display);
+  font-size: 1.85rem;
+  line-height: 1.2;
+  margin: 0 0 8px;
+  font-weight: 700;
+  text-wrap: balance;
+}
+h3 { font-size: 1.15rem; line-height: 1.3; margin: 32px 0 8px; font-weight: 600; text-wrap: balance; }
+h4 { font-size: 1rem; margin: 24px 0 4px; font-weight: 600; }
+.section-intro { color: var(--fg-soft); max-width: 68ch; margin: 0 0 20px; font-size: 1.05rem; }
+
+p, ul, ol, dl { margin: 0 0 14px; }
+p, .prose li, dd { max-width: 70ch; }
+li { margin-bottom: 4px; }
+ul, ol { padding-left: 1.3em; }
+strong { font-weight: 600; }
+
+code, kbd, samp {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--code-bg);
+  color: var(--code-fg);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+pre {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  background: var(--code-bg);
+  color: var(--code-fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 0 0 18px;
+  overflow-x: auto;
+  max-width: 100%;
+}
+pre code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
+.pre-label { font-size: 12px; color: var(--muted); margin: 0 0 4px; font-family: var(--font-mono); }
+
+/* Tables */
+.tablewrap { overflow-x: auto; margin: 0 0 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-width: 100%; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; line-height: 1.5; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+th { font-weight: 600; background: var(--surface-2); white-space: nowrap; font-size: 13px; }
+tr:last-child td { border-bottom: 0; }
+td code { white-space: nowrap; }
+td.wrap code { white-space: normal; }
+.tablewrap caption { text-align: left; padding: 10px 12px; font-weight: 600; caption-side: top; border-bottom: 1px solid var(--line); background: var(--surface); }
+table.nums td:nth-child(n+2), table.nums th:nth-child(n+2) { font-variant-numeric: tabular-nums; }
+
+/* Callouts */
+.callout {
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 0 0 20px;
+  font-size: 15px;
+  max-width: 76ch;
+}
+.callout > :last-child { margin-bottom: 0; }
+.callout .tag { display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; margin-bottom: 2px; }
+.callout.note { background: var(--note-bg); }
+.callout.note .tag { color: var(--note); }
+.callout.warning { background: var(--warn-bg); }
+.callout.warning .tag { color: var(--warn); }
+.callout.privacy { background: var(--priv-bg); }
+.callout.privacy .tag { color: var(--priv); }
+
+/* Steps */
+ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 0 0 20px; max-width: 76ch; }
+ol.steps > li {
+  counter-increment: step;
+  position: relative;
+  padding: 0 0 14px 44px;
+  margin: 0;
+  min-height: 32px;
+}
+ol.steps > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0; top: 0;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  display: grid; place-items: center;
+}
+ol.steps > li > :last-child { margin-bottom: 0; }
+ol.steps .stitle { font-weight: 600; display: block; }
+
+/* Cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin: 0 0 24px; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+.card h3, .card h4 { margin: 0 0 6px; font-size: 1.02rem; }
+.card p { font-size: 15px; max-width: none; }
+.card p:last-child { margin-bottom: 0; }
+.card dl { margin: 0 0 10px; font-size: 14.5px; }
+.card dt { font-weight: 600; margin-top: 8px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.card dd { margin: 0; max-width: none; }
+.card .kicker { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 2px; font-weight: 500; }
+.badge {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--fg-soft);
+  vertical-align: middle;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+.badge.net { border-color: var(--warn); color: var(--warn); }
+.badge.local { border-color: var(--priv); color: var(--priv); }
+
+.tcards { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 24px; }
+.tcard { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; min-width: 0; }
+.tcard header { background: var(--surface-2); padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; border-bottom: 1px solid var(--line); }
+.tcard header h3 { margin: 0; font-family: var(--font-mono); font-size: 1rem; font-weight: 500; }
+.tcard header span { color: var(--muted); font-size: 14px; }
+.tcard .body { padding: 14px 16px 4px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 4px 28px; }
+.tcard .body > div { min-width: 0; }
+.tcard h4 { margin: 0 0 4px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.tcard p, .tcard li { font-size: 14.5px; max-width: none; }
+.tcard ul { padding-left: 1.1em; margin-bottom: 12px; }
+.tcard .body p { margin-bottom: 12px; }
+
+/* Figures and diagrams */
+figure { margin: 0 0 28px; }
+.diagram {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-x: auto;
+  padding: 12px;
+  max-width: 100%;
+}
+.diagram svg { display: block; width: 100%; min-width: 760px; height: auto; color: var(--muted); }
+.diagram.narrow svg { min-width: 640px; }
+figcaption { font-size: 14px; color: var(--muted); margin-top: 8px; max-width: 76ch; }
+
+svg .s-zone { fill: none; stroke: var(--line-strong); stroke-width: 1.2; stroke-dasharray: 2 5; }
+svg .s-zone-title { fill: var(--muted); font: 600 12px var(--font-body); letter-spacing: 0.04em; }
+svg .s-box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+svg .s-box-accent { fill: var(--accent-soft); stroke: var(--accent); }
+svg .s-box-head { fill: var(--surface-2); }
+svg .s-box-chip { fill: var(--surface-2); }
+svg .s-box-mute { fill: var(--surface-2); stroke: var(--line-strong); }
+svg .s-box-warn { fill: var(--warn-bg); stroke: var(--warn); }
+svg .s-box-ext { stroke-dasharray: none; }
+svg .s-box-ext.s-net { stroke: var(--warn); stroke-dasharray: 5 3; }
+svg .s-title { fill: var(--fg); font: 600 13px var(--font-body); }
+svg .s-sub { fill: var(--muted); font: 11.5px var(--font-body); }
+svg .s-mono { fill: var(--fg-soft); font: 12px var(--font-mono); }
+svg .s-col { fill: var(--fg); }
+svg .s-tag { font-family: var(--font-mono); font-size: 10.5px; }
+svg .s-tname { fill: var(--fg); font: 500 13px var(--font-mono); }
+svg .s-th { fill: var(--accent-soft); stroke: none; }
+svg .s-line { stroke: var(--muted); stroke-width: 1.4; }
+svg .s-line-accent { stroke: var(--accent); stroke-width: 1.6; }
+svg .mk { fill: var(--muted); }
+svg .mk-accent { fill: var(--accent); }
+svg .s-lbl { fill: var(--fg-soft); font: 11.5px var(--font-body); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+svg .s-lbl-note { stroke: none; fill: var(--fg); }
+svg .s-num { fill: var(--accent); font-weight: 700; font-family: var(--font-mono); }
+svg .s-life { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 4 5; }
+svg .s-group { fill: none; stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 2 4; }
+svg .s-group-label { fill: var(--muted); font: 600 11px var(--font-body); }
+svg .s-note { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1; }
+
+/* Definition-style key/values */
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 20px; margin: 0 0 20px; font-size: 15px; }
+.kv dt { font-weight: 600; }
+.kv dd { margin: 0; max-width: none; }
+
+.glossary dt { font-family: var(--font-mono); font-weight: 500; font-size: 0.95rem; margin-top: 14px; }
+.glossary dd { margin: 0 0 0 0; max-width: 70ch; color: var(--fg-soft); }
+
+.theme-toggle {
+  font: inherit; font-size: 13px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--fg-soft);
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.theme-toggle:hover { background: var(--surface-2); }
+
+/* Pipeline overview */
+ol.flow { list-style: none; margin: 0 0 20px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; counter-reset: flow; }
+ol.flow > li { counter-increment: flow; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 0; font-size: 14px; line-height: 1.45; }
+ol.flow > li::before { content: counter(flow); display: block; font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+ol.flow strong { display: block; font-size: 15px; }
+ol.flow span { color: var(--muted); }
+@media (max-width: 600px) { ol.flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+@media (max-width: 960px) {
+  .page { grid-template-columns: minmax(0, 1fr); gap: 20px; padding-block: 20px 64px; }
+  .toc { position: static; max-height: none; overflow: visible; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0 16px; }
+  .toc summary { display: block; cursor: pointer; padding: 12px 0; font-weight: 600; }
+  .toc .brand, .toc .brand-sub { display: none; }
+  .toc details[open] summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  .toc details { padding-bottom: 8px; }
+  .toc a { margin-left: 0; }
+  .kv { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .kv dd { margin-bottom: 10px; }
+}
+@media (max-width: 520px) {
+  h2 { font-size: 1.55rem; }
+  .callout { padding: 12px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+<nav class="toc" aria-label="Table of contents">
+  <details id="toc-details" open>
+    <summary>Contents</summary>
+    <p class="brand">Academic Assistant</p>
+    <p class="brand-sub">Developer guide</p>
+    <ol>
+      <li><a href="#what"><span class="num">1</span>What the app does</a></li>
+      <li><a href="#parts"><span class="num">2</span>The moving parts</a></li>
+      <li><a href="#run"><span class="num">3</span>A "Check now" run</a></li>
+      <li><a href="#ai"><span class="num">4</span>How the AI analysis works</a></li>
+      <li><a href="#accounts"><span class="num">5</span>Accounts and sign-in</a></li>
+      <li><a href="#database"><span class="num">6</span>The database</a></li>
+      <li><a href="#screens"><span class="num">7</span>Screens and what they do</a></li>
+      <li><a href="#security"><span class="num">8</span>Security and privacy</a></li>
+      <li><a href="#tutorial"><span class="num">9</span>Developer tutorial</a></li>
+      <li><a href="#troubleshooting"><span class="num">10</span>Troubleshooting</a></li>
+      <li><a href="#glossary"><span class="num">11</span>Glossary</a></li>
+    </ol>
+  </details>
+</nav>
+<main id="top">
+<header class="hero">
+  <p class="eyebrow">Phase 1 &middot; Email analysis</p>
+  <h1>Academic Assistant developer guide</h1>
+  <p class="lede">A functional tour of the app for developers joining the project: what each part does and why, which services take part, how data flows during a check, and what ends up in the database.</p>
+  <div class="meta-row">
+    <span>Audience: developers</span>
+    <span>Companion to the reference docs in <a href="README.md">docs/</a></span>
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch between light and dark theme">Toggle theme</button>
+  </div>
+</header>
+
+<section id="what">
+  <h2>1. What the app does</h2>
+  <p class="section-intro">Academic Assistant is a Windows desktop app that reads a student's university mailboxes, keeps only what matters academically, and turns each relevant email into a small structured record: a category, a priority, the dates it mentions and the course it belongs to.</p>
+
+  <h3>The problem</h3>
+  <p>A student can have several mailboxes at once, for example an IMAP account at one university and a Microsoft 365 account at another. Exam date changes, assignment deadlines and room changes are buried in the same inbox as newsletters and surveys. Checking every mailbox by hand is slow, and a missed change is expensive.</p>
+
+  <h3>The mental model</h3>
+  <p>Every "Check now" moves emails through the same six stages. Most of the code you will read belongs to exactly one of them.</p>
+  <ol class="flow" aria-label="Pipeline stages">
+    <li><strong>Sources</strong><span>IMAP and Microsoft 365 mailboxes, read-only.</span></li>
+    <li><strong>Sync</strong><span>Fetch only what is new, using a per-folder cursor.</span></li>
+    <li><strong>Filters</strong><span>Deterministic rules drop duplicates, blocked senders and empty mail.</span></li>
+    <li><strong>AI questions</strong><span>One structured call per email: typed questions, closed answers.</span></li>
+    <li><strong>Structured results</strong><span>Category, priority, flags, course, dates. Saved in SQLite.</span></li>
+    <li><strong>UI</strong><span>Dashboard, Results and Runs render what the database holds.</span></li>
+  </ol>
+  <p>Two rules shape everything else. The <strong>database is the source of truth</strong>: the UI only renders what commands return. And <strong>no full email is ever stored</strong>: a body lives in memory while one message is processed, then it is gone.</p>
+
+  <h3>Phase 1 scope</h3>
+  <div class="cards">
+    <div class="card">
+      <h4>In scope</h4>
+      <ul>
+        <li>Several accounts, managed from the UI: IMAP and Microsoft 365 (Microsoft Graph).</li>
+        <li>A manual <strong>Check now</strong> across all enabled accounts.</li>
+        <li>Incremental sync; the first sync covers a configurable number of past days (default 14).</li>
+        <li>Deterministic filters before any AI call.</li>
+        <li>AI analysis of subject and body: relevance, category, priority, action required, possible change, university, course and dates.</li>
+        <li>A manual catalog of universities and courses that helps the AI name the course.</li>
+        <li>New/seen state, search, filters, run history, and logs.</li>
+        <li>Local AI (Ollama) or an explicitly configured external AI (jev).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Out of scope (later phases)</h4>
+      <ul>
+        <li>Automatic scheduled checks and background execution. Checks are manual only.</li>
+        <li>Native Windows notifications.</li>
+        <li>Linking a message to the earlier one it changes. Phase 1 only sets a <em>possible change</em> flag.</li>
+        <li>Free-text summaries. The AI answers typed questions only.</li>
+        <li>Attachments, Moodle, Blackboard, calendars, web scraping, browser agents, Notion.</li>
+        <li>The final visual design. The current UI is functional, not final.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout note">
+    <span class="tag">Where the requirements live</span>
+    <p>The product requirements are in <a href="../requirements.md">requirements.md</a>. When code and the original design documents differ, the component documents linked from <a href="README.md">docs/README.md</a> describe what the code does today.</p>
+  </div>
+</section>
+
+<section id="parts">
+  <h2>2. The moving parts</h2>
+  <p class="section-intro">One desktop process holds a React UI and a Rust backend. The backend talks to a handful of outside systems: some over the internet, some on the same PC. This section names each one and says when it is contacted and what happens without it.</p>
+
+  <figure>
+    <div class="diagram"><svg viewBox="0 0 1040 830" role="img" aria-label="Architecture: one desktop process containing the React UI and the Rust backend, reaching IMAP servers, Microsoft services, AI providers, the SQLite file and the Windows Credential Manager" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ah-arch" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker><marker id="aha-arch" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-accent"/></marker></defs><rect x="16" y="16" width="640" height="798" rx="10" class="s-zone"/><text x="32" y="38" class="s-zone-title">One process: Academic Assistant (Tauri 2)</text><rect x="40" y="56" width="592" height="76" rx="6" class="s-box s-box-accent"/><text x="336" y="90" class="s-title" text-anchor="middle">WebView: React + TypeScript UI</text><text x="336" y="105" class="s-sub" text-anchor="middle">Six screens, API client, React Query. Talks to Rust only through Tauri commands and events.</text><polyline points="336,132 336,168" class="s-line" fill="none" marker-end="url(#ah-arch)" marker-start="url(#ah-arch)"/><text x="348" y="154" class="s-lbl" text-anchor="start">commands (invoke) down, run:* events up</text><rect x="40" y="168" width="592" height="76" rx="6" class="s-box"/><text x="336" y="202" class="s-title" text-anchor="middle">src-tauri: composition root</text><text x="336" y="217" class="s-sub" text-anchor="middle">Commands, DTOs, input validation, event emission, logging, wiring of adapters.</text><polyline points="336,244 336,280" class="s-line" fill="none" marker-end="url(#ah-arch)"/><text x="348" y="266" class="s-lbl" text-anchor="start">calls the pipeline and repositories through ports</text><rect x="40" y="280" width="592" height="76" rx="6" class="s-box"/><text x="336" y="314" class="s-title" text-anchor="middle">crates/core: pure logic and ports</text><text x="336" y="329" class="s-sub" text-anchor="middle">Pipeline, analyzer, dates, filters, normalize. No I/O. Defines the traits.</text><polyline points="336,356 336,392" class="s-line" fill="none" marker-end="url(#ah-arch)"/><text x="348" y="378" class="s-lbl" text-anchor="start">ports are implemented by adapters</text><rect x="40" y="392" width="592" height="410" rx="6" class="s-box"/><text x="56" y="414" class="s-title">crates/infra: adapters, one per outside system</text><text x="56" y="448" class="s-mono">EmailProvider: IMAP, Microsoft Graph</text><text x="56" y="468" class="s-mono">StructuredModel: jev, Ollama</text><text x="56" y="488" class="s-mono">Repositories: SQLite</text><text x="56" y="508" class="s-mono">SecretStore: Credential Manager</text><rect x="340" y="424" width="280" height="44" rx="6" class="s-box s-box-chip"/><text x="480" y="450" class="s-title" text-anchor="middle">IMAP provider</text><rect x="760" y="424" width="270" height="44" rx="6" class="s-box s-box-ext s-net"/><text x="895" y="442" class="s-title" text-anchor="middle">IMAP servers</text><text x="895" y="457" class="s-sub" text-anchor="middle">implicit TLS, read-only (BODY.PEEK)</text><polyline points="620,446 760,446" class="s-line s-line-accent" fill="none" marker-end="url(#aha-arch)"/><text x="690" y="440" class="s-lbl" text-anchor="middle">LOGIN, UID FETCH</text><rect x="340" y="476" width="280" height="96" rx="6" class="s-box s-box-chip"/><text x="480" y="528" class="s-title" text-anchor="middle">Graph provider + OAuth</text><rect x="340" y="584" width="280" height="44" rx="6" class="s-box s-box-chip"/><text x="480" y="610" class="s-title" text-anchor="middle">jev adapter</text><rect x="760" y="584" width="270" height="44" rx="6" class="s-box s-box-ext s-net"/><text x="895" y="602" class="s-title" text-anchor="middle">jev API (TypeSafe)</text><text x="895" y="617" class="s-sub" text-anchor="middle">external AI, HTTPS</text><polyline points="620,606 760,606" class="s-line s-line-accent" fill="none" marker-end="url(#aha-arch)"/><text x="690" y="600" class="s-lbl" text-anchor="middle">questions (HTTPS)</text><rect x="340" y="636" width="280" height="44" rx="6" class="s-box s-box-chip"/><text x="480" y="662" class="s-title" text-anchor="middle">Ollama adapter</text><rect x="760" y="636" width="270" height="44" rx="6" class="s-box s-box-ext"/><text x="895" y="654" class="s-title" text-anchor="middle">Ollama</text><text x="895" y="669" class="s-sub" text-anchor="middle">local AI, http://localhost:11434</text><polyline points="620,658 760,658" class="s-line" fill="none" marker-end="url(#ah-arch)"/><text x="690" y="652" class="s-lbl" text-anchor="middle">questions (local)</text><rect x="340" y="688" width="280" height="44" rx="6" class="s-box s-box-chip"/><text x="480" y="714" class="s-title" text-anchor="middle">Database (SQLite)</text><rect x="760" y="688" width="270" height="44" rx="6" class="s-box s-box-ext"/><text x="895" y="706" class="s-title" text-anchor="middle">SQLite file</text><text x="895" y="721" class="s-sub" text-anchor="middle">academic-assistant.db, WAL mode</text><polyline points="620,710 760,710" class="s-line" fill="none" marker-end="url(#ah-arch)"/><text x="690" y="704" class="s-lbl" text-anchor="middle">SQL (rusqlite)</text><rect x="340" y="740" width="280" height="44" rx="6" class="s-box s-box-chip"/><text x="480" y="766" class="s-title" text-anchor="middle">KeyringSecretStore</text><rect x="760" y="740" width="270" height="44" rx="6" class="s-box s-box-ext"/><text x="895" y="758" class="s-title" text-anchor="middle">Windows Credential Manager</text><text x="895" y="773" class="s-sub" text-anchor="middle">passwords, refresh tokens, jev key</text><polyline points="620,762 760,762" class="s-line" fill="none" marker-end="url(#ah-arch)"/><text x="690" y="756" class="s-lbl" text-anchor="middle">get / set / delete</text><rect x="760" y="476" width="270" height="44" rx="6" class="s-box s-box-ext s-net"/><text x="895" y="494" class="s-title" text-anchor="middle">Microsoft Entra ID</text><text x="895" y="509" class="s-sub" text-anchor="middle">sign-in and token endpoint</text><polyline points="620,498 760,498" class="s-line s-line-accent" fill="none" marker-end="url(#aha-arch)"/><text x="690" y="492" class="s-lbl" text-anchor="middle">authorize, token</text><rect x="760" y="528" width="270" height="44" rx="6" class="s-box s-box-ext s-net"/><text x="895" y="546" class="s-title" text-anchor="middle">Microsoft Graph</text><text x="895" y="561" class="s-sub" text-anchor="middle">delta mail feed and /me</text><polyline points="620,550 760,550" class="s-line s-line-accent" fill="none" marker-end="url(#aha-arch)"/><text x="690" y="544" class="s-lbl" text-anchor="middle">delta feed, /me</text><rect x="760" y="160" width="270" height="44" rx="6" class="s-box s-box-ext"/><text x="895" y="178" class="s-title" text-anchor="middle">Log files</text><text x="895" y="193" class="s-sub" text-anchor="middle">logs/academic-assistant.log.&lt;date&gt;</text><polyline points="632,182 760,182" class="s-line" fill="none" marker-end="url(#ah-arch)"/><text x="696" y="176" class="s-lbl" text-anchor="middle">tracing (file)</text><rect x="760" y="212" width="270" height="44" rx="6" class="s-box s-box-ext"/><text x="895" y="230" class="s-title" text-anchor="middle">System browser</text><text x="895" y="245" class="s-sub" text-anchor="middle">sign-in page, Open email (https only)</text><polyline points="632,234 760,234" class="s-line" fill="none" marker-end="url(#ah-arch)"/><text x="696" y="228" class="s-lbl" text-anchor="middle">opens https URL</text><rect x="760" y="60" width="16" height="12" rx="2" class="s-box s-box-ext s-net"/><text x="784" y="71" class="s-sub">reached over the internet</text><rect x="760" y="84" width="16" height="12" rx="2" class="s-box s-box-ext"/><text x="784" y="95" class="s-sub">stays on this PC</text><rect x="760" y="108" width="16" height="12" rx="2" class="s-box s-box-chip"/><text x="784" y="119" class="s-sub">adapter inside the Rust backend</text></svg></div>
+    <figcaption>The whole app is one Tauri process. The UI never reaches the network or the disk on its own; every outside system is reached by an adapter in <code>crates/infra</code>. Dashed amber borders mark systems reached over the internet.</figcaption>
+  </figure>
+
+  <h3>Inside the process</h3>
+  <div class="cards">
+    <div class="card">
+      <p class="kicker">src/</p>
+      <h4>React UI in a WebView</h4>
+      <p>Six screens, a typed API client and React Query for caching. It calls backend commands and listens to <code>run:progress</code> and <code>run:finished</code> events. It never calls <code>invoke</code> outside <code>src/lib/api/</code>. Details: <a href="frontend/overview.md">frontend/overview.md</a>.</p>
+    </div>
+    <div class="card">
+      <p class="kicker">src-tauri</p>
+      <h4>The composition root</h4>
+      <p>Opens the database, builds the adapters and the pipeline runner, registers the commands, validates input, turns domain types into DTOs and forwards run progress as events. It holds no business rules. Details: <a href="app/tauri-commands.md">app/tauri-commands.md</a>.</p>
+    </div>
+    <div class="card">
+      <p class="kicker">crates/core</p>
+      <h4>Pure logic and ports</h4>
+      <p>Everything that decides something: the check pipeline, question building, answer assembly, date extraction, filters and text normalization. It performs no I/O and defines the traits (ports) the outside world must implement. Details: <a href="core/pipeline.md">core/pipeline.md</a>, <a href="core/domain-and-ports.md">core/domain-and-ports.md</a>.</p>
+    </div>
+    <div class="card">
+      <p class="kicker">crates/infra</p>
+      <h4>Adapters</h4>
+      <p>One adapter per outside system: SQLite repositories, IMAP, Microsoft Graph with OAuth, jev, Ollama and the Windows Credential Manager, plus the factories that pick an adapter from stored settings. Details: <a href="infra/factories.md">infra/factories.md</a>.</p>
+    </div>
+  </div>
+  <p>The dependency rule is <code>src-tauri &rarr; infra &rarr; core</code>. <code>core</code> never imports <code>infra</code>, which is why the whole pipeline can be tested with in-memory fakes. See <a href="architecture.md">architecture.md</a> for the crate table and the extension points.</p>
+
+  <h3>Outside systems and local resources</h3>
+  <p>Each card answers four questions: what it is used for, when the app contacts it, what data goes to it, and what happens when it is unavailable.</p>
+
+  <div class="cards">
+    <article class="card">
+      <h4>IMAP servers <span class="badge net">internet</span></h4>
+      <dl>
+        <dt>Used for</dt><dd>Reading mail of IMAP accounts. Implicit TLS only, usually port 993. STARTTLS is not implemented.</dd>
+        <dt>Contacted when</dt><dd>You press Test on an account, and during a check for every IMAP account and each of its folders.</dd>
+        <dt>Data sent</dt><dd>Username and password (<code>LOGIN</code>), the folder name and a UID or date search. Mail is fetched with <code>BODY.PEEK[]</code>, so nothing becomes read, moved or deleted.</dd>
+        <dt>If it is down</dt><dd>Timeouts (20 s to connect, 60 s per command) become a <code>connection</code> error; a rejected login becomes <code>auth</code>. The account fails, the others continue, and its cursor stays put so the next check retries.</dd>
+      </dl>
+      <p><a href="infra/imap.md">infra/imap.md</a></p>
+    </article>
+
+    <article class="card">
+      <h4>Microsoft Entra ID <span class="badge net">internet</span></h4>
+      <dl>
+        <dt>Used for</dt><dd>Signing in and exchanging or refreshing tokens (<code>login.microsoftonline.com</code>). The app is a public client using PKCE, with the delegated scopes <code>offline_access Mail.Read User.Read</code>.</dd>
+        <dt>Contacted when</dt><dd>During the interactive sign-in, and during Test or a check when the in-memory access token is missing or within 60 seconds of expiry.</dd>
+        <dt>Data sent</dt><dd>Client ID, tenant, PKCE challenge and verifier, the one-time code, the refresh token. The user's password is typed in the browser and never reaches the app.</dd>
+        <dt>If it is down</dt><dd>A <code>connection</code> error. If the refresh token was revoked or expired, an <code>auth</code> error: "Your sign-in expired. Reconnect the account".</dd>
+      </dl>
+      <p><a href="infra/microsoft-graph.md">infra/microsoft-graph.md</a></p>
+    </article>
+
+    <article class="card">
+      <h4>Microsoft Graph <span class="badge net">internet</span></h4>
+      <dl>
+        <dt>Used for</dt><dd>Reading mail (<code>graph.microsoft.com/v1.0</code>): <code>/me</code> to confirm identity, and the delta feed of <code>/me/mailFolders/{folder}/messages</code>.</dd>
+        <dt>Contacted when</dt><dd>Right after sign-in, on Test, and during a check for every Microsoft 365 account and folder.</dd>
+        <dt>Data sent</dt><dd>The access token as a bearer header, the folder, a selected list of fields, and a <code>receivedDateTime</code> filter on the first sync.</dd>
+        <dt>If it is down</dt><dd>Network problems are <code>connection</code> errors. A 401 or 403 becomes <code>auth</code>: "Microsoft Graph rejected the request. Reconnect the account".</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <h4>jev API (TypeSafe) <span class="badge net">internet</span></h4>
+      <dl>
+        <dt>Used for</dt><dd>The external structured AI. Only when Settings selects jev.</dd>
+        <dt>Contacted when</dt><dd>Once per email that survives dedup and filters, and once on Test provider.</dd>
+        <dt>Data sent</dt><dd>Subject, sender name and address, received time, the cleaned body (at most 12,000 characters), the account's default university name, the question texts, and the catalog's course names and aliases. The API key travels in the <code>Authorization</code> header.</dd>
+        <dt>If it is down</dt><dd>Rate limits, 5xx and transport errors are retried up to three times (1 s, 2 s, 4 s). If they persist the account stops without advancing its cursor. A 401 or 403 stops it at once.</dd>
+      </dl>
+      <p><a href="infra/ai-providers.md">infra/ai-providers.md</a></p>
+    </article>
+
+    <article class="card">
+      <h4>Ollama <span class="badge local">this PC</span></h4>
+      <dl>
+        <dt>Used for</dt><dd>Local structured AI, the default provider. An HTTP server on <code>http://localhost:11434</code>, default model <code>qwen3:8b</code>.</dd>
+        <dt>Contacted when</dt><dd>Once per surviving email and on Test provider.</dd>
+        <dt>Data sent</dt><dd>The same content as for jev, to the base URL configured in Settings. Keep it on localhost to keep the data on the PC.</dd>
+        <dt>If it is down</dt><dd>Connection refused, a 120 s timeout or any non-2xx status (including a missing model) is <code>Unavailable</code>. The account stops and its cursor does not advance. There are no retries.</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <h4>Windows Credential Manager <span class="badge local">this PC</span></h4>
+      <dl>
+        <dt>Used for</dt><dd>The only place secrets live: IMAP passwords, Microsoft refresh tokens and the jev API key.</dd>
+        <dt>Contacted when</dt><dd>Saving an account, signing in, editing the jev key, creating a provider for a check or test, computing "credentials configured", and deleting an account.</dd>
+        <dt>Data</dt><dd>Keys such as <code>academic-assistant/account/{id}/password</code>, <code>academic-assistant/account/{id}/refresh-token</code> and <code>academic-assistant/jev-api-key</code>.</dd>
+        <dt>If it fails</dt><dd>Commands return "Something went wrong while accessing secure storage"; providers report "Could not read secure storage". The detail goes to the log.</dd>
+      </dl>
+      <p><a href="infra/secure-storage.md">infra/secure-storage.md</a></p>
+    </article>
+
+    <article class="card">
+      <h4>The SQLite file <span class="badge local">this PC</span></h4>
+      <dl>
+        <dt>Used for</dt><dd>All app state except secrets: accounts, catalog, settings, cursors, runs, processed-message metadata and results. One file, <code>academic-assistant.db</code>, in WAL mode with foreign keys on.</dd>
+        <dt>Contacted when</dt><dd>At startup (open, migrate, mark interrupted runs) and by nearly every command.</dd>
+        <dt>Data</dt><dd>Never a secret, never a body. See <a href="#database">section 6</a>.</dd>
+        <dt>If it fails</dt><dd>If it cannot be opened at startup, the app exits. Later failures reach the UI as "Something went wrong while saving data".</dd>
+      </dl>
+      <p><a href="infra/database.md">infra/database.md</a></p>
+    </article>
+
+    <article class="card">
+      <h4>Log files <span class="badge local">this PC</span></h4>
+      <dl>
+        <dt>Used for</dt><dd>Diagnosing runs and command failures. A daily rolling file <code>logs/academic-assistant.log.&lt;date&gt;</code> next to the database.</dd>
+        <dt>Contacted when</dt><dd>Startup, the start and end of each run and account, and every failed command.</dd>
+        <dt>Data</dt><dd>Ids, counters, stages and sanitized errors. Never bodies, subjects, tokens, passwords or keys.</dd>
+        <dt>If it fails</dt><dd>Logging is set up during startup; a failure there aborts startup. Old files are not deleted automatically.</dd>
+      </dl>
+      <p><a href="app/logging-and-data.md">app/logging-and-data.md</a></p>
+    </article>
+
+    <article class="card">
+      <h4>System browser <span class="badge local">this PC</span></h4>
+      <dl>
+        <dt>Used for</dt><dd>The Microsoft sign-in page and the "Open email" link of Microsoft 365 results.</dd>
+        <dt>Contacted when</dt><dd>You press Sign in, or Open email.</dd>
+        <dt>Data</dt><dd>Only <code>https://</code> URLs. The Tauri capability file allows nothing else to be opened.</dd>
+        <dt>If it fails</dt><dd>Sign-in never completes and times out after five minutes. "Open email" shows a short inline error.</dd>
+      </dl>
+    </article>
+  </div>
+</section>
+
+<section id="run">
+  <h2>3. A "Check now" run, step by step</h2>
+  <p class="section-intro">This is the core of Phase 1. We follow one run over two accounts and six fictional emails, from the button press to the rows in SQLite. The reference for the code is <a href="core/pipeline.md">core/pipeline.md</a>; here we focus on what happens and why.</p>
+
+  <h3>The scenario</h3>
+  <p>Today is 29 September 2026. The student has configured the following. Everything below is invented.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Item</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Account 1, <code>UV IMAP</code></td><td class="wrap">IMAP, folder <code>INBOX</code>, default university "Universidad de Valencia", first-sync window 14 days, no cursor yet (first check).</td></tr>
+        <tr><td>Account 2, <code>UAH 365</code></td><td class="wrap">Microsoft 365, folder <code>inbox</code>, default university "Universidad de Alcal&aacute;", first-sync window 14 days, signed in, no cursor yet.</td></tr>
+        <tr><td>Catalog</td><td class="wrap">Valencia: "&Aacute;lgebra Lineal" (aliases <code>ALG</code>, <code>MAT101</code>), "Programaci&oacute;n" (<code>PROG</code>). Alcal&aacute;: "Bases de Datos" (<code>BD</code>).</td></tr>
+        <tr><td>Blocked senders</td><td class="wrap"><code>@newsletter.uv.example</code></td></tr>
+        <tr><td>AI provider</td><td class="wrap">Ollama, model <code>qwen3:8b</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <caption>The emails waiting in the two mailboxes</caption>
+      <thead><tr><th>Account</th><th>Id</th><th>Sender (fictional)</th><th>Subject</th><th>What it is</th></tr></thead>
+      <tbody>
+        <tr><td>UV IMAP</td><td>UID 501</td><td class="wrap"><code>garcia@uv.example</code></td><td class="wrap">Cambio de fecha del examen parcial de &Aacute;lgebra Lineal</td><td class="wrap">Exam date change</td></tr>
+        <tr><td>UV IMAP</td><td>UID 502</td><td class="wrap"><code>practicas@uv.example</code></td><td class="wrap">Entrega de la pr&aacute;ctica 3 de Programaci&oacute;n</td><td class="wrap">Assignment deadline</td></tr>
+        <tr><td>UV IMAP</td><td>UID 503</td><td class="wrap"><code>news@newsletter.uv.example</code></td><td class="wrap">Bolet&iacute;n semanal del campus</td><td class="wrap">Newsletter from a blocked domain</td></tr>
+        <tr><td>UV IMAP</td><td>UID 504</td><td class="wrap"><code>garcia@uv.example</code></td><td class="wrap">Cambio de fecha del examen parcial de &Aacute;lgebra Lineal</td><td class="wrap">Duplicate: the mailing list delivered UID 501 a second time (same <code>Message-ID</code>)</td></tr>
+        <tr><td>UAH 365</td><td>Graph id</td><td class="wrap"><code>bd@uah.example</code></td><td class="wrap">Seminario de Bases de Datos: sesi&oacute;n pr&aacute;ctica el 5 de noviembre a las 16:30</td><td class="wrap">Event announcement</td></tr>
+        <tr><td>UAH 365</td><td>Graph id</td><td class="wrap"><code>servicios@uah.example</code></td><td class="wrap">Encuesta de satisfacci&oacute;n del comedor</td><td class="wrap">Irrelevant survey</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <figure>
+    <div class="diagram"><svg viewBox="0 0 1000 791" role="img" aria-label="Sequence of a Check now run: the UI calls check_now, the backend prepares the run, then for every account and folder fetches mail, and for every email applies filters and asks the AI model once before saving to SQLite" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ah-run" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker><marker id="aha-run" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-accent"/></marker></defs><rect x="10" y="166" width="980" height="479" rx="6" class="s-group"/><text x="18" y="180" class="s-group-label">for each enabled account, in order</text><rect x="18" y="238" width="964" height="366" rx="6" class="s-group"/><text x="26" y="252" class="s-group-label">for each configured folder</text><rect x="26" y="360" width="948" height="206" rx="6" class="s-group"/><text x="34" y="374" class="s-group-label">for each email</text><line x1="90" y1="48" x2="90" y2="785" class="s-life"/><line x1="300" y1="48" x2="300" y2="785" class="s-life"/><line x1="540" y1="48" x2="540" y2="785" class="s-life"/><line x1="760" y1="48" x2="760" y2="785" class="s-life"/><line x1="920" y1="48" x2="920" y2="785" class="s-life"/><rect x="25" y="2" width="130" height="44" rx="6" class="s-box s-box-head"/><text x="90" y="20" class="s-title" text-anchor="middle">React UI</text><text x="90" y="35" class="s-sub" text-anchor="middle">WebView</text><rect x="220" y="2" width="160" height="44" rx="6" class="s-box s-box-head"/><text x="300" y="20" class="s-title" text-anchor="middle">Backend</text><text x="300" y="35" class="s-sub" text-anchor="middle">check_now, CheckRunner</text><rect x="470" y="2" width="140" height="44" rx="6" class="s-box s-box-head"/><text x="540" y="20" class="s-title" text-anchor="middle">Mail source</text><text x="540" y="35" class="s-sub" text-anchor="middle">IMAP or Graph</text><rect x="695" y="2" width="130" height="44" rx="6" class="s-box s-box-head"/><text x="760" y="20" class="s-title" text-anchor="middle">AI model</text><text x="760" y="35" class="s-sub" text-anchor="middle">jev or Ollama</text><rect x="865" y="2" width="110" height="44" rx="6" class="s-box s-box-head"/><text x="920" y="20" class="s-title" text-anchor="middle">SQLite</text><text x="920" y="35" class="s-sub" text-anchor="middle">app database</text><polyline points="90,74 300,74" class="s-line s-line-accent" fill="none" marker-end="url(#aha-run)"/><text x="195" y="67" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">1</tspan>  check_now</text><polyline points="300,108 920,108" class="s-line" fill="none" marker-end="url(#ah-run)"/><text x="610" y="101" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">2</tspan>  preconditions, then create run row (status running)</text><polyline points="300,142 90,142" class="s-line" fill="none" stroke-dasharray="5 4" marker-end="url(#ah-run)"/><text x="195" y="135" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">3</tspan>  run id; run:progress events follow</text><rect x="310" y="184" width="290" height="42" rx="5" class="s-note"/><text x="320" y="199" class="s-lbl s-lbl-note"><tspan class="s-num">4</tspan>  create provider: secret read from</text><text x="320" y="214" class="s-lbl s-lbl-note">Credential Manager (no network yet)</text><polyline points="300,268 920,268" class="s-line" fill="none" marker-end="url(#ah-run)"/><text x="610" y="261" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">5</tspan>  read the folder cursor</text><polyline points="300,302 540,302" class="s-line" fill="none" marker-end="url(#ah-run)"/><text x="420" y="295" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">6</tspan>  fetch_new(cursor, first-sync window)</text><polyline points="540,336 300,336" class="s-line" fill="none" stroke-dasharray="5 4" marker-end="url(#ah-run)"/><text x="420" y="329" class="s-lbl s-lbl-seq" text-anchor="middle">up to 200 emails, oldest first, next cursor</text><polyline points="300,390 920,390" class="s-line" fill="none" marker-end="url(#ah-run)"/><text x="610" y="383" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">7</tspan>  already processed? duplicate?</text><rect x="310" y="412" width="250" height="42" rx="5" class="s-note"/><text x="320" y="427" class="s-lbl s-lbl-note"><tspan class="s-num">8</tspan>  normalize, filters, date</text><text x="320" y="442" class="s-lbl s-lbl-note">candidates (no I/O)</text><polyline points="300,476 760,476" class="s-line s-line-accent" fill="none" marker-end="url(#aha-run)"/><text x="530" y="469" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">9</tspan>  ask(): one typed question set</text><polyline points="760,510 300,510" class="s-line" fill="none" stroke-dasharray="5 4" marker-end="url(#ah-run)"/><text x="530" y="503" class="s-lbl s-lbl-seq" text-anchor="middle">answers</text><polyline points="300,544 920,544" class="s-line" fill="none" marker-end="url(#ah-run)"/><text x="610" y="537" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">10</tspan>  save outcome (result and dates in one transaction)</text><polyline points="300,582 920,582" class="s-line" fill="none" marker-end="url(#ah-run)"/><text x="610" y="575" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">11</tspan>  advance cursor, only if the whole batch was saved</text><rect x="310" y="608" width="250" height="27" rx="5" class="s-note"/><text x="320" y="623" class="s-lbl s-lbl-note"><tspan class="s-num">12</tspan>  next account: repeat steps 4 to 11</text><polyline points="300,661 920,661" class="s-line" fill="none" marker-end="url(#ah-run)"/><text x="610" y="654" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">13</tspan>  record per-account results, finish run (success, partial, failed)</text><polyline points="300,695 90,695" class="s-line s-line-accent" fill="none" stroke-dasharray="5 4" marker-end="url(#aha-run)"/><text x="195" y="688" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">13</tspan>  run:finished (once)</text><rect x="100" y="717" width="210" height="42" rx="5" class="s-note"/><text x="110" y="732" class="s-lbl s-lbl-note"><tspan class="s-num">14</tspan>  refetch dashboard,</text><text x="110" y="747" class="s-lbl s-lbl-note">results and runs</text></svg></div>
+    <figcaption>One run. The numbers match the steps below. Dashed arrows are replies or events; the accent color marks the two calls that define the feature: the user's request and the single AI call per email.</figcaption>
+  </figure>
+
+  <h3>Preconditions</h3>
+  <p>Before anything is written, <code>prepare</code> verifies three things. If one fails, the command returns an error and <strong>no run row exists</strong>.</p>
+  <ul>
+    <li><strong>A single run.</strong> A lock allows one run at a time. A second press returns "A check is already running".</li>
+    <li><strong>At least one enabled account.</strong> Otherwise: "There are no enabled accounts".</li>
+    <li><strong>AI configured.</strong> Ollama always counts as configured (it is only contacted later). Selecting jev without a stored key is refused: "The AI provider is not configured: Add your jev API key in Settings".</li>
+  </ul>
+
+  <h3>The run</h3>
+  <ol class="steps">
+    <li><span class="stitle">You press Check now.</span>The Dashboard calls the <code>check_now</code> command. The button is replaced by a progress label.</li>
+    <li><span class="stitle">The backend prepares the run.</span>It takes the lock, loads settings, lists the enabled accounts (here ids 1 and 2), builds the AI model from the settings, and inserts a <code>runs</code> row, for example id 7 with status <code>running</code>. The model, the settings and the account list are captured at this moment, so editing Settings during the run does not change it.</li>
+    <li><span class="stitle">The command returns the run id immediately.</span>The pipeline continues on a background task. A supervisor task watches it; if the task panics, the supervisor marks the run failed ("Interrupted") and emits <code>run:finished</code> so the UI never hangs.</li>
+    <li><span class="stitle">Account 1 starts.</span>The backend emits <code>run:progress</code> with stage <code>connecting</code>, then asks the provider factory for an IMAP provider. The factory reads the password from Windows Credential Manager. Creating the provider does no network I/O; if the password is missing the account fails right here with an <code>auth</code> error and no folder is touched.</li>
+    <li><span class="stitle">The folder cursor is read.</span>For <code>INBOX</code> there is no <code>sync_states</code> row yet, so the sync is a first sync. The window start is <code>since = now - initial_sync_days</code>, that is 15 September 2026. With a stored cursor, the cursor wins and the window is not used.</li>
+    <li><span class="stitle">Mail is fetched.</span>The IMAP provider connects over TLS, logs in, runs <code>SELECT INBOX</code> and <code>UID SEARCH SINCE 15-Sep-2026</code>, and fetches the matches with <code>UID FETCH ... BODY.PEEK[]</code>. UIDs 501 to 504 come back, parsed into emails and sorted oldest first, together with the next cursor <code>{"type":"imap","uidvalidity":N,"last_uid":504}</code>. At most 200 emails come back per folder per check.</li>
+    <li>
+      <span class="stitle">Each email takes the same path.</span>Deduplication and filtering run before any AI call. The diagram below shows every branch; the table after it applies it to our four UV emails.
+      <figure>
+        <div class="diagram narrow"><svg viewBox="0 0 900 580" role="img" aria-label="Per-message decision flow: skip if already processed, filtered as duplicate or by a filter, otherwise analyzed by the model and saved as irrelevant, failed, stopped or a result" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ah-msg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker><marker id="aha-msg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-accent"/></marker></defs><rect x="40" y="20" width="290" height="48" rx="6" class="s-box s-box-head"/><text x="185" y="40" class="s-title" text-anchor="middle">Email from fetch_new</text><text x="185" y="55" class="s-sub" text-anchor="middle">one row of the batch, oldest first</text><rect x="40" y="100" width="290" height="52" rx="6" class="s-box"/><text x="185" y="122" class="s-title" text-anchor="middle">Already in processed_messages?</text><text x="185" y="137" class="s-sub" text-anchor="middle">same account, folder, provider id</text><rect x="40" y="180" width="290" height="52" rx="6" class="s-box"/><text x="185" y="202" class="s-title" text-anchor="middle">Duplicate?</text><text x="185" y="217" class="s-sub" text-anchor="middle">same Message-ID or content hash, this account</text><rect x="40" y="260" width="290" height="52" rx="6" class="s-box"/><text x="185" y="282" class="s-title" text-anchor="middle">A deterministic filter matches?</text><text x="185" y="297" class="s-sub" text-anchor="middle">blocked sender or domain, own message, empty</text><rect x="40" y="370" width="290" height="68" rx="6" class="s-box s-box-accent"/><text x="185" y="400" class="s-title" text-anchor="middle">Find date candidates, ask the model once</text><text x="185" y="415" class="s-sub" text-anchor="middle">one ask() with the typed question set</text><polyline points="185,68 185,100" class="s-line" fill="none" marker-end="url(#ah-msg)"/><text x="193" y="88" class="s-lbl" text-anchor="start">no</text><polyline points="185,152 185,180" class="s-line" fill="none" marker-end="url(#ah-msg)"/><text x="193" y="170" class="s-lbl" text-anchor="start">no</text><polyline points="185,232 185,260" class="s-line" fill="none" marker-end="url(#ah-msg)"/><text x="193" y="250" class="s-lbl" text-anchor="start">no</text><polyline points="185,312 185,370" class="s-line" fill="none" marker-end="url(#ah-msg)"/><text x="193" y="345" class="s-lbl" text-anchor="start">no</text><rect x="470" y="100" width="390" height="52" rx="6" class="s-box s-box-mute"/><text x="665" y="122" class="s-title" text-anchor="middle">Skip silently</text><text x="665" y="137" class="s-sub" text-anchor="middle">not counted, no row written</text><polyline points="330,126 470,126" class="s-line" fill="none" marker-end="url(#ah-msg)"/><text x="400" y="120" class="s-lbl" text-anchor="middle">yes</text><rect x="470" y="180" width="390" height="52" rx="6" class="s-box s-box-mute"/><text x="665" y="202" class="s-title" text-anchor="middle">Row: filtered, reason duplicate</text><text x="665" y="217" class="s-sub" text-anchor="middle">counted as found and filtered</text><polyline points="330,206 470,206" class="s-line" fill="none" marker-end="url(#ah-msg)"/><text x="400" y="200" class="s-lbl" text-anchor="middle">yes</text><rect x="470" y="260" width="390" height="52" rx="6" class="s-box s-box-mute"/><text x="665" y="282" class="s-title" text-anchor="middle">Row: filtered, reason from the filter</text><text x="665" y="297" class="s-sub" text-anchor="middle">blocked_sender, blocked_domain, own_message, empty</text><polyline points="330,286 470,286" class="s-line" fill="none" marker-end="url(#ah-msg)"/><text x="400" y="280" class="s-lbl" text-anchor="middle">yes</text><polyline points="330,404 400,404" class="s-line" fill="none"/><polyline points="400,364 400,532" class="s-line" fill="none"/><rect x="470" y="340" width="390" height="48" rx="6" class="s-box s-box-accent"/><text x="665" y="360" class="s-title" text-anchor="middle">Relevant: result and dates saved</text><text x="665" y="375" class="s-sub" text-anchor="middle">row analyzed; results_created + 1</text><polyline points="400,364 470,364" class="s-line" fill="none" marker-end="url(#ah-msg)"/><rect x="470" y="396" width="390" height="48" rx="6" class="s-box s-box-mute"/><text x="665" y="416" class="s-title" text-anchor="middle">Irrelevant: p(relevant) below 0.4</text><text x="665" y="431" class="s-sub" text-anchor="middle">row irrelevant, no result</text><polyline points="400,420 470,420" class="s-line" fill="none" marker-end="url(#ah-msg)"/><rect x="470" y="452" width="390" height="48" rx="6" class="s-box s-box-warn"/><text x="665" y="472" class="s-title" text-anchor="middle">Invalid answer: row failed, reason saved</text><text x="665" y="487" class="s-sub" text-anchor="middle">run continues, cursor still advances</text><polyline points="400,476 470,476" class="s-line" fill="none" marker-end="url(#ah-msg)"/><rect x="470" y="508" width="390" height="48" rx="6" class="s-box s-box-warn"/><text x="665" y="528" class="s-title" text-anchor="middle">Auth, rate limit or provider down</text><text x="665" y="543" class="s-sub" text-anchor="middle">stop the account, cursor NOT advanced</text><polyline points="400,532 470,532" class="s-line" fill="none" marker-end="url(#ah-msg)"/></svg></div>
+        <figcaption>Per-message decisions. Only the last box costs an AI call.</figcaption>
+      </figure>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>UID</th><th>Decision</th><th><code>processed_messages</code> row</th></tr></thead>
+          <tbody>
+            <tr><td>501</td><td class="wrap">Not seen before, not a duplicate, no filter matches. Goes on to the AI.</td><td class="wrap">Written after the AI answers (step 10).</td></tr>
+            <tr><td>502</td><td class="wrap">Same: goes on to the AI.</td><td class="wrap">Written after the AI answers.</td></tr>
+            <tr><td>503</td><td class="wrap">The domain is on the blocked list. Discarded without any AI call.</td><td class="wrap">outcome <code>filtered</code>, reason <code>blocked_domain</code></td></tr>
+            <tr><td>504</td><td class="wrap">Its <code>Message-ID</code> header equals the one stored for UID 501. Discarded as a duplicate.</td><td class="wrap">outcome <code>filtered</code>, reason <code>duplicate</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Duplicate detection compares, per account, the <code>Message-ID</code> header <em>or</em> a content hash of (sender, subject, cleaned body). An email without a <code>Message-ID</code> is only compared by hash.</p>
+    </li>
+    <li>
+      <span class="stitle">Normalization, filters and date candidates (pure code, no I/O).</span>For UID 501 the raw body is turned into plain text, quoted replies and the signature are dropped, whitespace is collapsed, and the text is cut at 12,000 characters. What remains is:
+<pre><code>Subject: Cambio de fecha del examen parcial de Álgebra Lineal
+Estimados alumnos: el examen parcial se traslada al martes 27 de octubre
+a las 10:00 en el aula 2.3. La fecha anterior (20 de octubre) queda anulada.
+Un saludo, J. García</code></pre>
+      <p>The date extractor scans subject then body and finds two candidates. Neither mentions a year, so the year is inferred from the email's received date (2026). Relative words such as "mañana" are resolved against the received time, not against the clock at analysis time.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Candidate</th><th>Text span found</th><th>Resolved</th></tr></thead>
+          <tbody>
+            <tr><td><code>date_0</code></td><td class="wrap"><code>martes 27 de octubre a las 10:00</code></td><td>2026-10-27 10:00</td></tr>
+            <tr><td><code>date_1</code></td><td class="wrap"><code>20 de octubre</code></td><td>2026-10-20</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </li>
+    <li>
+      <span class="stitle">One AI call.</span>The analyzer builds the state (subject, sender, received time, cleaned body, the account's default university name) and the question set, then calls the model <strong>once</strong>. Because UV IMAP has a default university, no <code>university</code> question is asked; the <code>course</code> question offers only Valencia's courses. A plausible answer from the model:
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Question</th><th>Answer</th><th>What the code does with it</th></tr></thead>
+          <tbody>
+            <tr><td><code>relevant</code></td><td>0.96</td><td class="wrap">At least 0.4, so the email is relevant.</td></tr>
+            <tr><td><code>category</code></td><td><code>change</code></td><td class="wrap">Stored as the category.</td></tr>
+            <tr><td><code>action_required</code></td><td>0.20</td><td class="wrap">Below 0.5: flag off.</td></tr>
+            <tr><td><code>possible_change</code></td><td>0.93</td><td class="wrap">At least 0.5: flag on.</td></tr>
+            <tr><td><code>priority</code></td><td>level 2 (<code>high</code>)</td><td class="wrap">Stored as the priority.</td></tr>
+            <tr><td><code>course</code></td><td><code>c1</code> (&Aacute;lgebra Lineal)</td><td class="wrap">Stored as the course; university comes from the account default.</td></tr>
+            <tr><td><code>date_0</code></td><td><code>exam</code></td><td class="wrap">Kept: 2026-10-27 10:00, kind exam.</td></tr>
+            <tr><td><code>date_1</code></td><td><code>not_relevant</code></td><td class="wrap">Dropped: the superseded date is not stored.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Section 4 explains each question in detail.</p>
+    </li>
+    <li><span class="stitle">The outcome is saved.</span>For a relevant email, one SQL transaction writes the <code>processed_messages</code> row (outcome <code>analyzed</code>), the <code>ai_results</code> row and one <code>result_dates</code> row per kept date. Either all three are stored or none. UID 502 goes through the same steps and produces a <code>task</code> with a <code>deadline</code> date of Friday 30 October 2026.</li>
+    <li>
+      <span class="stitle">The cursor advances, but only after the batch.</span>Once all four emails of the batch were processed without stopping, <code>sync_states</code> for (account 1, <code>INBOX</code>) is upserted: the cursor becomes <code>last_uid: 504</code>, status <code>ok</code>, <code>last_error</code> cleared. If the run stops halfway, the cursor stays where it was. The rows of messages already saved make a retry cheap: on the next run they are recognized and skipped silently.
+      <p>The <code>analyzing</code> progress event fires every 10 messages and at the end of a batch, so this account shows "Analyzing 4/4", then <code>done</code>.</p>
+    </li>
+    <li><span class="stitle">Account 2 runs the same way.</span>Microsoft Graph replaces IMAP: the provider refreshes the access token from the stored refresh token, then requests the delta feed of <code>inbox</code> filtered by <code>receivedDateTime</code>. Two messages arrive. The seminar announcement is relevant (category <code>event</code>, priority <code>medium</code>, course "Bases de Datos", date <code>event</code> 2026-11-05 16:30) and becomes a result. The cafeteria survey gets <code>relevant</code> 0.08, below 0.4, so it is saved as <code>irrelevant</code>: a <code>processed_messages</code> row, no result. The cursor becomes the <code>deltaLink</code> returned by Graph.</li>
+    <li>
+      <span class="stitle">The run finishes.</span>Each account's counters are recorded in <code>run_accounts</code>, summed into the <code>runs</code> row, and the status is set: <code>success</code> when no account failed, <code>failed</code> when all did, <code>partial</code> otherwise. The lock is released, then <code>run:finished</code> is emitted exactly once.
+      <div class="tablewrap">
+        <table class="nums">
+          <caption>Counters recorded for run 7</caption>
+          <thead><tr><th>Scope</th><th>found</th><th>filtered</th><th>analyzed</th><th>failed</th><th>results</th></tr></thead>
+          <tbody>
+            <tr><td>UV IMAP</td><td>4</td><td>2</td><td>2</td><td>0</td><td>2</td></tr>
+            <tr><td>UAH 365</td><td>2</td><td>0</td><td>2</td><td>0</td><td>1</td></tr>
+            <tr><td><strong>Run 7 (success)</strong></td><td>6</td><td>2</td><td>4</td><td>0</td><td>3</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><code>found</code> counts every message that was not skipped as already processed. <code>analyzed</code> counts messages actually sent to the model, including irrelevant ones and invalid answers. <code>failed</code> counts only invalid answers.</p>
+    </li>
+    <li><span class="stitle">The UI refreshes.</span>The check-run provider, mounted once at the app root, listens to both events, so any screen reacts. On <code>run:finished</code> it invalidates the dashboard, results and runs queries. The Dashboard now shows the last check ("success"), three unseen results, and counters New 3, Tasks 1, Events 1, and Changes and notices 1.</li>
+  </ol>
+
+  <h3>Fetching: first sync and incremental sync</h3>
+  <p>The cursor is an opaque bookmark per account and folder, stored as JSON in <code>sync_states.cursor</code>. Its shape depends on the provider.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th></th><th>IMAP</th><th>Microsoft 365 (Graph)</th></tr></thead>
+      <tbody>
+        <tr><td>Cursor</td><td class="wrap"><code>{"type":"imap","uidvalidity":N,"last_uid":N}</code></td><td class="wrap"><code>{"type":"graph","link":"..."}</code>, a delta link</td></tr>
+        <tr><td>First sync (no cursor)</td><td class="wrap"><code>UID SEARCH SINCE &lt;date&gt;</code>, date = now minus first-sync days (a day, not a time)</td><td class="wrap">Delta query with <code>$filter=receivedDateTime ge &lt;since&gt;</code>, 50 messages per page</td></tr>
+        <tr><td>Later checks</td><td class="wrap"><code>UID SEARCH UID last_uid+1:*</code>; UIDs at or below <code>last_uid</code> are ignored</td><td class="wrap">The saved link is requested as is; no filter is added</td></tr>
+        <tr><td>Batch cap</td><td class="wrap">200 emails, oldest first</td><td class="wrap">Paging stops before a page would exceed 200; the saved cursor is the unfetched next-page link</td></tr>
+        <tr><td>Nothing new</td><td class="wrap">Cursor unchanged. With no cursor yet: <code>last_uid = UIDNEXT - 1</code></td><td class="wrap">The delta link</td></tr>
+        <tr><td>Mailbox recreated</td><td class="wrap"><code>UIDVALIDITY</code> differs: the cursor is discarded and the window is used again. Message-level dedup makes the re-fetch harmless.</td><td class="wrap">Not applicable</td></tr>
+        <tr><td>Unparseable message</td><td class="wrap">Skipped with a warning that logs only the UID; the cursor moves past it</td><td class="wrap">Skipped with a warning that logs only the Graph id; the cursor moves past it</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout note">
+    <span class="tag">Backlog</span>
+    <p>A folder with 500 new messages needs three checks: each check takes at most 200 and the cursor advances by that batch only.</p>
+  </div>
+
+  <h3>When things go wrong</h3>
+  <p>The pipeline isolates failures at three levels: a message, a folder, an account. A failure never stops accounts that have nothing to do with it.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Situation</th><th>What happens</th><th>Cursor</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="wrap"><strong>Sign-in expired</strong> on UAH 365</td>
+          <td class="wrap"><code>fetch_new</code> fails with <code>auth</code> ("Your sign-in expired. Reconnect the account"). The folder's sync state becomes <code>error</code>; <code>run_accounts</code> records <code>failed</code> with the error kind and message. UV IMAP still runs. The run ends <code>partial</code> ("1 of 2 accounts failed") and the Dashboard shows a banner with the message.</td>
+          <td class="wrap">Not advanced</td>
+        </tr>
+        <tr>
+          <td class="wrap"><strong>IMAP password missing</strong></td>
+          <td class="wrap">The factory fails before any network call. The account is recorded <code>failed</code> with zero counters. The Dashboard banner comes from the credentials check ("The password is missing. Edit the account to set it").</td>
+          <td class="wrap">Untouched</td>
+        </tr>
+        <tr>
+          <td class="wrap"><strong>AI unavailable</strong> (Ollama stopped, jev key rejected, rate limit)</td>
+          <td class="wrap">The failing message stops the whole account, including its remaining folders. Error kind <code>ai</code>. Messages already saved earlier in the batch stay saved.</td>
+          <td class="wrap">Not advanced. The next check fetches the batch again, skips the saved messages silently and retries the failing one.</td>
+        </tr>
+        <tr>
+          <td class="wrap"><strong>Invalid AI answer</strong> for one message</td>
+          <td class="wrap">The message is stored as <code>failed</code> with a sanitized reason (whitespace collapsed, at most 500 characters), <code>failed</code> and <code>analyzed</code> counters go up, and processing continues. The account does not fail.</td>
+          <td class="wrap">Advances. The message is not retried automatically, because its row now exists.</td>
+        </tr>
+        <tr>
+          <td class="wrap"><strong>One folder cannot be fetched</strong></td>
+          <td class="wrap">That folder's sync state becomes <code>error</code>. The next folder of the same account is still tried. The account is reported failed with the first error it hit.</td>
+          <td class="wrap">Not advanced for that folder</td>
+        </tr>
+        <tr>
+          <td class="wrap"><strong>App closed or crashed mid-run</strong></td>
+          <td class="wrap">On the next startup every run still marked <code>running</code> becomes <code>failed</code> with the summary "Interrupted".</td>
+          <td class="wrap">Only advanced for batches that had finished</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout warning">
+    <span class="tag">Attention banners persist</span>
+    <p>The dashboard banner for an account is driven by the stored sync state, so it stays until a later check of that folder succeeds. Fixing the cause is not enough; run Check now again. Disabled accounts and folders no longer configured never show a banner.</p>
+  </div>
+</section>
+
+<section id="ai">
+  <h2>4. How the AI analysis works</h2>
+  <p class="section-intro">The AI is not asked to write anything. For each email, code builds a list of typed questions with closed answer sets, sends them in one call, validates the answers and converts them to columns. This section explains that design, the questions, the thresholds and what leaves the machine. Reference: <a href="core/email-analyzer.md">core/email-analyzer.md</a>, <a href="infra/ai-providers.md">infra/ai-providers.md</a>.</p>
+
+  <h3>Why structured questions</h3>
+  <p>jev only answers typed questions, so the whole feature is built around that. The same shape also suits the product: results must be predictable columns the UI can sort and filter, not prose that has to be parsed. There are three question types.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Type</th><th>Meaning</th><th>Answer</th><th>Used for</th></tr></thead>
+      <tbody>
+        <tr><td><code>noul</code></td><td class="wrap">A yes/no statement. The model says how likely it is true.</td><td class="wrap">A probability <code>p_yes</code> between 0 and 1</td><td class="wrap">relevant, action_required, possible_change</td></tr>
+        <tr><td><code>choice</code></td><td class="wrap">Pick exactly one key from a closed list of options, each with a description.</td><td class="wrap">One option key</td><td class="wrap">category, university, course, each date</td></tr>
+        <tr><td><code>score</code></td><td class="wrap">Pick a level on an ordered scale.</td><td class="wrap">A level index</td><td class="wrap">priority</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Every answer is validated against the question that was asked: a missing answer, a key that is not one of the options, or a level out of range makes the call an <em>invalid response</em>. That single email is stored as <code>failed</code> and the run continues (see section 3). The pipeline only knows a <code>StructuredModel</code> port with <code>ask(state, questions)</code>; jev and Ollama are two adapters behind it.</p>
+
+  <h3>What the model receives</h3>
+  <p>The <em>state</em> is a small JSON document. Nothing else about the email is included.</p>
+<pre><code>{
+  "email": {
+    "subject": "Cambio de fecha del examen parcial de Álgebra Lineal",
+    "from": { "name": "J. García", "email": "garcia@uv.example" },
+    "received_at": "2026-09-29T07:12:00+00:00",
+    "body": "Estimados alumnos: el examen parcial se traslada al martes 27 de octubre ..."
+  },
+  "context": { "account_university": "Universidad de Valencia" }
+}</code></pre>
+  <p>The body is the <em>normalized</em> body: plain text, quoted replies and signature removed, at most 12,000 characters. <code>context.account_university</code> is present only when the account has a default university that exists in the catalog.</p>
+
+  <h3>The questions</h3>
+  <p>The set is built in a fixed order for every email. Five questions are always asked; the others depend on the account, the catalog and the dates found.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Id</th><th>Type</th><th>Asked</th><th>What it means and how the answer is used</th></tr></thead>
+      <tbody>
+        <tr><td><code>relevant</code></td><td>noul</td><td>always</td><td class="wrap">Is this an academic communication relevant to a student (courses, classes, exams, assignments, grades, schedules, tutoring, academic procedures)? <strong>Below 0.4</strong>: the email is <em>irrelevant</em>, stored without a result. Otherwise relevant.</td></tr>
+        <tr><td><code>category</code></td><td>choice</td><td>always</td><td class="wrap">One of <code>notice</code> (general announcement), <code>task</code> (something to complete or submit), <code>exam</code>, <code>event</code> (a talk or session at a time), <code>change</code> (modifies or cancels earlier information), <code>general_info</code> (administrative, no action). Stored as is.</td></tr>
+        <tr><td><code>action_required</code></td><td>noul</td><td>always</td><td class="wrap">Does the email ask the student to submit, register, reply, attend, prepare, pay or bring something? Flag set when <strong>0.5 or more</strong>.</td></tr>
+        <tr><td><code>possible_change</code></td><td>noul</td><td>always</td><td class="wrap">Does it change something communicated before (new date or time, new room, cancellation, new instructions)? Flag set when <strong>0.5 or more</strong>. Phase 1 only flags; it does not link to the earlier email.</td></tr>
+        <tr><td><code>priority</code></td><td>score</td><td>always</td><td class="wrap">How soon must the student act: <code>low</code> (informational, or far away), <code>medium</code> (within weeks), <code>high</code> (within days), <code>urgent</code> (immediate, or within 48 hours). The level chosen is stored.</td></tr>
+        <tr><td><code>university</code></td><td>choice</td><td class="wrap">Only if the account has <strong>no</strong> default university and the catalog has at least one</td><td class="wrap">Options <code>u{id}</code> per catalog university plus <code>unknown</code>.</td></tr>
+        <tr><td><code>course</code></td><td>choice</td><td class="wrap">Only if there is at least one candidate course</td><td class="wrap">Options <code>c{id}</code> per candidate course plus <code>none</code>. Each option is described as "Name (University), also known as: aliases", so aliases such as <code>ALG</code> help the model match. At most 254 courses are offered.</td></tr>
+        <tr><td><code>date_0</code>, <code>date_1</code>, ...</td><td>choice</td><td class="wrap">One per date candidate, at most 20</td><td class="wrap">"What does the date written as &laquo;27 de octubre a las 10:00&raquo; refer to?" Options: <code>exam</code>, <code>deadline</code>, <code>event</code>, <code>class</code>, <code>other</code>, <code>not_relevant</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>All questions go out in <strong>one call</strong> per email. That means an irrelevant email costs the same call as a relevant one, and a malformed answer to any single question makes the whole email <code>failed</code>, even if <code>relevant</code> was clearly low.</p>
+
+  <h3>Thresholds and derived values</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Value</th><th>Rule</th></tr></thead>
+      <tbody>
+        <tr><td>Relevant</td><td class="wrap"><code>relevant.p_yes &ge; 0.4</code> (constant <code>RELEVANCE_THRESHOLD</code>).</td></tr>
+        <tr><td><code>action_required</code>, <code>possible_change</code></td><td class="wrap"><code>p_yes &ge; 0.5</code> (constant <code>FLAG_THRESHOLD</code>).</td></tr>
+        <tr><td>Priority</td><td class="wrap">The level the model selected. jev's level is the highest-probability level, not a rounded score.</td></tr>
+        <tr><td>Confidence</td><td class="wrap">The <em>minimum</em> confidence across all answers, when the provider reports one. Stored in <code>ai_results.confidence</code>; the UI never shows it.</td></tr>
+        <tr><td>Model used</td><td class="wrap">Provider and model name are stored in <code>ai_results.model_provider</code> and <code>model_name</code>, also hidden in the UI.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>How dates are found and classified</h3>
+  <p>Code finds the dates; the model only says what each one is. Calendar arithmetic and year inference are error-prone for language models and easy to test in code, so they never depend on the model.</p>
+  <ul>
+    <li><strong>Formats.</strong> Numeric (<code>27/10</code>, <code>27/10/2026</code>, <code>27-10-2026</code>, <code>2026-10-27</code>, day first), Spanish and English month names (<code>27 de octubre</code>, <code>October 27</code>), an optional leading weekday, and relative words: <code>hoy</code>, <code>mañana</code>, <code>pasado mañana</code>, <code>próximo lunes</code>, <code>next Monday</code>. "La mañana" and "esta mañana" mean morning and are not dates.</li>
+    <li><strong>Times.</strong> Attached to a date when they follow it within 20 characters: <code>10:00</code>, <code>10h</code>, <code>a las 10:30</code>, <code>3 pm</code>.</li>
+    <li><strong>Missing year.</strong> The day and month are tried in the previous, current and next year of the email's received date; the closest one that is not earlier than 30 days before the received date wins. If none qualifies, the candidate is discarded.</li>
+    <li><strong>Relative dates</strong> are resolved against the email's received time in the local time zone, so the same email gives the same dates whenever it is analyzed.</li>
+    <li><strong>Order and limits.</strong> Subject first, then body; duplicates by (date, time) collapse; at most 20 candidates.</li>
+    <li><strong>Classification.</strong> Each candidate becomes a <code>date_i</code> question. An answer other than <code>not_relevant</code> creates a row in <code>result_dates</code> with the model's kind; <code>not_relevant</code> dates are dropped.</li>
+  </ul>
+  <p>Detail and examples: <a href="core/date-extraction.md">core/date-extraction.md</a>.</p>
+
+  <h3>How university and course are resolved</h3>
+  <ol>
+    <li>If the account has a default university, that is the result's university, and no <code>university</code> question is asked.</li>
+    <li>Otherwise, if the model picked a course, the university of that course wins, because a course is more specific.</li>
+    <li>Otherwise, if the <code>university</code> question was asked, its answer is used (<code>unknown</code> means none).</li>
+    <li>Otherwise there is no university.</li>
+  </ol>
+  <p>The candidate courses are the default university's courses when the account has one, otherwise every course in the catalog. An empty catalog therefore means no <code>course</code> question and no course on any result. That is why filling the University catalog improves results.</p>
+
+  <h3>jev and Ollama compared</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th></th><th>jev (TypeSafe)</th><th>Ollama</th></tr></thead>
+      <tbody>
+        <tr><td>Where it runs</td><td class="wrap">External API, <code>https://api.typesafe.ai</code></td><td class="wrap">Local HTTP server, <code>http://localhost:11434</code> by default</td></tr>
+        <tr><td>Privacy</td><td class="wrap">Email text leaves the machine. Only when you select it and store a key.</td><td class="wrap">Stays on this PC as long as the URL is local. The default provider.</td></tr>
+        <tr><td>How it is asked</td><td class="wrap">One <code>POST /v1/systemone</code> with the state and typed questions</td><td class="wrap">One <code>POST /api/chat</code>; the answer is constrained by a JSON schema built from the questions, temperature 0</td></tr>
+        <tr><td>Answer detail</td><td class="wrap">Real probabilities for noul questions and a confidence for every answer</td><td class="wrap">Booleans only: a noul is 1.0 or 0.0, so the thresholds behave as plain yes/no. No confidence, so <code>ai_results.confidence</code> stays empty.</td></tr>
+        <tr><td>Failure handling</td><td class="wrap">401/403: auth error. 429, 5xx and transport errors: retried three times (1, 2, 4 s), then rate-limited or unavailable. Timeout 60 s per request.</td><td class="wrap">Any transport error or non-2xx status: unavailable, no retry. Timeout 120 s.</td></tr>
+        <tr><td>Speed and cost</td><td class="wrap">Network round trip per email; retries add waiting time.</td><td class="wrap">Depends on your hardware and model size; slow machines can hit the 120 s timeout.</td></tr>
+        <tr><td>Defaults</td><td class="wrap">Model <code>jev-latest</code></td><td class="wrap">Model <code>qwen3:8b</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>What is sent outside, and what is not</h3>
+  <div class="callout privacy">
+    <span class="tag">Privacy</span>
+    <p>When jev is selected, each email that passed dedup and filters produces one request containing: subject, sender name and address, received time, the normalized body (at most 12,000 characters), the account's default university name, the question texts, and the candidate courses' names and aliases (or the university names, when that question is asked). The date phrases found in the text appear inside the date questions. The API key travels in an HTTP header.</p>
+    <p>Never sent: recipients (To and Cc), the <code>Message-ID</code> header, provider ids, folder names, attachments, other emails, passwords or tokens. Emails that were filtered out are never sent at all. With Ollama the same payload goes only to the configured base URL.</p>
+  </div>
+</section>
+
+<section id="accounts">
+  <h2>5. Accounts and sign-in</h2>
+  <p class="section-intro">An account is a mailbox plus the rules for reading it. There are two kinds and they differ in how they authenticate. The provider type is fixed when the account is created.</p>
+
+  <h3>IMAP accounts</h3>
+  <ul>
+    <li><strong>Fields.</strong> Display name, email, host, port (default 993), username, password, folders (default <code>INBOX</code>), default university, first-sync days (1 to 365, default 14).</li>
+    <li><strong>Where each piece goes.</strong> Host, port and username are stored as JSON in <code>accounts.config</code>. The password goes only to Windows Credential Manager under <code>academic-assistant/account/{id}/password</code>. When you edit the account, an empty password field keeps the stored one.</li>
+    <li><strong>Connection.</strong> Implicit TLS only (usually port 993); STARTTLS is not implemented. The provider logs in with <code>LOGIN</code> and fetches with <code>BODY.PEEK[]</code>, which never sets the read flag. It never moves, deletes or writes anything.</li>
+    <li><strong>Creating one.</strong> The account row is inserted, any leftover secret under the new id is deleted (defense in depth), then the password is stored. If storing fails, the row is deleted again. Ids are <code>AUTOINCREMENT</code>, so a deleted account's id is never reused and a stale secret can never be inherited.</li>
+    <li><strong>Providers that block plain passwords.</strong> Many universities, Gmail and Outlook.com require an app password or have IMAP disabled. A rejected login is an <code>auth</code> error.</li>
+  </ul>
+
+  <h3>Microsoft 365 accounts</h3>
+  <p>Microsoft 365 mailboxes are read through Microsoft Graph, with OAuth 2 authorization code and PKCE. The app is a <em>public client</em>: it ships no secret.</p>
+  <ol class="steps">
+    <li><span class="stitle">Register the app once in Entra ID.</span>Multitenant registration, platform "Mobile and desktop applications" with redirect URI <code>http://localhost</code> (any port is accepted, and the app picks a free one at sign-in), delegated permissions <code>Mail.Read</code>, <code>User.Read</code> and <code>offline_access</code>, "Allow public client flows" set to Yes, and no client secret. Full walk-through: <a href="setup.md#2-microsoft-entra-app-registration">setup.md</a>.</li>
+    <li><span class="stitle">Paste the Application (client) ID into Settings.</span>It is stored in the <code>settings</code> table as <code>microsoft.client_id</code>.</li>
+    <li><span class="stitle">Add the account.</span>Fields: name, email, folders (default <code>inbox</code>), default university, first-sync days. The tenant defaults to <code>organizations</code> and cannot be changed later; it must match <code>^[A-Za-z0-9.-]+$</code>. It is stored as <code>{"tenant": "..."}</code> in <code>accounts.config</code>.</li>
+    <li><span class="stitle">Press Sign in with Microsoft.</span>The flow below runs. Nothing but the refresh token is stored.</li>
+  </ol>
+
+  <figure>
+    <div class="diagram"><svg viewBox="0 0 1000 614" role="img" aria-label="Microsoft sign-in: the backend opens the browser with a PKCE authorization URL, receives the code on a loopback listener, exchanges it for tokens, verifies the mailbox and stores the refresh token in the Windows Credential Manager" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ah-auth" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker><marker id="aha-auth" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-accent"/></marker></defs><line x1="80" y1="48" x2="80" y2="608" class="s-life"/><line x1="280" y1="48" x2="280" y2="608" class="s-life"/><line x1="500" y1="48" x2="500" y2="608" class="s-life"/><line x1="730" y1="48" x2="730" y2="608" class="s-life"/><line x1="920" y1="48" x2="920" y2="608" class="s-life"/><rect x="15" y="2" width="130" height="44" rx="6" class="s-box s-box-head"/><text x="80" y="20" class="s-title" text-anchor="middle">Accounts UI</text><text x="80" y="35" class="s-sub" text-anchor="middle">WebView</text><rect x="195" y="2" width="170" height="44" rx="6" class="s-box s-box-head"/><text x="280" y="20" class="s-title" text-anchor="middle">Backend</text><text x="280" y="35" class="s-sub" text-anchor="middle">connect_microsoft_account</text><rect x="430" y="2" width="140" height="44" rx="6" class="s-box s-box-head"/><text x="500" y="20" class="s-title" text-anchor="middle">System browser</text><text x="500" y="35" class="s-sub" text-anchor="middle">and loopback port</text><rect x="655" y="2" width="150" height="44" rx="6" class="s-box s-box-head"/><text x="730" y="20" class="s-title" text-anchor="middle">Microsoft</text><text x="730" y="35" class="s-sub" text-anchor="middle">Entra ID and Graph</text><rect x="850" y="2" width="140" height="44" rx="6" class="s-box s-box-head"/><text x="920" y="20" class="s-title" text-anchor="middle">Credential Manager</text><text x="920" y="35" class="s-sub" text-anchor="middle">Windows</text><polyline points="80,74 280,74" class="s-line s-line-accent" fill="none" marker-end="url(#aha-auth)"/><text x="180" y="67" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">1</tspan>  Sign in with Microsoft</text><rect x="290" y="96" width="330" height="42" rx="5" class="s-note"/><text x="300" y="111" class="s-lbl s-lbl-note"><tspan class="s-num">2</tspan>  check client ID and tenant, listen on</text><text x="300" y="126" class="s-lbl s-lbl-note">127.0.0.1:random port, make PKCE verifier + state</text><polyline points="280,160 500,160" class="s-line" fill="none" marker-end="url(#ah-auth)"/><text x="390" y="153" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">3</tspan>  open authorize URL</text><polyline points="500,194 730,194" class="s-line" fill="none" marker-end="url(#ah-auth)"/><text x="615" y="187" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">4</tspan>  user signs in and consents</text><polyline points="730,228 500,228" class="s-line" fill="none" stroke-dasharray="5 4" marker-end="url(#ah-auth)"/><text x="615" y="221" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">5</tspan>  redirect to localhost with code and state</text><polyline points="500,262 280,262" class="s-line" fill="none" marker-end="url(#ah-auth)"/><text x="390" y="255" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">6</tspan>  GET /?code=...&amp;state=... (loopback)</text><rect x="290" y="284" width="240" height="42" rx="5" class="s-note"/><text x="300" y="299" class="s-lbl s-lbl-note"><tspan class="s-num">7</tspan>  state must match, otherwise</text><text x="300" y="314" class="s-lbl s-lbl-note">the attempt is rejected</text><polyline points="280,348 730,348" class="s-line" fill="none" marker-end="url(#ah-auth)"/><text x="505" y="341" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">8</tspan>  POST /token: code + PKCE verifier</text><polyline points="730,382 280,382" class="s-line" fill="none" stroke-dasharray="5 4" marker-end="url(#ah-auth)"/><text x="505" y="375" class="s-lbl s-lbl-seq" text-anchor="middle">access token, refresh token</text><polyline points="280,416 730,416" class="s-line" fill="none" marker-end="url(#ah-auth)"/><text x="505" y="409" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">9</tspan>  GET /me (Graph)</text><polyline points="730,450 280,450" class="s-line" fill="none" stroke-dasharray="5 4" marker-end="url(#ah-auth)"/><text x="505" y="443" class="s-lbl s-lbl-seq" text-anchor="middle">mail and userPrincipalName</text><rect x="290" y="472" width="330" height="42" rx="5" class="s-note"/><text x="300" y="487" class="s-lbl s-lbl-note"><tspan class="s-num">10</tspan>  account email must equal mail or</text><text x="300" y="502" class="s-lbl s-lbl-note">userPrincipalName, otherwise nothing is stored</text><polyline points="280,536 920,536" class="s-line s-line-accent" fill="none" marker-end="url(#aha-auth)"/><text x="600" y="529" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">11</tspan>  store refresh token</text><polyline points="280,570 80,570" class="s-line" fill="none" stroke-dasharray="5 4" marker-end="url(#ah-auth)"/><text x="180" y="563" class="s-lbl s-lbl-seq" text-anchor="middle"><tspan class="s-num">12</tspan>  account (credentialsConfigured: true)</text></svg></div>
+    <figcaption>The sign-in flow. The user's password is typed in the browser and never reaches the app. Only the refresh token is persisted, in Windows Credential Manager; the access token lives in memory.</figcaption>
+  </figure>
+
+  <h4>Details worth knowing</h4>
+  <ul>
+    <li><strong>PKCE and state.</strong> The app generates a random verifier (its SHA-256 challenge goes in the authorize URL) and a random <code>state</code>. If the returned <code>state</code> differs, the attempt is rejected before any token request.</li>
+    <li><strong>Loopback listener.</strong> A minimal HTTP listener binds <code>127.0.0.1</code> on a random port and accepts only <code>GET /</code>. Other paths, such as the browser's favicon request, get a 404 and the listener keeps waiting. The whole sign-in times out after 5 minutes.</li>
+    <li><strong>The mailbox must match.</strong> After the token exchange the app calls <code>GET /me</code>. The account's email must equal the returned <code>mail</code> or <code>userPrincipalName</code> (case-insensitive). Otherwise nothing is stored and the user sees "Signed in as X, expected Y".</li>
+    <li><strong>Refresh token storage and rotation.</strong> The access token is cached in memory and refreshed when missing or within 60 seconds of expiry. Microsoft does not always rotate the refresh token: if the response has none, the old one is kept; if it has a different one, the new one is written to Credential Manager before the new access token is cached. An unchanged token causes no write.</li>
+    <li><strong>What forces a new sign-in.</strong> Editing a Microsoft account's email address or its tenant deletes the stored refresh token. A revoked or expired token (<code>invalid_grant</code>) produces "Your sign-in expired. Reconnect the account". In both cases the fix is <em>Reconnect</em> on the Accounts screen.</li>
+    <li><strong>Mail access.</strong> Only read permissions are requested (<code>Mail.Read</code>, <code>User.Read</code>, <code>offline_access</code>), so the app cannot send, move or delete messages.</li>
+  </ul>
+
+  <h3>Sign-in errors and what they mean</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Message</th><th>Cause</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td class="wrap">Your organization requires admin approval for this app</td><td class="wrap">The tenant restricts user consent (Microsoft codes <code>AADSTS65001</code> or <code>AADSTS90094</code>).</td><td class="wrap">Ask the tenant admin to grant consent for the client ID, or use another account or tenant. See <a href="setup.md#university-tenants-and-admin-consent">setup.md</a>.</td></tr>
+        <tr><td class="wrap">Set the Microsoft client ID in Settings</td><td class="wrap">No <code>microsoft.client_id</code> saved.</td><td class="wrap">Enter the Entra application ID in Settings and save.</td></tr>
+        <tr><td class="wrap">Signed in as X, expected Y</td><td class="wrap">The browser account differs from the account's email.</td><td class="wrap">Reconnect and pick the right account, or correct the email.</td></tr>
+        <tr><td class="wrap">Sign in to this account</td><td class="wrap">No refresh token stored (never signed in, or the email or tenant was edited).</td><td class="wrap">Press Sign in on the account.</td></tr>
+        <tr><td class="wrap">Microsoft Graph rejected the request. Reconnect the account</td><td class="wrap">Graph answered 401 or 403.</td><td class="wrap">Reconnect the account.</td></tr>
+        <tr><td class="wrap">Enter a valid tenant (or Invalid Microsoft tenant)</td><td class="wrap">The tenant contains characters other than letters, digits, dots and dashes.</td><td class="wrap">Recreate the account with a valid tenant, or leave it as <code>organizations</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>More detail: <a href="infra/microsoft-graph.md">infra/microsoft-graph.md</a> and <a href="infra/imap.md">infra/imap.md</a>.</p>
+</section>
+
+<section id="database">
+  <h2>6. The database</h2>
+  <p class="section-intro">One SQLite file holds everything the app remembers except secrets and email bodies. This section shows where it is, how the tables relate, what each table is for and when its rows change during real use. Column-level reference: <a href="infra/database.md">infra/database.md</a>; the schema itself is <code>crates/infra/migrations/0001_init.sql</code>.</p>
+
+  <h3>Where the file lives</h3>
+  <div class="kv">
+    <dt>Folder</dt><dd><code>%APPDATA%\dev.eaybar.academic-assistant</code> (named after the bundle identifier in <code>src-tauri/tauri.conf.json</code>)</dd>
+    <dt>Files</dt><dd><code>academic-assistant.db</code>, plus <code>-wal</code> and <code>-shm</code> files while the app runs</dd>
+    <dt>Created</dt><dd>On first start. The app creates the folder, opens the file, turns on WAL and foreign keys, and applies pending migrations. Reopening an up-to-date file does nothing.</dd>
+    <dt>Migrations</dt><dd>Only <code>0001_init.sql</code> exists. A <code>schema_migrations</code> table, created by the app, records applied versions.</dd>
+  </div>
+  <p>Conventions you will see in the columns:</p>
+  <ul>
+    <li><strong>Timestamps</strong> are RFC 3339 UTC text, for example <code>2026-09-29T09:31:04+00:00</code>.</li>
+    <li><strong>Result dates and times</strong> (<code>result_dates.date</code>, <code>time</code>) are local <code>YYYY-MM-DD</code> and <code>HH:MM</code> text, exactly what the UI shows.</li>
+    <li><strong>Enums</strong> are snake_case text with <code>CHECK</code> constraints. <strong>Booleans</strong> are 0 or 1. <strong>JSON columns</strong> (<code>config</code>, <code>folders</code>, <code>aliases</code>, <code>cursor</code>, every <code>settings.value</code>) hold plain JSON text.</li>
+  </ul>
+
+  <figure>
+    <div class="diagram"><svg viewBox="0 0 1160 866" role="img" aria-label="Entity-relationship diagram of the SQLite database: universities, courses, accounts, sync_states, runs, run_accounts, processed_messages, ai_results and result_dates, plus the standalone settings and schema_migrations tables" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ah-er" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk"/></marker><marker id="aha-er" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="mk-accent"/></marker></defs><polyline points="120,112 120,260" class="s-line" fill="none"/><text x="128" y="168" class="s-lbl" text-anchor="start">1 : N  cascade</text><polyline points="220,62 290,62" class="s-line" fill="none" stroke-dasharray="5 4"/><text x="255" y="54" class="s-lbl" text-anchor="middle">set null</text><polyline points="375,220 375,260" class="s-line" fill="none"/><text x="383" y="240" class="s-lbl" text-anchor="start">1 : N  cascade</text><polyline points="520,220 520,470" class="s-line" fill="none"/><text x="528" y="400" class="s-lbl" text-anchor="start">1 : N</text><text x="528" y="414" class="s-lbl" text-anchor="start">cascade</text><polyline points="540,130 570,130 570,320 600,320" class="s-line" fill="none"/><text x="564" y="300" class="s-lbl" text-anchor="end">1:N</text><polyline points="725,220 725,260" class="s-line" fill="none"/><text x="733" y="240" class="s-lbl" text-anchor="start">1 : N  cascade</text><polyline points="540,560 600,560" class="s-line" fill="none"/><text x="570" y="552" class="s-lbl" text-anchor="middle">1 : 1</text><polyline points="850,560 900,560" class="s-line" fill="none"/><text x="875" y="552" class="s-lbl" text-anchor="middle">1 : N</text><rect x="20" y="20" width="200" height="92" rx="6" class="s-box"/><path d="M20 50 V26 a6 6 0 0 1 6 -6 H214 a6 6 0 0 1 6 6 V50 Z" class="s-th"/><text x="30" y="40" class="s-tname">universities</text><text x="30" y="66" class="s-mono s-col">id</text><text x="210" y="66" class="s-sub s-tag" text-anchor="end">PK</text><text x="30" y="84" class="s-mono s-col">name</text><text x="210" y="84" class="s-sub s-tag" text-anchor="end">unique</text><text x="30" y="102" class="s-mono s-col">created_at</text><rect x="20" y="260" width="200" height="110" rx="6" class="s-box"/><path d="M20 290 V266 a6 6 0 0 1 6 -6 H214 a6 6 0 0 1 6 6 V290 Z" class="s-th"/><text x="30" y="280" class="s-tname">courses</text><text x="30" y="306" class="s-mono s-col">id</text><text x="210" y="306" class="s-sub s-tag" text-anchor="end">PK</text><text x="30" y="324" class="s-mono s-col">university_id</text><text x="210" y="324" class="s-sub s-tag" text-anchor="end">FK</text><text x="30" y="342" class="s-mono s-col">name</text><text x="30" y="360" class="s-mono s-col">aliases</text><text x="210" y="360" class="s-sub s-tag" text-anchor="end">JSON</text><rect x="290" y="20" width="250" height="200" rx="6" class="s-box"/><path d="M290 50 V26 a6 6 0 0 1 6 -6 H534 a6 6 0 0 1 6 6 V50 Z" class="s-th"/><text x="300" y="40" class="s-tname">accounts</text><text x="300" y="66" class="s-mono s-col">id</text><text x="530" y="66" class="s-sub s-tag" text-anchor="end">PK autoinc</text><text x="300" y="84" class="s-mono s-col">name</text><text x="300" y="102" class="s-mono s-col">email_address</text><text x="300" y="120" class="s-mono s-col">provider_type</text><text x="530" y="120" class="s-sub s-tag" text-anchor="end">imap | ms_graph</text><text x="300" y="138" class="s-mono s-col">config</text><text x="530" y="138" class="s-sub s-tag" text-anchor="end">JSON</text><text x="300" y="156" class="s-mono s-col">folders</text><text x="530" y="156" class="s-sub s-tag" text-anchor="end">JSON</text><text x="300" y="174" class="s-mono s-col">default_university_id</text><text x="530" y="174" class="s-sub s-tag" text-anchor="end">FK</text><text x="300" y="192" class="s-mono s-col">initial_sync_days</text><text x="530" y="192" class="s-sub s-tag" text-anchor="end">1..365</text><text x="300" y="210" class="s-mono s-col">enabled</text><text x="530" y="210" class="s-sub s-tag" text-anchor="end">0/1</text><rect x="290" y="260" width="170" height="164" rx="6" class="s-box"/><path d="M290 290 V266 a6 6 0 0 1 6 -6 H454 a6 6 0 0 1 6 6 V290 Z" class="s-th"/><text x="300" y="280" class="s-tname">sync_states</text><text x="300" y="306" class="s-mono s-col">account_id</text><text x="450" y="306" class="s-sub s-tag" text-anchor="end">PK FK</text><text x="300" y="324" class="s-mono s-col">folder</text><text x="450" y="324" class="s-sub s-tag" text-anchor="end">PK</text><text x="300" y="342" class="s-mono s-col">cursor</text><text x="450" y="342" class="s-sub s-tag" text-anchor="end">JSON</text><text x="300" y="360" class="s-mono s-col">last_run_at</text><text x="300" y="378" class="s-mono s-col">last_success_at</text><text x="300" y="396" class="s-mono s-col">status</text><text x="300" y="414" class="s-mono s-col">last_error</text><rect x="600" y="20" width="250" height="200" rx="6" class="s-box"/><path d="M600 50 V26 a6 6 0 0 1 6 -6 H844 a6 6 0 0 1 6 6 V50 Z" class="s-th"/><text x="610" y="40" class="s-tname">runs</text><text x="610" y="66" class="s-mono s-col">id</text><text x="840" y="66" class="s-sub s-tag" text-anchor="end">PK</text><text x="610" y="84" class="s-mono s-col">trigger</text><text x="840" y="84" class="s-sub s-tag" text-anchor="end">manual</text><text x="610" y="102" class="s-mono s-col">started_at</text><text x="610" y="120" class="s-mono s-col">finished_at</text><text x="610" y="138" class="s-mono s-col">status</text><text x="610" y="156" class="s-mono s-col">accounts_processed</text><text x="610" y="174" class="s-mono s-col">messages_* counters</text><text x="610" y="192" class="s-mono s-col">results_created</text><text x="610" y="210" class="s-mono s-col">error_summary</text><rect x="600" y="260" width="250" height="146" rx="6" class="s-box"/><path d="M600 290 V266 a6 6 0 0 1 6 -6 H844 a6 6 0 0 1 6 6 V290 Z" class="s-th"/><text x="610" y="280" class="s-tname">run_accounts</text><text x="610" y="306" class="s-mono s-col">run_id</text><text x="840" y="306" class="s-sub s-tag" text-anchor="end">PK FK</text><text x="610" y="324" class="s-mono s-col">account_id</text><text x="840" y="324" class="s-sub s-tag" text-anchor="end">PK FK</text><text x="610" y="342" class="s-mono s-col">status</text><text x="610" y="360" class="s-mono s-col">messages_* counters</text><text x="610" y="378" class="s-mono s-col">error_kind</text><text x="610" y="396" class="s-mono s-col">error_message</text><rect x="290" y="470" width="250" height="236" rx="6" class="s-box"/><path d="M290 500 V476 a6 6 0 0 1 6 -6 H534 a6 6 0 0 1 6 6 V500 Z" class="s-th"/><text x="300" y="490" class="s-tname">processed_messages</text><text x="300" y="516" class="s-mono s-col">id</text><text x="530" y="516" class="s-sub s-tag" text-anchor="end">PK</text><text x="300" y="534" class="s-mono s-col">account_id</text><text x="530" y="534" class="s-sub s-tag" text-anchor="end">FK</text><text x="300" y="552" class="s-mono s-col">folder</text><text x="300" y="570" class="s-mono s-col">provider_message_id</text><text x="300" y="588" class="s-mono s-col">message_id_header</text><text x="300" y="606" class="s-mono s-col">content_hash</text><text x="300" y="624" class="s-mono s-col">received_at</text><text x="300" y="642" class="s-mono s-col">outcome</text><text x="300" y="660" class="s-mono s-col">reason</text><text x="300" y="678" class="s-mono s-col">run_id</text><text x="530" y="678" class="s-sub s-tag" text-anchor="end">FK</text><text x="300" y="696" class="s-mono s-col">processed_at</text><rect x="600" y="470" width="250" height="308" rx="6" class="s-box"/><path d="M600 500 V476 a6 6 0 0 1 6 -6 H844 a6 6 0 0 1 6 6 V500 Z" class="s-th"/><text x="610" y="490" class="s-tname">ai_results</text><text x="610" y="516" class="s-mono s-col">id</text><text x="840" y="516" class="s-sub s-tag" text-anchor="end">PK</text><text x="610" y="534" class="s-mono s-col">account_id</text><text x="840" y="534" class="s-sub s-tag" text-anchor="end">FK</text><text x="610" y="552" class="s-mono s-col">processed_message_id</text><text x="840" y="552" class="s-sub s-tag" text-anchor="end">FK unique</text><text x="610" y="570" class="s-mono s-col">run_id</text><text x="840" y="570" class="s-sub s-tag" text-anchor="end">FK</text><text x="610" y="588" class="s-mono s-col">subject</text><text x="610" y="606" class="s-mono s-col">sender_name / _email</text><text x="610" y="624" class="s-mono s-col">university_id</text><text x="840" y="624" class="s-sub s-tag" text-anchor="end">FK</text><text x="610" y="642" class="s-mono s-col">course_id</text><text x="840" y="642" class="s-sub s-tag" text-anchor="end">FK</text><text x="610" y="660" class="s-mono s-col">category, priority</text><text x="610" y="678" class="s-mono s-col">action_required</text><text x="840" y="678" class="s-sub s-tag" text-anchor="end">0/1</text><text x="610" y="696" class="s-mono s-col">possible_change</text><text x="840" y="696" class="s-sub s-tag" text-anchor="end">0/1</text><text x="610" y="714" class="s-mono s-col">confidence</text><text x="610" y="732" class="s-mono s-col">model_provider / _name</text><text x="610" y="750" class="s-mono s-col">source_url</text><text x="610" y="768" class="s-mono s-col">seen, seen_at</text><rect x="900" y="470" width="240" height="128" rx="6" class="s-box"/><path d="M900 500 V476 a6 6 0 0 1 6 -6 H1134 a6 6 0 0 1 6 6 V500 Z" class="s-th"/><text x="910" y="490" class="s-tname">result_dates</text><text x="910" y="516" class="s-mono s-col">id</text><text x="1130" y="516" class="s-sub s-tag" text-anchor="end">PK</text><text x="910" y="534" class="s-mono s-col">result_id</text><text x="1130" y="534" class="s-sub s-tag" text-anchor="end">FK</text><text x="910" y="552" class="s-mono s-col">date</text><text x="1130" y="552" class="s-sub s-tag" text-anchor="end">YYYY-MM-DD</text><text x="910" y="570" class="s-mono s-col">time</text><text x="1130" y="570" class="s-sub s-tag" text-anchor="end">HH:MM</text><text x="910" y="588" class="s-mono s-col">kind</text><rect x="20" y="470" width="200" height="74" rx="6" class="s-box"/><path d="M20 500 V476 a6 6 0 0 1 6 -6 H214 a6 6 0 0 1 6 6 V500 Z" class="s-th"/><text x="30" y="490" class="s-tname">settings</text><text x="30" y="516" class="s-mono s-col">key</text><text x="210" y="516" class="s-sub s-tag" text-anchor="end">PK</text><text x="30" y="534" class="s-mono s-col">value</text><text x="210" y="534" class="s-sub s-tag" text-anchor="end">JSON</text><rect x="20" y="580" width="200" height="74" rx="6" class="s-box"/><path d="M20 610 V586 a6 6 0 0 1 6 -6 H214 a6 6 0 0 1 6 6 V610 Z" class="s-th"/><text x="30" y="600" class="s-tname">schema_migrations</text><text x="30" y="626" class="s-mono s-col">version</text><text x="210" y="626" class="s-sub s-tag" text-anchor="end">PK</text><text x="30" y="644" class="s-mono s-col">applied_at</text><text x="20" y="812" class="s-sub">Not drawn as lines: processed_messages.run_id and ai_results.run_id point to runs (no cascade);</text><text x="20" y="832" class="s-sub">ai_results.university_id and course_id point to universities and courses (set null when those are deleted).</text><text x="20" y="852" class="s-sub">Deleting an account cascades to sync_states, run_accounts, processed_messages and, through it, ai_results and result_dates.</text></svg></div>
+    <figcaption>Entity-relationship diagram. Read the account as the hub: everything a check produces hangs off an account and off a run. <code>PK</code> primary key, <code>FK</code> foreign key. Solid lines cascade on delete; the dashed line sets the reference to null.</figcaption>
+  </figure>
+
+  <h3>The tables</h3>
+  <div class="tcards">
+
+    <article class="tcard" id="t-universities">
+      <header><h3>universities</h3><span>The manual catalog of universities</span></header>
+      <div class="body">
+        <div>
+          <h4>Key columns</h4>
+          <ul><li><code>id</code>, <code>name</code> (unique), <code>created_at</code></li></ul>
+          <h4>Relationships</h4>
+          <ul>
+            <li>Has many <code>courses</code>; deleting a university deletes them.</li>
+            <li><code>accounts.default_university_id</code> and <code>ai_results.university_id</code> become <code>NULL</code> when it is deleted, so accounts keep working and old results keep existing without a university.</li>
+          </ul>
+        </div>
+        <div>
+          <h4>When rows change</h4>
+          <ul>
+            <li><strong>Created</strong> on the University catalog screen (Add university).</li>
+            <li><strong>Updated</strong> when renamed. A duplicate name is refused.</li>
+            <li><strong>Deleted</strong> from the same screen, after confirmation. The pipeline never writes here; it only reads the catalog once per run.</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <article class="tcard" id="t-courses">
+      <header><h3>courses</h3><span>Courses offered to the AI as answer options</span></header>
+      <div class="body">
+        <div>
+          <h4>Key columns</h4>
+          <ul>
+            <li><code>university_id</code>, <code>name</code> (unique per university)</li>
+            <li><code>aliases</code>: JSON array of strings, for example <code>["ALG","MAT101"]</code></li>
+          </ul>
+          <h4>Relationships</h4>
+          <ul>
+            <li>Belongs to a university; deleted with it.</li>
+            <li><code>ai_results.course_id</code> becomes <code>NULL</code> when the course is deleted.</li>
+          </ul>
+        </div>
+        <div>
+          <h4>When rows change</h4>
+          <ul>
+            <li><strong>Created, updated, deleted</strong> only from the University catalog screen. Aliases are trimmed and blanks dropped.</li>
+            <li>Read at the start of every run to build the <code>course</code> question.</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <article class="tcard" id="t-accounts">
+      <header><h3>accounts</h3><span>Configured mailboxes</span></header>
+      <div class="body">
+        <div>
+          <h4>Key columns</h4>
+          <ul>
+            <li><code>id</code> (<code>AUTOINCREMENT</code>: never reused), <code>name</code>, <code>email_address</code></li>
+            <li><code>provider_type</code>: <code>imap</code> or <code>microsoft_graph</code></li>
+            <li><code>config</code>: JSON without a type tag, <code>{"host","port","username"}</code> or <code>{"tenant"}</code>. No secrets.</li>
+            <li><code>folders</code>: JSON array, for example <code>["INBOX"]</code></li>
+            <li><code>default_university_id</code>, <code>initial_sync_days</code> (1 to 365), <code>enabled</code></li>
+          </ul>
+          <h4>Relationships</h4>
+          <ul><li>Parent of <code>sync_states</code>, <code>run_accounts</code>, <code>processed_messages</code> and <code>ai_results</code>. Deleting an account cascades to all of them, and through <code>processed_messages</code> to results and dates.</li></ul>
+        </div>
+        <div>
+          <h4>When rows change</h4>
+          <ul>
+            <li><strong>Created</strong> by Add account (the password or sign-in secret is stored separately).</li>
+            <li><strong>Updated</strong> when you edit the account or flip the Enabled toggle. The check pipeline only reads it.</li>
+            <li><strong>Deleted</strong> by Delete account, which also removes both possible credentials.</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <article class="tcard" id="t-sync_states">
+      <header><h3>sync_states</h3><span>Where each folder stands</span></header>
+      <div class="body">
+        <div>
+          <h4>Key columns</h4>
+          <ul>
+            <li>Primary key (<code>account_id</code>, <code>folder</code>)</li>
+            <li><code>cursor</code>: JSON, nullable. <code>{"type":"imap","uidvalidity":N,"last_uid":N}</code> or <code>{"type":"graph","link":"..."}</code></li>
+            <li><code>last_run_at</code>, <code>last_success_at</code>, <code>status</code> (<code>never</code>, <code>ok</code>, <code>error</code>), <code>last_error</code></li>
+          </ul>
+          <h4>Relationships</h4>
+          <ul><li>Belongs to an account; deleted with it.</li></ul>
+        </div>
+        <div>
+          <h4>When rows change</h4>
+          <ul>
+            <li><strong>Created</strong> the first time a folder finishes a batch or fails. No row means "never synced".</li>
+            <li><strong>On success</strong>: cursor replaced, both times set, status <code>ok</code>, error cleared.</li>
+            <li><strong>On failure</strong>: <code>last_run_at</code>, status <code>error</code> and <code>last_error</code> are set. The cursor is left as it was.</li>
+            <li>This table drives the dashboard attention banner. States of folders you removed from the account are ignored.</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <article class="tcard" id="t-runs">
+      <header><h3>runs</h3><span>One row per Check now</span></header>
+      <div class="body">
+        <div>
+          <h4>Key columns</h4>
+          <ul>
+            <li><code>trigger</code> (only <code>manual</code>), <code>started_at</code>, <code>finished_at</code></li>
+            <li><code>status</code>: <code>running</code>, <code>success</code>, <code>partial</code>, <code>failed</code></li>
+            <li>Counters: <code>accounts_processed</code>, <code>messages_found</code>, <code>messages_filtered</code>, <code>messages_analyzed</code>, <code>messages_failed</code>, <code>results_created</code></li>
+            <li><code>error_summary</code>, for example "1 of 2 accounts failed" or "Interrupted"</li>
+          </ul>
+        </div>
+        <div>
+          <h4>When rows change</h4>
+          <ul>
+            <li><strong>Created</strong> when a check passes its preconditions, with status <code>running</code>.</li>
+            <li><strong>Updated</strong> once at the end with status, time, summed counters and summary. At startup, any run still <code>running</code> is set to <code>failed</code> with "Interrupted".</li>
+            <li><strong>Never deleted</strong> by the app. <code>processed_messages.run_id</code> and <code>ai_results.run_id</code> reference it without cascade.</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <article class="tcard" id="t-run_accounts">
+      <header><h3>run_accounts</h3><span>How each account fared in a run</span></header>
+      <div class="body">
+        <div>
+          <h4>Key columns</h4>
+          <ul>
+            <li>Primary key (<code>run_id</code>, <code>account_id</code>)</li>
+            <li><code>status</code>: <code>success</code> or <code>failed</code>; the same five counters as <code>runs</code></li>
+            <li><code>error_kind</code>: <code>auth</code>, <code>connection</code>, <code>protocol</code>, <code>ai</code> or <code>internal</code>; <code>error_message</code></li>
+          </ul>
+          <h4>Relationships</h4>
+          <ul><li>Cascades from both the run and the account.</li></ul>
+        </div>
+        <div>
+          <h4>When rows change</h4>
+          <ul>
+            <li><strong>Created</strong> as each account finishes, whatever the outcome. If the catalog cannot be loaded, every account gets a failed row with kind <code>internal</code>.</li>
+            <li><strong>Never updated.</strong> A run that was interrupted may have no rows for accounts it did not reach.</li>
+            <li>The Runs screen joins this table with <code>accounts</code> to show names.</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <article class="tcard" id="t-processed_messages">
+      <header><h3>processed_messages</h3><span>Memory of every email the pipeline looked at</span></header>
+      <div class="body">
+        <div>
+          <h4>Key columns</h4>
+          <ul>
+            <li>Unique (<code>account_id</code>, <code>folder</code>, <code>provider_message_id</code>): the "already processed" check</li>
+            <li><code>message_id_header</code> and <code>content_hash</code>, each indexed with the account: the duplicate check</li>
+            <li><code>received_at</code>, <code>processed_at</code>, <code>run_id</code></li>
+            <li><code>outcome</code>: <code>filtered</code>, <code>irrelevant</code>, <code>analyzed</code>, <code>failed</code></li>
+            <li><code>reason</code>: <code>duplicate</code>, <code>blocked_sender</code>, <code>blocked_domain</code>, <code>own_message</code>, <code>empty</code> for filtered rows; a sanitized message (at most 500 characters) for failed rows</li>
+          </ul>
+          <p>No subject, no sender, no body. Only identifiers and a hash.</p>
+        </div>
+        <div>
+          <h4>When rows change</h4>
+          <ul>
+            <li><strong>Created</strong> once per email that is not skipped. Filtered, irrelevant and failed rows are inserted alone; an analyzed row is inserted inside the transaction that also writes the result.</li>
+            <li><strong>Never updated.</strong> A processed email is never analyzed twice.</li>
+            <li><strong>Deleted</strong> only by cascade when the account is removed, and then its result and dates go too.</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <article class="tcard" id="t-ai_results">
+      <header><h3>ai_results</h3><span>The structured result of a relevant email</span></header>
+      <div class="body">
+        <div>
+          <h4>Key columns</h4>
+          <ul>
+            <li><code>processed_message_id</code> (unique, one result per email), <code>account_id</code>, <code>run_id</code></li>
+            <li><code>subject</code>, <code>sender_name</code>, <code>sender_email</code>, <code>received_at</code>, <code>detected_at</code></li>
+            <li><code>university_id</code>, <code>course_id</code> (nullable)</li>
+            <li><code>category</code>, <code>priority</code>, <code>action_required</code>, <code>possible_change</code></li>
+            <li><code>confidence</code>, <code>model_provider</code>, <code>model_name</code>, <code>source_url</code></li>
+            <li><code>seen</code>, <code>seen_at</code>; an index on (<code>seen</code>, <code>received_at</code>)</li>
+          </ul>
+        </div>
+        <div>
+          <h4>When rows change</h4>
+          <ul>
+            <li><strong>Created</strong> only together with its <code>processed_messages</code> row and its dates, in one transaction.</li>
+            <li><strong>Updated</strong> only in <code>seen</code> and <code>seen_at</code>, by the Seen buttons and Mark all as seen (and their undo).</li>
+            <li><strong>Deleted</strong> by cascade when the account is removed. There is no per-result delete.</li>
+            <li><code>source_url</code> is the Graph <code>webLink</code> for Microsoft 365 results and <code>NULL</code> for IMAP. This is the personal-data table: it holds subjects and sender addresses.</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <article class="tcard" id="t-result_dates">
+      <header><h3>result_dates</h3><span>Dates the model confirmed for a result</span></header>
+      <div class="body">
+        <div>
+          <h4>Key columns</h4>
+          <ul>
+            <li><code>result_id</code>, <code>date</code> (<code>YYYY-MM-DD</code>), <code>time</code> (<code>HH:MM</code>, nullable)</li>
+            <li><code>kind</code>: <code>exam</code>, <code>deadline</code>, <code>event</code>, <code>class</code>, <code>other</code></li>
+          </ul>
+        </div>
+        <div>
+          <h4>When rows change</h4>
+          <ul>
+            <li><strong>Created</strong> with the result, one per date the model did not call <code>not_relevant</code>.</li>
+            <li><strong>Never updated.</strong> Deleted with the result.</li>
+            <li>The "Nearest upcoming date" sort uses the smallest <code>date</code> that is today or later.</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <article class="tcard" id="t-settings">
+      <header><h3>settings</h3><span>Key/value application settings</span></header>
+      <div class="body">
+        <div>
+          <h4>Key columns</h4>
+          <ul><li><code>key</code> (primary key) and <code>value</code> (JSON text). The keys are listed below.</li></ul>
+        </div>
+        <div>
+          <h4>When rows change</h4>
+          <ul>
+            <li>The table starts empty; a missing key falls back to its default.</li>
+            <li>Pressing Save on Settings upserts all six keys in one transaction.</li>
+            <li>The jev API key is not here. It is in Credential Manager.</li>
+          </ul>
+        </div>
+      </div>
+    </article>
+
+    <article class="tcard" id="t-schema_migrations">
+      <header><h3>schema_migrations</h3><span>Applied migration versions</span></header>
+      <div class="body">
+        <div>
+          <h4>Key columns</h4>
+          <ul><li><code>version</code> (primary key), <code>applied_at</code></li></ul>
+        </div>
+        <div>
+          <h4>When rows change</h4>
+          <ul><li>Created by the app itself when the database opens, not by the migration file. Version 1 is recorded in the same transaction that applies <code>0001_init.sql</code>.</li></ul>
+        </div>
+      </div>
+    </article>
+  </div>
+
+  <h3>The life of one email in the database</h3>
+  <p>Follow UID 501 from section 3, the exam date change, and its duplicate UID 504. All values are invented; the ids assume a fresh database.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>#</th><th>Moment</th><th>Table</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td class="wrap">Check now is accepted</td><td><code>runs</code></td><td class="wrap">Row 7 inserted: <code>status='running'</code>, <code>started_at</code> set, counters 0.</td></tr>
+        <tr><td>2</td><td class="wrap">Email 501 is analyzed and relevant</td><td><code>processed_messages</code></td><td class="wrap">Row inserted: <code>account_id=1</code>, <code>folder='INBOX'</code>, <code>provider_message_id='501'</code>, <code>message_id_header</code> from the email, <code>content_hash</code> (64 hex characters), <code>outcome='analyzed'</code>, <code>reason=NULL</code>, <code>run_id=7</code>.</td></tr>
+        <tr><td>3</td><td class="wrap">Same transaction</td><td><code>ai_results</code></td><td class="wrap">Row inserted: <code>processed_message_id</code> pointing to step 2, <code>subject</code>, <code>sender_email='garcia@uv.example'</code>, <code>university_id=1</code>, <code>course_id=1</code>, <code>category='change'</code>, <code>priority='high'</code>, <code>action_required=0</code>, <code>possible_change=1</code>, <code>confidence=NULL</code> (Ollama reports none), <code>model_provider='ollama'</code>, <code>model_name='qwen3:8b'</code>, <code>source_url=NULL</code> (IMAP), <code>seen=0</code>.</td></tr>
+        <tr><td>4</td><td class="wrap">Same transaction</td><td><code>result_dates</code></td><td class="wrap">One row: <code>date='2026-10-27'</code>, <code>time='10:00'</code>, <code>kind='exam'</code>. The 20 October candidate, answered <code>not_relevant</code>, gets no row.</td></tr>
+        <tr><td>5</td><td class="wrap">Email 504 is recognized as a duplicate</td><td><code>processed_messages</code></td><td class="wrap">Row inserted: <code>outcome='filtered'</code>, <code>reason='duplicate'</code>. No result and no dates.</td></tr>
+        <tr><td>6</td><td class="wrap">The batch ends without stopping</td><td><code>sync_states</code></td><td class="wrap">Row for (1, 'INBOX') upserted: <code>cursor='{"type":"imap","uidvalidity":...,"last_uid":504}'</code>, <code>status='ok'</code>, <code>last_error=NULL</code>, both times set.</td></tr>
+        <tr><td>7</td><td class="wrap">Account 1 ends</td><td><code>run_accounts</code></td><td class="wrap">Row (7, 1): <code>status='success'</code>, found 4, filtered 2, analyzed 2, failed 0, results 2.</td></tr>
+        <tr><td>8</td><td class="wrap">Run ends</td><td><code>runs</code></td><td class="wrap">Row 7 updated: <code>status='success'</code>, <code>finished_at</code>, <code>accounts_processed=2</code>, summed counters, <code>error_summary=NULL</code>.</td></tr>
+        <tr><td>9</td><td class="wrap">The student presses Seen</td><td><code>ai_results</code></td><td class="wrap">Only <code>seen=1</code> and <code>seen_at</code> change. Mark as new sets them back.</td></tr>
+        <tr><td>10</td><td class="wrap">Next check fetches 501 again for any reason</td><td><code>processed_messages</code></td><td class="wrap">The unique key finds it: skipped silently, nothing counted, nothing written.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Settings keys and defaults</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Key</th><th>Value (JSON)</th><th>Default when missing</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>ai.provider</code></td><td class="wrap"><code>"ollama"</code> or <code>"jev"</code></td><td><code>"ollama"</code></td><td class="wrap">Which structured model a check uses.</td></tr>
+        <tr><td><code>jev.model</code></td><td class="wrap">string</td><td><code>"jev-latest"</code></td><td class="wrap">Model name sent to jev.</td></tr>
+        <tr><td><code>ollama.base_url</code></td><td class="wrap">string, <code>http(s)</code> URL</td><td><code>"http://localhost:11434"</code></td><td class="wrap">Where the Ollama server listens.</td></tr>
+        <tr><td><code>ollama.model</code></td><td class="wrap">string</td><td><code>"qwen3:8b"</code></td><td class="wrap">Model name sent to Ollama.</td></tr>
+        <tr><td><code>microsoft.client_id</code></td><td class="wrap">string or <code>null</code></td><td><code>null</code></td><td class="wrap">The Entra application (client) ID for all Microsoft 365 accounts.</td></tr>
+        <tr><td><code>filters.blocked</code></td><td class="wrap">array of strings</td><td><code>[]</code></td><td class="wrap">Blocked senders and domains; entries starting with <code>@</code> block that exact domain.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Read-only queries for debugging</h3>
+  <p>These only read. They are safe to run against a copy of the database or against the live file opened read-only.</p>
+
+  <p class="pre-label">Latest runs with per-account errors</p>
+<pre><code>SELECT r.id, r.started_at, r.status,
+       a.name AS account, ra.status AS account_status,
+       ra.error_kind, ra.error_message
+FROM runs r
+LEFT JOIN run_accounts ra ON ra.run_id = r.id
+LEFT JOIN accounts a ON a.id = ra.account_id
+ORDER BY r.id DESC, a.name
+LIMIT 20;</code></pre>
+
+  <p class="pre-label">Unseen results by category</p>
+<pre><code>SELECT category, COUNT(*) AS unseen
+FROM ai_results
+WHERE seen = 0
+GROUP BY category
+ORDER BY unseen DESC;</code></pre>
+
+  <p class="pre-label">Processed outcomes per account, with the filter reason</p>
+<pre><code>SELECT a.name, pm.outcome, COALESCE(pm.reason, '-') AS reason, COUNT(*) AS n
+FROM processed_messages pm
+JOIN accounts a ON a.id = pm.account_id
+GROUP BY a.name, pm.outcome, pm.reason
+ORDER BY a.name, n DESC;</code></pre>
+
+  <p class="pre-label">Where each folder stands (cursor and last error)</p>
+<pre><code>SELECT a.name, s.folder, s.status, s.last_run_at, s.last_success_at,
+       s.cursor, s.last_error
+FROM sync_states s
+JOIN accounts a ON a.id = s.account_id
+ORDER BY a.name, s.folder;</code></pre>
+
+  <p class="pre-label">Upcoming dates, soonest first</p>
+<pre><code>SELECT d.date, d.time, d.kind, r.priority, r.category
+FROM result_dates d
+JOIN ai_results r ON r.id = d.result_id
+WHERE d.date &gt;= date('now')
+ORDER BY d.date, d.time;</code></pre>
+
+  <div class="callout warning">
+    <span class="tag">Open the database safely</span>
+    <p>Close the app first, and never write to the file with another tool while the app is running: the app keeps it open in WAL mode. If you only want to look, open the file read-only, for example <code>sqlite3 -readonly "$env:APPDATA\dev.eaybar.academic-assistant\academic-assistant.db"</code>, or use "Open Database Read Only" in DB Browser for SQLite. To keep a snapshot, close the app and copy the <code>.db</code> file together with its <code>-wal</code> and <code>-shm</code> files.</p>
+  </div>
+  <div class="callout privacy">
+    <span class="tag">Privacy</span>
+    <p><code>ai_results</code> holds real subjects and sender addresses. Do not paste rows from a real database into issues, chats or commits.</p>
+  </div>
+</section>
+
+<section id="screens">
+  <h2>7. Screens and what they do</h2>
+  <p class="section-intro">Six screens, each a route in <code>src/App.tsx</code> and a folder in <code>src/features/</code>. The tables below list what each action calls and what it touches. Every call goes through the API client, which maps one method to one Tauri command; the commands are listed in <a href="app/tauri-commands.md">app/tauri-commands.md</a> and the screens in <a href="frontend/dashboard-results-runs.md">frontend/dashboard-results-runs.md</a> and <a href="frontend/accounts-catalog-settings.md">frontend/accounts-catalog-settings.md</a>.</p>
+
+  <h3>Dashboard <code>/</code></h3>
+  <p>The landing screen: the state of the last check, the button to start a new one, accounts that need attention, counters of unseen results and the unseen results themselves. The sidebar's unseen badge on Results comes from the same query.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Action</th><th>Command</th><th>Touches</th></tr></thead>
+      <tbody>
+        <tr><td class="wrap">Load, change sort, refresh after a run</td><td><code>get_dashboard(sort)</code></td><td class="wrap">Reads <code>runs</code> and <code>run_accounts</code> (last run), <code>sync_states</code> and <code>accounts</code> plus Credential Manager (attention banners), <code>ai_results</code> with dates (counters and up to 100 unseen results). Sorts: nearest upcoming date (default), priority, received date.</td></tr>
+        <tr><td class="wrap">Check now</td><td><code>check_now</code>, events <code>run:progress</code> and <code>run:finished</code></td><td class="wrap">Section 3. Reads settings, accounts, catalog and secrets; writes <code>runs</code>, <code>run_accounts</code>, <code>sync_states</code>, <code>processed_messages</code>, <code>ai_results</code>, <code>result_dates</code>; network to mail servers and the AI provider.</td></tr>
+        <tr><td class="wrap">Seen on a card</td><td><code>set_result_seen(id, true)</code></td><td class="wrap"><code>ai_results.seen</code>, <code>seen_at</code></td></tr>
+        <tr><td class="wrap">Mark all as seen</td><td><code>mark_all_seen</code></td><td class="wrap"><code>ai_results</code>: every unseen row</td></tr>
+        <tr><td class="wrap">Open email, Copy Message-ID</td><td class="wrap">none</td><td class="wrap">Opens an <code>https</code> URL in the system browser (Microsoft 365 results) or copies the header to the clipboard (IMAP results). No database access.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Results <code>/results</code></h3>
+  <p>The full history with search, filters and paging (25 per page). A row expands to show the sender, all dates, flags and the undo for Seen.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Action</th><th>Command</th><th>Touches</th></tr></thead>
+      <tbody>
+        <tr><td class="wrap">List, search, filter, sort, page</td><td><code>get_results(query)</code></td><td class="wrap">Reads <code>ai_results</code> joined with <code>accounts</code>, <code>universities</code>, <code>courses</code>, <code>processed_messages</code> (Message-ID) and <code>result_dates</code>. Search is a case-insensitive match on subject, sender name and sender address, debounced 300 ms.</td></tr>
+        <tr><td class="wrap">Options of the Filters and sort modal</td><td><code>get_accounts</code>, <code>get_catalog</code></td><td class="wrap">Reads accounts and the catalog to fill the account and course dropdowns.</td></tr>
+        <tr><td class="wrap">Mark as seen, Mark as new</td><td><code>set_result_seen(id, seen)</code></td><td class="wrap"><code>ai_results.seen</code>, <code>seen_at</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Runs <code>/runs</code></h3>
+  <p>The latest 50 checks, newest first. Expanding a run shows its error summary and each account's status, error kind and message. It refetches on <code>run:finished</code>.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Action</th><th>Command</th><th>Touches</th></tr></thead>
+      <tbody>
+        <tr><td class="wrap">Load the history</td><td><code>get_run_history(50)</code></td><td class="wrap">Reads <code>runs</code> and <code>run_accounts</code> joined with <code>accounts</code> for names. The limit is clamped between 1 and 200.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Accounts <code>/accounts</code></h3>
+  <p>Add, edit, test, enable, disable, reconnect and delete mailboxes.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Action</th><th>Command</th><th>Touches</th></tr></thead>
+      <tbody>
+        <tr><td class="wrap">Load the list</td><td><code>get_accounts</code></td><td class="wrap">Reads <code>accounts</code>, <code>sync_states</code> and Credential Manager (only to know whether a secret exists).</td></tr>
+        <tr><td class="wrap">Add account</td><td><code>add_account</code></td><td class="wrap">Inserts into <code>accounts</code>; deletes any leftover secret for the new id, then stores the IMAP password in Credential Manager. If that fails, the row is removed again.</td></tr>
+        <tr><td class="wrap">Edit, Enabled toggle</td><td><code>update_account</code></td><td class="wrap">Updates <code>accounts</code>. The IMAP password is replaced only when a new one is typed. For Microsoft accounts, changing the email or tenant deletes the refresh token.</td></tr>
+        <tr><td class="wrap">Test</td><td><code>test_account</code></td><td class="wrap">Reads the secret, then logs in (IMAP) or refreshes the token and calls <code>/me</code> (Graph). No database write.</td></tr>
+        <tr><td class="wrap">Sign in with Microsoft, Reconnect</td><td><code>connect_microsoft_account</code></td><td class="wrap">Reads <code>settings</code> for the client ID; opens the system browser; on success stores the refresh token in Credential Manager. Section 5.</td></tr>
+        <tr><td class="wrap">Delete</td><td><code>remove_account</code></td><td class="wrap">Deletes both possible secrets, then the <code>accounts</code> row. Cascades to <code>sync_states</code>, <code>run_accounts</code>, <code>processed_messages</code>, <code>ai_results</code>, <code>result_dates</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>University catalog <code>/catalog</code></h3>
+  <p>Universities and their courses, with aliases. It only feeds the AI's answer options; nothing here is required for a check to run.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Action</th><th>Command</th><th>Touches</th></tr></thead>
+      <tbody>
+        <tr><td class="wrap">Load</td><td><code>get_catalog</code></td><td class="wrap">Reads <code>universities</code> and <code>courses</code>.</td></tr>
+        <tr><td class="wrap">Add, rename, delete a university</td><td><code>add_university</code>, <code>update_university</code>, <code>remove_university</code></td><td class="wrap"><code>universities</code>. Delete cascades to <code>courses</code> and nulls <code>accounts.default_university_id</code> and <code>ai_results.university_id</code>. A duplicate name is a conflict.</td></tr>
+        <tr><td class="wrap">Add, edit, delete a course</td><td><code>add_course</code>, <code>update_course</code>, <code>remove_course</code></td><td class="wrap"><code>courses</code>. Delete nulls <code>ai_results.course_id</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Settings <code>/settings</code></h3>
+  <p>AI provider choice and configuration, the Entra client ID and the blocked senders. A single Save applies the whole form.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Action</th><th>Command</th><th>Touches</th></tr></thead>
+      <tbody>
+        <tr><td class="wrap">Load</td><td><code>get_settings</code></td><td class="wrap">Reads <code>settings</code>, and Credential Manager only to report whether a jev key exists. The key is never returned.</td></tr>
+        <tr><td class="wrap">Save</td><td><code>update_settings</code></td><td class="wrap">Upserts the six <code>settings</code> keys. URLs must be <code>http(s)</code>, model names non-empty, a blank client ID becomes null, blocked entries are trimmed.</td></tr>
+        <tr><td class="wrap">Replace key, Remove key</td><td><code>set_jev_api_key</code>, <code>clear_jev_api_key</code></td><td class="wrap">Credential Manager only. The key field is write-only.</td></tr>
+        <tr><td class="wrap">Test provider</td><td><code>test_ai_provider</code></td><td class="wrap">Reads settings and the jev key, builds the model and asks it one yes/no question (<code>greeting</code>). Reports success when an answer for it comes back. No database write.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="security">
+  <h2>8. Security and privacy model</h2>
+  <p class="section-intro">The design goal is that a user can run the whole app without any academic text leaving the computer, and that secrets and message bodies are never at rest anywhere the app controls. Reference: <a href="architecture.md#security-and-privacy-model">architecture.md</a>.</p>
+
+  <h3>What is stored where</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Data</th><th>Where</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>IMAP password</td><td>Windows Credential Manager</td><td class="wrap">Key <code>academic-assistant/account/{id}/password</code>. Never in SQLite, logs, DTOs or error messages.</td></tr>
+        <tr><td>Microsoft refresh token</td><td>Windows Credential Manager</td><td class="wrap">Key <code>academic-assistant/account/{id}/refresh-token</code>. Rewritten only when Microsoft rotates it.</td></tr>
+        <tr><td>Microsoft access token</td><td>Memory only</td><td class="wrap">Cached inside the provider until shortly before it expires; never written to disk.</td></tr>
+        <tr><td>jev API key</td><td>Windows Credential Manager</td><td class="wrap">Key <code>academic-assistant/jev-api-key</code>. The UI can set or clear it and learn whether it exists. It cannot read it back.</td></tr>
+        <tr><td>Accounts, catalog, settings, runs, cursors</td><td>SQLite</td><td class="wrap">No secrets. The account <code>config</code> holds host, port, username or tenant.</td></tr>
+        <tr><td>Email body</td><td>Memory only, during one message</td><td class="wrap"><strong>Never stored</strong> in SQLite, logs or anywhere else.</td></tr>
+        <tr><td>Subject and sender of relevant emails</td><td>SQLite, <code>ai_results</code></td><td class="wrap">Needed to show results. Filtered, irrelevant and failed emails leave no subject or sender.</td></tr>
+        <tr><td>Message-ID header and content hash</td><td>SQLite, <code>processed_messages</code></td><td class="wrap">Deduplication metadata only.</td></tr>
+        <tr><td>Application log</td><td>Daily files in <code>logs/</code></td><td class="wrap">Ids, counters, stages, sanitized errors.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>What is logged, and what is never logged</h3>
+  <ul>
+    <li><strong>Logged</strong> at <code>info</code>: startup, "check started" with the run id, "account processed" with account id and stage, "check finished" with the status. Every failed command is logged at <code>warn</code> with the command name, error kind, user-facing message and, for internal errors, the internal detail. Command arguments are never logged.</li>
+    <li><strong>Never logged</strong>: email bodies and subjects, tokens, passwords, API keys. The Microsoft mismatch error carries addresses for the user, but the log line says only "signed-in account mismatch".</li>
+    <li><strong>Dependencies.</strong> In release builds the log filter caps <code>async_imap</code>, <code>hyper</code>, <code>reqwest</code>, <code>rustls</code> and <code>tokio_rustls</code> at <code>warn</code>, because their debug output can include protocol traffic. A <code>RUST_LOG</code> setting cannot raise those crates above <code>warn</code>, although a directive naming a deeper module of one of them can. Treat the log folder as private.</li>
+  </ul>
+
+  <h3>What leaves the machine, and when</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Destination</th><th>When</th><th>What</th></tr></thead>
+      <tbody>
+        <tr><td>Your IMAP server</td><td class="wrap">Test, and each check of an IMAP account</td><td class="wrap">Login credentials, folder and search terms. Read-only fetch.</td></tr>
+        <tr><td>Microsoft (Entra ID, Graph)</td><td class="wrap">Sign-in, Test, each check of a Microsoft 365 account</td><td class="wrap">OAuth parameters and tokens, then reads of the mailbox with the read-only permission.</td></tr>
+        <tr><td>jev (TypeSafe)</td><td class="wrap">Only when jev is selected: per email that passed dedup and filters, and on Test provider</td><td class="wrap">Subject, sender, received time, cleaned body up to 12,000 characters, university and course names, question texts. See section 4.</td></tr>
+        <tr><td>Ollama</td><td class="wrap">Per email that passed dedup and filters, and on Test provider</td><td class="wrap">The same payload, sent to the configured URL. Local by default.</td></tr>
+        <tr><td>System browser</td><td class="wrap">Sign-in, Open email</td><td class="wrap">An <code>https</code> URL.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Nothing else goes out. The React code contains no network calls, and the WebView's content security policy is <code>default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost</code>, so the UI can only reach the Rust side. In the Rust code, network access exists only in the IMAP, Graph, jev and Ollama adapters and in the loopback listener used during sign-in.</p>
+
+  <h3>Defensive design</h3>
+  <ul>
+    <li><strong>Mailboxes are read-only.</strong> IMAP uses <code>BODY.PEEK[]</code> and never moves, deletes or flags; Graph is asked for read permissions only.</li>
+    <li><strong>Least privilege in the shell.</strong> The Tauri capability grants <code>core:event:default</code> so the UI can listen to run events, and <code>opener:allow-open-url</code> limited to <code>https://*</code>. Nothing else.</li>
+    <li><strong>OAuth hardening.</strong> Authorization code with PKCE and a <code>state</code> check, a listener bound to <code>127.0.0.1</code> only, a public client with no secret, and a mailbox check before any token is stored.</li>
+    <li><strong>Errors are sanitized.</strong> Adapters describe failures in short generic messages (status code, "request timed out", the id of a question that did not validate) and never dump a request or response body. Storage and secret errors reach the UI as generic text; the detail goes to the log.</li>
+    <li><strong>Secrets and ids.</strong> Account ids are never reused, so an orphaned secret cannot be picked up by a later account, and a new account's secret slots are cleared on creation.</li>
+  </ul>
+  <div class="callout privacy">
+    <span class="tag">Working on the code</span>
+    <p>Never put real credentials, real emails or real personal data in code, tests, fixtures, logs, commits or docs. Fixtures are fictional; tests use fake values such as <code>test-key</code>. This is a rule of the repository (<code>AGENTS.md</code>).</p>
+  </div>
+</section>
+
+<section id="tutorial">
+  <h2>9. Developer tutorial</h2>
+  <p class="section-intro">A hands-on path from a clean Windows machine to a first check you can watch in the logs and the database, followed by how to reset, test and extend the app. Prerequisites and the Entra registration are covered in <a href="setup.md">setup.md</a>; conventions and quality gates in <a href="development.md">development.md</a>.</p>
+
+  <h3>1. Prerequisites</h3>
+  <ul>
+    <li>Rust stable with the <code>x86_64-pc-windows-msvc</code> target and the Visual Studio Build Tools "Desktop development with C++" workload.</li>
+    <li>Node.js 22 or newer and npm. The WebView2 runtime ships with Windows 11.</li>
+    <li>Optional: <a href="https://ollama.com">Ollama</a> for local analysis. A jev API key is only needed if you want the external provider.</li>
+  </ul>
+
+  <h3>2. Run in development</h3>
+<pre><code>npm install
+npm run tauri dev</code></pre>
+  <p>The Tauri CLI first runs <code>npm run dev</code>, which starts Vite on port 1420 (<code>strictPort</code> is on, so the command fails if something else holds that port). It then compiles the Rust workspace and opens the window. The first Rust build takes several minutes.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>You change</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td class="wrap">React, TypeScript or CSS under <code>src/</code></td><td class="wrap">Vite hot-reloads the window. The backend keeps running, so a check in progress is unaffected.</td></tr>
+        <tr><td class="wrap">Rust under <code>src-tauri/</code> or <code>crates/</code></td><td class="wrap">Vite ignores these files. The Tauri CLI watches them, rebuilds and relaunches the app. The window closes and reopens, and an in-flight run ends as "Interrupted" at the next start. Data on disk survives.</td></tr>
+        <tr><td class="wrap">A migration file</td><td class="wrap">Applied on the next launch, when the database opens.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p><code>npm run dev</code> on its own serves the UI in a normal browser. It is useful for layout work, but every command fails because there is no Rust backend behind it.</p>
+
+  <h3>3. First setup</h3>
+  <ol class="steps">
+    <li><span class="stitle">Settings: choose the AI.</span>Keep <strong>Ollama</strong> selected. Start Ollama and run <code>ollama pull qwen3:8b</code>, then press <strong>Test provider</strong>. It must report success.</li>
+    <li><span class="stitle">University catalog: add a university and a course.</span>For example "Universidad de Valencia" with the course "&Aacute;lgebra Lineal" and aliases <code>ALG, MAT101</code>.</li>
+    <li><span class="stitle">Accounts: add an IMAP account.</span>Use a test mailbox if you can. Enter host, port 993, username, and an app password if the provider needs one. Choose the default university and keep the first-sync days small (for example 3) while developing. Press <strong>Test</strong>.</li>
+    <li><span class="stitle">Dashboard: press Check now.</span>Watch the progress label change per account.</li>
+  </ol>
+  <div class="callout warning">
+    <span class="tag">Real mailboxes</span>
+    <p>A check is read-only, but it sends email text to the AI provider you selected. With Ollama that stays on your PC. Do not point development builds at a mailbox with content you would not want to appear in a log or database on your machine.</p>
+  </div>
+
+  <h3>4. Trigger a check and watch what happens</h3>
+  <p>In the terminal that runs <code>npm run tauri dev</code> the log events also appear on stderr. The same lines go to the daily file. To follow the newest one from a second PowerShell window:</p>
+<pre><code>$dir = "$env:APPDATA\dev.eaybar.academic-assistant\logs"
+$file = Get-ChildItem $dir | Sort-Object LastWriteTime | Select-Object -Last 1
+Get-Content $file.FullName -Wait -Tail 20</code></pre>
+  <p>You should see <code>check started</code> with a run id, one <code>account processed</code> line per account with stage <code>done</code> or <code>failed</code>, and <code>check finished</code> with the status. To see more of the app's own code, set <code>RUST_LOG</code> before starting, for example <code>$env:RUST_LOG = "info,academic_core=debug"</code>. Debug builds do not cap dependency logging, so avoid a bare <code>debug</code> level with a real mailbox, since protocol-level output can include mail traffic.</p>
+  <p>Then look at the result in three places:</p>
+  <ul>
+    <li>The <strong>Runs</strong> screen: expand the newest run for counters and per-account errors.</li>
+    <li>The <strong>Dashboard</strong> and <strong>Results</strong> screens for the new results.</li>
+    <li>The database, using the queries in <a href="#database">section 6</a>. Close the app first, or open a copy read-only.</li>
+  </ul>
+  <p>A useful experiment: press <strong>Check now</strong> twice. The second run should report almost nothing new, because the cursor moved and processed messages are skipped. Then stop Ollama and check again with new mail in the mailbox to see the <code>ai</code> error, the banner on the Dashboard, and the unchanged cursor in <code>sync_states</code>.</p>
+
+  <h3>5. Reset local state</h3>
+  <ol class="steps">
+    <li><span class="stitle">Close the app</span> (and stop <code>npm run tauri dev</code>).</li>
+    <li><span class="stitle">Delete the data folder</span> <code>%APPDATA%\dev.eaybar.academic-assistant</code>. This removes the database and the logs, so accounts, catalog, settings, runs and results are gone. The next launch recreates an empty database.</li>
+    <li>
+      <span class="stitle">Remove the credentials.</span>Secrets are not in that folder. Open Windows Credential Manager, then Windows Credentials, and remove the generic credentials whose names start with <code>academic-assistant/</code> (IMAP passwords, refresh tokens and the jev key). From a terminal you can list them and delete one by its exact target name:
+<pre><code>cmdkey /list | Select-String "academic-assistant"
+cmdkey /delete:&lt;target name copied from the list&gt;</code></pre>
+    </li>
+  </ol>
+  <div class="callout warning">
+    <span class="tag">Destructive</span>
+    <p>Deleting the folder cannot be undone. Account ids restart from 1 in a new database, so remove old credentials too, otherwise a stale secret could match a new account's id. To re-analyze mail that was already processed, a full reset is the safe route; deleting rows by hand is easy to get wrong because results cascade from <code>processed_messages</code>.</p>
+  </div>
+
+  <h3>6. Run the tests</h3>
+  <p>Default tests use fakes, fixtures and a local mock server. They never touch the network, the Credential Manager or a real mailbox.</p>
+<pre><code># Rust (if cargo is not on PATH: $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path")
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+
+# narrower while iterating
+cargo test -p academic-core
+cargo test -p academic-core --test pipeline
+cargo test -p academic-infra
+cargo test -p academic-assistant
+
+# frontend
+npm run typecheck
+npm run lint
+npm run test
+npm run build</code></pre>
+  <p>Tests marked <code>#[ignore]</code> hit a real service and run only with <code>-- --ignored</code>: live jev, Ollama and IMAP smoke tests, and the Credential Manager round trip. Pass any key or password through your shell session's environment only, and clear it afterwards. Suites, fixtures and the manual acceptance checklist are in <a href="testing.md">testing.md</a>.</p>
+
+  <h3>7. Where to add things</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>You want to add</th><th>Start in</th><th>The idea</th><th>Recipe</th></tr></thead>
+      <tbody>
+        <tr><td class="wrap">A screen</td><td class="wrap"><code>src/features/&lt;area&gt;/</code>, <code>src/App.tsx</code>, <code>src/components/Layout.tsx</code></td><td class="wrap">Query with <code>useQuery</code> and the <code>queryKeys</code> factories, write with <code>useMutation</code>, reuse <code>Modal</code> and the form primitives, add the route and the nav item.</td><td><a href="development.md#a-screen">development.md</a></td></tr>
+        <tr><td class="wrap">A Tauri command</td><td class="wrap"><code>src-tauri/src/commands/</code>, <code>dto/</code>, <code>validation.rs</code>, <code>lib.rs</code>; <code>src/lib/api/</code></td><td class="wrap">Contract first: DTO and error kinds. Register in <code>generate_handler!</code>, mirror types in <code>types.ts</code>, add one wrapper to <code>client.ts</code>.</td><td><a href="development.md#a-tauri-command">development.md</a></td></tr>
+        <tr><td class="wrap">An email provider</td><td class="wrap"><code>crates/core/src/domain/</code>, <code>crates/infra/src/</code>, <code>factory.rs</code></td><td class="wrap">Implement <code>EmailProvider</code> (read-only, at most 200 emails per batch, oldest first, a resumable cursor). The pipeline does not change.</td><td><a href="development.md#a-new-email-provider">development.md</a></td></tr>
+        <tr><td class="wrap">An AI provider</td><td class="wrap"><code>crates/infra/src/</code>, <code>factory.rs</code>, settings types and screen</td><td class="wrap">Implement <code>StructuredModel</code>: build a request from the <code>QuestionSet</code>, map answers, map failures to <code>ModelError</code>.</td><td><a href="development.md#a-new-ai-provider">development.md</a></td></tr>
+        <tr><td class="wrap">A migration</td><td class="wrap"><code>crates/infra/migrations/</code>, <code>crates/infra/src/db/mod.rs</code></td><td class="wrap">Add <code>0002_&lt;name&gt;.sql</code>, never edit a released one. The runner currently handles only version 1, so it must become an ordered list first.</td><td><a href="development.md#a-database-migration">development.md</a></td></tr>
+        <tr><td class="wrap">A filter or a question</td><td class="wrap"><code>crates/core/src/filters.rs</code>, <code>analyzer/</code></td><td class="wrap">Pure code with unit tests. A new filter needs a <code>FilterReason</code>; a new question needs building and assembly rules and, if stored, a column.</td><td><a href="core/normalization-and-filters.md">filters</a>, <a href="core/email-analyzer.md">analyzer</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout note">
+    <span class="tag">House rules</span>
+    <p>Work follows <code>AGENTS.md</code>: plan large changes first, keep changes minimal and scoped, no dead code, no secrets. Branches go <code>main &larr; phase-1-email-analysis &larr; feature/*</code>, commits use Conventional Commits, and each component's Markdown file is updated in the same change as the code. The documentation index is <a href="README.md">docs/README.md</a>.</p>
+  </div>
+</section>
+
+<section id="troubleshooting">
+  <h2>10. Troubleshooting</h2>
+  <p class="section-intro">Start with the Runs screen: expand the newest run and read each failed account's error kind and message. Then check the log file and, if needed, the queries in section 6. The table lists symptoms in the words the UI uses.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td class="wrap">Sign-in: "Your organization requires admin approval for this app"</td><td class="wrap">The university tenant blocks user consent to third-party apps (<code>AADSTS65001</code> or <code>AADSTS90094</code>).</td><td class="wrap">Ask IT to grant admin consent for the client ID with the three delegated permissions, or use another account or tenant. See <a href="setup.md#university-tenants-and-admin-consent">setup.md</a>.</td></tr>
+        <tr><td class="wrap">IMAP Test or check fails with an authentication error</td><td class="wrap">Wrong username or password, IMAP disabled, or the provider requires an app password.</td><td class="wrap">Create an app password in the provider's security settings and edit the account. Only implicit TLS (usually port 993) is supported.</td></tr>
+        <tr><td class="wrap">IMAP connection error or timeout</td><td class="wrap">Wrong host or port, no network, or a VPN is required by the university.</td><td class="wrap">Check host and port, connect the VPN, retry. Connect and handshake time out after 20 s, commands after 60 s.</td></tr>
+        <tr><td class="wrap">"The password is missing. Edit the account to set it"</td><td class="wrap">The credential was deleted or never stored.</td><td class="wrap">Edit the account and enter the password.</td></tr>
+        <tr><td class="wrap">AI error, provider unavailable (Ollama)</td><td class="wrap">Ollama is not running, the base URL is wrong, or the model is not pulled. Any non-2xx reply counts as unavailable.</td><td class="wrap">Start Ollama, check the base URL in Settings, run <code>ollama pull &lt;model&gt;</code>, make sure the model name matches, then press <strong>Test provider</strong>.</td></tr>
+        <tr><td class="wrap">"The AI provider is not configured: Add your jev API key in Settings"</td><td class="wrap">jev is selected without a stored key.</td><td class="wrap">Use Replace key in Settings, or switch to Ollama.</td></tr>
+        <tr><td class="wrap">jev rejects the key, or rate-limits</td><td class="wrap">401 or 403 means a wrong or revoked key. 429 is retried three times, then reported.</td><td class="wrap">Replace the key. If rate limiting persists, wait and check again; the cursor was not advanced, so nothing is lost.</td></tr>
+        <tr><td class="wrap">A run is <em>Failed</em> with "Interrupted"</td><td class="wrap">The app was closed or crashed during the run, or the run task panicked.</td><td class="wrap">Start a new check. Cursors only advance after a saved batch, so unprocessed mail is picked up again.</td></tr>
+        <tr><td class="wrap">A run looks stuck on <em>Running</em></td><td class="wrap">Waiting on the AI provider (jev 60 s, Ollama 120 s per request), possibly with retries.</td><td class="wrap">Wait. If nothing changes, restart the app; the run is marked interrupted.</td></tr>
+        <tr><td class="wrap">The attention banner stays after fixing the problem</td><td class="wrap">Banners come from the folder's stored sync state, which only changes when a check of that folder runs.</td><td class="wrap">Press Check now. Disabling the account or removing the folder from it also hides the banner.</td></tr>
+        <tr><td class="wrap">"Signed in as X, expected Y"</td><td class="wrap">You chose a different Microsoft account in the browser.</td><td class="wrap">Reconnect and pick the account that matches the email, or correct the account's email.</td></tr>
+        <tr><td class="wrap">"Your sign-in expired. Reconnect the account" or "Sign in to this account"</td><td class="wrap">The refresh token expired, was revoked, or was deleted by an edit of the email or tenant.</td><td class="wrap">Press Reconnect or Sign in on the account.</td></tr>
+        <tr><td class="wrap">Check succeeds but no results appear</td><td class="wrap">Everything was filtered (blocked, duplicate, own message, empty) or judged irrelevant.</td><td class="wrap">Run the "processed outcomes per account" query in section 6 and look at the reasons.</td></tr>
+        <tr><td class="wrap">Old emails are missing</td><td class="wrap">The first sync only covers the account's first-sync days.</td><td class="wrap">Raise the value before the first check, or reset local state and sync again.</td></tr>
+        <tr><td class="wrap">Results have no course or university</td><td class="wrap">The catalog is empty, or the account has no default university and the model answered <code>unknown</code> or <code>none</code>.</td><td class="wrap">Add universities and courses (with aliases such as course codes), and set a default university on the account.</td></tr>
+        <tr><td class="wrap">Development: <code>npm run tauri dev</code> fails at startup</td><td class="wrap">Port 1420 is in use, or <code>cargo</code> is not on the PATH.</td><td class="wrap">Stop the other process. Add <code>%USERPROFILE%\.cargo\bin</code> to the PATH for the session.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="glossary">
+  <h2>11. Glossary</h2>
+  <p class="section-intro">Terms as they are used in the code and the UI.</p>
+  <dl class="glossary">
+    <dt>account</dt><dd>A configured mailbox (IMAP or Microsoft 365) with its folders, default university and first-sync window. Table <code>accounts</code>.</dd>
+    <dt>attention</dt><dd>The Dashboard list of enabled accounts that need action: a folder whose last sync failed, or a missing password or sign-in.</dd>
+    <dt>candidate course</dt><dd>A course offered as an option in the <code>course</code> question: the default university's courses, or all courses when the account has no default.</dd>
+    <dt>catalog</dt><dd>The manual list of universities and courses, with aliases, used to help the AI name the course.</dd>
+    <dt>choice</dt><dd>A question type with a closed list of options; the answer is one option key.</dd>
+    <dt>confidence</dt><dd>A value between 0 and 1 that jev reports per answer. The app stores the minimum across answers and never shows it. Ollama reports none.</dd>
+    <dt>content hash</dt><dd>SHA-256 of the lowercased sender, the trimmed subject and the normalized body. Used with the <code>Message-ID</code> header to detect duplicates.</dd>
+    <dt>cursor</dt><dd>The stored bookmark of a folder's sync, kept in <code>sync_states.cursor</code>. It advances only after a whole batch is saved.</dd>
+    <dt>date candidate</dt><dd>A date mention found in the text by code, with its resolved date and optional time. The model classifies each one.</dd>
+    <dt>delta link</dt><dd>The Microsoft Graph URL that returns only changes since the last request. It is the cursor of a Microsoft 365 folder.</dd>
+    <dt>duplicate</dt><dd>An email whose <code>Message-ID</code> header or content hash matches an earlier processed email of the same account. Recorded as filtered with reason <code>duplicate</code>.</dd>
+    <dt>filtered</dt><dd>A processed-message outcome for emails discarded before the AI: duplicate, blocked sender, blocked domain, own message or empty.</dd>
+    <dt>first-sync window</dt><dd>How many past days the first check of a folder fetches. Default 14, from 1 to 365.</dd>
+    <dt>invalid response</dt><dd>An AI answer that is missing, has an unknown option or a level out of range. The message is stored as <code>failed</code>; the run goes on.</dd>
+    <dt>loopback</dt><dd>The temporary listener on <code>127.0.0.1</code> that receives the browser's redirect during Microsoft sign-in.</dd>
+    <dt>Message-ID header</dt><dd>The email header that identifies a message across copies. Stored, without angle brackets, for deduplication. IMAP results show it as Copy Message-ID.</dd>
+    <dt>noul</dt><dd>A yes/no question type. The answer is a probability of yes, from 0 to 1.</dd>
+    <dt>outcome</dt><dd>What became of a processed email: <code>filtered</code>, <code>irrelevant</code>, <code>analyzed</code> or <code>failed</code>.</dd>
+    <dt>PKCE</dt><dd>Proof Key for Code Exchange. The sign-in flow that lets a public client exchange a code for tokens without a client secret.</dd>
+    <dt>port (Rust)</dt><dd>A trait in <code>crates/core</code> that describes something the outside world provides, such as <code>EmailProvider</code>, <code>StructuredModel</code>, <code>SecretStore</code> or a repository.</dd>
+    <dt>processed message</dt><dd>A row in <code>processed_messages</code>: the app's memory that it already looked at an email, and what it decided.</dd>
+    <dt>question set</dt><dd>The ordered typed questions built for one email and sent in one call.</dd>
+    <dt>refresh token</dt><dd>The long-lived Microsoft token stored in Credential Manager. It is exchanged for short-lived access tokens.</dd>
+    <dt>relevant / irrelevant</dt><dd>Relevant when the <code>relevant</code> answer is at least 0.4. Only relevant emails become results.</dd>
+    <dt>result</dt><dd>A row in <code>ai_results</code> with its dates: the structured record of one relevant email.</dd>
+    <dt>run</dt><dd>One execution of Check now, with a status: <code>running</code>, <code>success</code>, <code>partial</code> or <code>failed</code>. Only one can run at a time (the run lock).</dd>
+    <dt>score</dt><dd>An ordered-scale question type. Priority uses it with the levels low, medium, high, urgent.</dd>
+    <dt>seen / new</dt><dd>The review state of a result. New results are unseen. The user can mark them seen and undo it.</dd>
+    <dt>state (AI)</dt><dd>The JSON document sent with the questions: the email's subject, sender, received time and cleaned body, plus context such as the account's university.</dd>
+    <dt>sync state</dt><dd>The stored status of one folder: cursor, last run and success times, status and last error.</dd>
+    <dt>tenant</dt><dd>The Microsoft Entra directory an account signs in to. Defaults to <code>organizations</code> and cannot be edited after creation.</dd>
+    <dt>UID</dt><dd>The per-folder unique number an IMAP server gives each message. The IMAP cursor stores the highest one fetched.</dd>
+    <dt>UIDVALIDITY</dt><dd>An IMAP value that changes when a folder's UIDs are reassigned. If it differs from the cursor's, the cursor is discarded and the window is used again.</dd>
+    <dt>WAL</dt><dd>SQLite write-ahead logging mode, which is why <code>-wal</code> and <code>-shm</code> files appear next to the database.</dd>
+  </dl>
+</section>
+
+</main>
+</div>
+<script>
+(function () {
+  var root = document.documentElement;
+  var btn = document.getElementById('theme-toggle');
+  function current() {
+    var t = root.getAttribute('data-theme');
+    if (t) return t;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  if (btn) btn.addEventListener('click', function () {
+    root.setAttribute('data-theme', current() === 'dark' ? 'light' : 'dark');
+  });
+
+  var details = document.getElementById('toc-details');
+  var narrow = window.matchMedia('(max-width: 960px)');
+  function syncToc() { if (details) details.open = !narrow.matches; }
+  syncToc();
+  narrow.addEventListener('change', syncToc);
+
+  var links = {};
+  document.querySelectorAll('.toc a').forEach(function (a) {
+    links[a.getAttribute('href').slice(1)] = a;
+    a.addEventListener('click', function () { if (narrow.matches && details) details.open = false; });
+  });
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting || !links[e.target.id]) return;
+        Object.keys(links).forEach(function (k) { links[k].removeAttribute('aria-current'); });
+        links[e.target.id].setAttribute('aria-current', 'true');
+      });
+    }, { rootMargin: '-15% 0px -75% 0px' });
+    document.querySelectorAll('main section[id]').forEach(function (s) { io.observe(s); });
+  }
+})();
+</script>
+</body>
+</html>
