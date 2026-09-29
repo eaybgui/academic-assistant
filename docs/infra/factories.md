@@ -23,8 +23,8 @@ Ollama all take a `reqwest::Client` in their constructors). It is configured wit
   version).
 - A 10 second connect timeout — how long it will wait to establish the TCP+TLS
   connection before giving up. This is deliberately separate from each adapter's own
-  per-request timeout (jev: 60 s, Ollama: 120 s, Graph: none set here — see
-  `docs/infra/ai-providers.md` and `docs/infra/microsoft-graph.md`), which bounds how
+  per-request timeout (jev: 60 s, Ollama: 120 s, Graph: 60 s — see
+  [ai-providers.md](ai-providers.md) and [microsoft-graph.md](microsoft-graph.md)), which bounds how
   long it waits for a response once connected.
 
 Building the client performs no I/O; it can be called any number of times (e.g. once
@@ -48,8 +48,8 @@ switches on `account.provider`:
   - Missing (`Ok(None)`) → `ProviderError::Auth("The password is missing. Edit the
     account to set it")`.
   - `SecretStore` failure (`Err`) → `ProviderError::Protocol("Could not read secure
-    storage")` (the underlying `SecretError` is not included — see spec §11/§12: no
-    internal detail, no secret value, in a user-facing message).
+    storage")` (the underlying `SecretError` is not included: no internal detail and no
+    secret value in a user-facing message).
   - Otherwise builds an `ImapEmailProvider::new(account.id, host, port, username,
     password)`. No network I/O happens here; the provider only connects when
     `test_connection`/`fetch_new` is called.
@@ -97,7 +97,7 @@ The `String` error is the contract `ModelProvider::current` already defines (see
 
 - Every error message returned by this module is safe to show in the UI and to log:
   no secret value, no `SecretError`/`RepoError` internal detail, ever appears in a
-  `ProviderError` or `String` this module returns (spec §11.1, §12).
+  `ProviderError` or `String` this module returns.
 - Building a provider never performs network I/O. Connectivity is only exercised when
   the caller later calls `EmailProvider::test_connection`/`fetch_new` or
   `StructuredModel::ask`.
@@ -128,4 +128,5 @@ access.
 
 - `DefaultEmailProviderFactory` does not validate `account.folders` or any other
   account field beyond what's needed to pick a provider kind and read its secret;
-  validating account input is the Tauri command layer's job (Task T14, spec §10.2).
+  validating account input is the Tauri command layer's job
+  ([../app/tauri-commands.md](../app/tauri-commands.md)).

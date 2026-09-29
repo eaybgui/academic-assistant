@@ -1,8 +1,8 @@
 # `core::dates`: date candidate extraction
 
-`crates/core/src/dates/` (Task T4) scans an email's subject and body for date
-mentions and turns each into a [`DateCandidate`](../core/domain-and-ports.md)
-(`{ span, date, time }`) for `core::analyzer` (Task T5) to confirm and classify.
+`crates/core/src/dates/` scans an email's subject and body for date
+mentions and turns each into a [`DateCandidate`](domain-and-ports.md#analysis-analysisrs)
+(`{ span, date, time }`) for [`core::analyzer`](email-analyzer.md) to confirm and classify.
 It is pure: no I/O, no system clock. Every relative expression (`mañana`,
 `próximo lunes`, ...) and every missing year is resolved from the caller-supplied
 `received_at`, never from the machine's current time.
@@ -81,9 +81,8 @@ the first candidate's span and then dropped as a false overlap.
   satisfies that cutoff — either because the day/month is invalid in all
   three candidate years (e.g. 29 February against three non-leap years), or
   because every calendar-valid candidate falls more than 30 days before
-  `received_at`. Spec §6.3 requires the resolved date to never be earlier
-  than 30 days before `received_at`, so there is no fallback outside the
-  cutoff window.
+  `received_at`. A resolved date is never earlier than 30 days before
+  `received_at`, so there is no fallback outside the cutoff window.
 
 ## Validation, ordering, deduplication
 
@@ -128,5 +127,4 @@ Run with `cargo test -p academic-core dates::`.
   (see above) — the model only sees the span text and confirmed date.
 - The English month/day recognizers do not disambiguate `may` (the month) from
   the English modal verb; this mirrors the inherent ambiguity of the word and
-  is not addressed further, since it is outside the cases described in the
-  design spec (§6.3).
+  is not addressed further.

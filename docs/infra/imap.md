@@ -1,6 +1,6 @@
 # `academic-infra::imap`: IMAP email provider
 
-Implements the `academic-core` [`EmailProvider`](../core/domain-and-ports.md) port for
+Implements the `academic-core` [`EmailProvider`](../core/domain-and-ports.md#email-providers-emailrs) port for
 plain IMAP accounts (`crates/infra/src/imap/`). Connects over implicit TLS, never marks
 messages `\Seen` (`BODY.PEEK[]`), and does incremental sync by tracking the highest UID
 already fetched.
@@ -73,11 +73,10 @@ password field; it is never included in error messages or logs.
 1. TCP-connects to `host:port` with a 20 s timeout.
 2. Wraps the socket in a TLS client stream (`tokio-rustls`, root store from
    `webpki-roots`, `rustls`'s default crypto provider — already selected process-wide by
-   the `aws-lc-rs` feature enabled transitively through the workspace's `rustls`
-   dependency graph); the handshake has its own 20 s timeout.
+   the `aws-lc-rs` feature enabled transitively through `reqwest`'s `rustls` feature); the handshake has its own 20 s timeout.
 3. Reads the server greeting (20 s timeout; a timeout is `Connection("greeting from host:port timed out")`), then issues `LOGIN username password`.
 
-Error mapping (spec §8.1 / §12 — the password itself is never included in any error):
+Error mapping (the password itself is never included in any error):
 
 | Situation | `ProviderError` |
 |---|---|
@@ -92,7 +91,8 @@ applies to every other IMAP command (`SELECT`, `UID SEARCH`, `UID FETCH`, `LOGOU
 ### I/O timeouts
 
 Every command after the connection is established is bounded by a timeout, and a
-timeout maps to `ProviderError::Connection("<command> timed out")`:
+timeout maps to `ProviderError::Connection` (`"<command> timed out"`; for `LOGIN` the
+message is `"LOGIN to host:port timed out"`):
 
 | Command | Timeout |
 |---|---|
@@ -101,7 +101,7 @@ timeout maps to `ProviderError::Connection("<command> timed out")`:
 | `UID FETCH` (issuing it and consuming the whole response stream, not per message) | 60 s total |
 | `LOGOUT` (best effort, result ignored) | 5 s |
 
-## Fetch algorithm (`mod.rs`, spec §8.1)
+## Fetch algorithm (`mod.rs`)
 
 `fetch_new(folder, cursor, since)`:
 
@@ -199,7 +199,7 @@ fetched message. Output: `(emails, max_uid)`, where `max_uid` covers every input
 - No `IDLE`/push support — sync is always a one-shot `fetch_new` call, matching the
   `EmailProvider` port.
 - STARTTLS (explicit TLS upgrade on port 143) is not implemented, only implicit TLS
-  (port 993), per spec §8.1.
+  (port 993).
 - A server that omits `UIDVALIDITY` or `UIDNEXT` on `SELECT` (required by RFC 3501 but
   not universally honored by broken servers) causes a `Protocol` error rather than a
   degraded fallback.

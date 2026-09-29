@@ -3,7 +3,7 @@
 Covers `src/features/accounts/**`, `src/features/catalog/**`, `src/features/settings/**` and the
 shared form primitives in `src/components/forms/**`. These screens configure the app (email
 accounts, the university/course catalog and global settings); they don't fetch results or trigger
-a "Check now" run (see `docs/frontend/dashboard-results-runs.md` for that, once written).
+a "Check now" run (see [dashboard-results-runs.md](dashboard-results-runs.md) for that).
 
 ## Shared form primitives (`src/components/forms/`)
 
@@ -18,8 +18,8 @@ a "Check now" run (see `docs/frontend/dashboard-results-runs.md` for that, once 
   The confirm label is always "Delete".
 - `icons.tsx` — small inline SVG icons (`TrashIcon`, `PencilIcon`) used instead of emoji.
 
-These are the only building blocks this task owns outside `src/features/**`; everything else
-(`Layout`, `Modal`, `ErrorMessage`, `src/lib/api/**`) belongs to other tasks and is used as-is.
+The screens also use the shared shell and API layer as they are (`Layout`, `Modal`,
+`ErrorMessage`, `src/lib/api/**`; see [overview.md](overview.md)).
 
 ## Accounts (`src/features/accounts/`)
 
@@ -38,10 +38,13 @@ These are the only building blocks this task owns outside `src/features/**`; eve
 - `AccountFormModal.tsx` — the add/edit modal. The IMAP/Microsoft 365 switch is only enabled when
   creating (`account === null`); editing keeps the existing provider. Switching provider keeps the
   name, email, default university and first-sync days (only provider-specific fields reset).
-  "Test connection" only shows when editing an existing account (a new account must be saved first,
-  per the design). Saving an IMAP account closes the modal; saving a Microsoft account keeps it open
+  "Test connection" only shows when editing an existing account (a new account must be saved
+  first). Saving an IMAP account closes the modal; saving a Microsoft account keeps it open
   and shows a "Sign in with Microsoft" button (`connectMicrosoftAccount`), with a "Waiting for
-  sign-in in your browser…" message while that call is pending and "Signed in." afterwards. A second
+  sign-in in your browser…" message while that call is pending and "Signed in." afterwards.
+  Editing the email address of a Microsoft account discards its stored sign-in on the backend,
+  so the account list shows "Sign-in required" and the account has to be signed in again (the
+  tenant is never editable). A second
   Save after a Microsoft account was created updates that account (`account ?? savedAccount`)
   instead of creating a duplicate. The password input uses `autoComplete="new-password"`; the
   Microsoft form carries the note "Your sign-in is saved in Windows Credential Manager, never in the
@@ -125,9 +128,8 @@ Covered cases (see the `*.test.ts(x)` files next to each module):
 
 ## Known limitations
 
-- Catalog delete confirmation copy ("Deletes this university and all its courses." / "Deletes this
-  course.") is not specified verbatim by the design spec (only the account deletion copy is); it
-  follows the same pattern.
-- The Microsoft sign-in flow only covers the UI side (calling `connectMicrosoftAccount` and showing
-  a pending/error state); the actual OAuth loopback flow is implemented in `src-tauri` (a later
-  task).
+- The Microsoft sign-in UI only calls `connectMicrosoftAccount` and shows a pending/error state.
+  The OAuth loopback flow itself runs in the backend: see
+  [../infra/microsoft-graph.md](../infra/microsoft-graph.md) for the flow and
+  [../app/tauri-commands.md](../app/tauri-commands.md) for the command (it waits up to 5 minutes for
+  the browser redirect).

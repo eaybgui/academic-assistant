@@ -22,7 +22,7 @@ and the overall technical direction.
 | [core/domain-and-ports.md](core/domain-and-ports.md) | Domain types, enum conventions and every port trait (providers, models, secrets, repositories, clock, observer) |
 | [core/normalization-and-filters.md](core/normalization-and-filters.md) | HTML to text, quote/signature stripping, content hash, deterministic filters |
 | [core/date-extraction.md](core/date-extraction.md) | Spanish/English date and time candidate extraction and year resolution |
-| [core/email-analyzer.md](core/email-analyzer.md) | Question set building and answer assembly (`EmailAnalyzer`) |
+| [core/email-analyzer.md](core/email-analyzer.md) | Question set building, model calls and answer assembly (`analyzer` module) |
 | [core/pipeline.md](core/pipeline.md) | `CheckRunner`: per-run, per-account and per-message processing, counters, run lock |
 
 ## Infrastructure (`crates/infra`, adapters)
@@ -51,9 +51,12 @@ and the overall technical direction.
 | [app/tauri-commands.md](app/tauri-commands.md) | Composition root, Tauri commands, DTOs, error mapping and events |
 | [app/logging-and-data.md](app/logging-and-data.md) | Application log, app data directory and what is persisted |
 
-## Design and plan
+## Design and plan (historical)
+
+The documents above describe what the code does today. These are the original planning documents;
+where they differ in detail, the component documents above are authoritative.
 
 | File | Description |
 |---|---|
 | [superpowers/specs/2026-09-28-phase-1-email-analysis-design.md](superpowers/specs/2026-09-28-phase-1-email-analysis-design.md) | Approved Phase 1 design: contracts, pipeline, providers, schema, commands, UI |
-| [superpowers/plans/2026-09-28-phase-1-email-analysis.md](superpowers/plans/2026-09-28-phase-1-email-analysis.md) | Phase 1 implementation plan, split into tasks (T1 to T15) and waves |
+| [superpowers/plans/2026-09-28-phase-1-email-analysis.md](superpowers/plans/2026-09-28-phase-1-email-analysis.md) | Phase 1 implementation plan: task breakdown, contracts and execution order |

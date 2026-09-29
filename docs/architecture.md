@@ -19,7 +19,7 @@ The dependency rule is `src-tauri -> infra -> core`. `core` never depends on `in
 
 | Crate | Responsibility | Reference |
 |---|---|---|
-| `crates/core` (`academic-core`) | Domain model, port traits, normalization, filters, date extraction, question building and answer assembly, and the `CheckRunner` pipeline. Only pure dependencies (`serde`, `chrono`, `regex`, `sha2`, `html2text`, `async-trait`, `thiserror`, `indexmap`, `hex`). | [domain-and-ports](core/domain-and-ports.md), [normalization-and-filters](core/normalization-and-filters.md), [date-extraction](core/date-extraction.md), [email-analyzer](core/email-analyzer.md), [pipeline](core/pipeline.md) |
+| `crates/core` (`academic-core`) | Domain model, port traits, normalization, filters, date extraction, question building and answer assembly, and the `CheckRunner` pipeline. Only pure dependencies (`serde`, `serde_json`, `chrono`, `regex`, `sha2`, `html2text`, `async-trait`, `thiserror`, `indexmap`, `hex`). | [domain-and-ports](core/domain-and-ports.md), [normalization-and-filters](core/normalization-and-filters.md), [date-extraction](core/date-extraction.md), [email-analyzer](core/email-analyzer.md), [pipeline](core/pipeline.md) |
 | `crates/infra` (`academic-infra`) | Implementations of the ports: SQLite repositories, Windows Credential Manager, IMAP, Microsoft Graph + OAuth, jev, Ollama, and the factories that pick a provider from stored configuration. | [database](infra/database.md), [secure-storage](infra/secure-storage.md), [imap](infra/imap.md), [microsoft-graph](infra/microsoft-graph.md), [ai-providers](infra/ai-providers.md), [factories](infra/factories.md) |
 | `src-tauri` (`academic-assistant`) | Composition root: opens the database, builds the adapters, the `CheckRunner` and the logging, registers the Tauri commands, translates domain types to DTOs and forwards run progress as events. | [tauri-commands](app/tauri-commands.md), [logging-and-data](app/logging-and-data.md) |
 | `src/` (React) | Screens, an API client that wraps every command, event subscriptions and React Query caching. It never calls `invoke` outside `src/lib/api/`. | [frontend/overview](frontend/overview.md) |
@@ -40,7 +40,7 @@ sequenceDiagram
     participant T as src-tauri (check_now)
     participant R as CheckRunner (core)
     participant P as EmailProvider (IMAP / Graph)
-    participant A as EmailAnalyzer + StructuredModel (jev / Ollama)
+    participant A as analyzer + StructuredModel (jev / Ollama)
     participant D as SQLite (Database)
 
     U->>UI: Check now
@@ -93,14 +93,14 @@ Key rules of the flow (details in [core/pipeline.md](core/pipeline.md)):
 
 ## Data model overview
 
-SQLite, one file (`academic-assistant.db`), WAL mode, foreign keys on, schema in
+SQLite, one file (`academic-assistant.db`, in the app data directory), WAL mode, foreign keys on, schema in
 `crates/infra/migrations/0001_init.sql`. Timestamps are RFC 3339 UTC text; result dates are
 local `YYYY-MM-DD` / `HH:MM`. Details in [infra/database.md](infra/database.md).
 
 | Table | Purpose |
 |---|---|
 | `universities`, `courses` | Manual catalog; courses carry JSON aliases and cascade from their university |
-| `accounts` | Configured mailboxes: provider type, provider JSON config (no secrets), folders, default university, first-sync window, enabled flag |
+| `accounts` | Configured mailboxes: provider type (`provider_type`), provider JSON config (`config`, no secrets, no type tag), folders, default university, first-sync window, enabled flag. Ids are never reused (`AUTOINCREMENT`), so the secret keys derived from an account id can never be inherited by a later account |
 | `sync_states` | Per account and folder: cursor, last run/success, status (`never`/`ok`/`error`), last error |
 | `runs` | One row per check: status, timing, summed counters, error summary |
 | `run_accounts` | Per run and account: status, counters, error kind and message |
@@ -125,23 +125,27 @@ The database is the source of truth; the UI only renders what the commands retur
   The database keeps structured results (subject, sender, classification, dates) and
   deduplication metadata (provider id, `Message-ID` header, content hash).
 - **Providers are read-only.** IMAP uses `BODY.PEEK[]` (never sets `\Seen`) and never moves
-  or deletes; Graph uses only the `Mail.Read` permission.
+  or deletes; Graph requests only the delegated permissions `Mail.Read`, `User.Read` and
+  `offline_access`, so it can only read mail.
 - **What is sent to jev** (only when jev is the selected provider): for each message that
   passed deduplication and the filters, the subject, sender name and address, received
   time, the normalized body (quotes and signatures removed, at most 12,000 characters), the
   default university name of the account, the question texts, and the catalog's course names
   and aliases offered as answer options. Nothing else. With Ollama, the same payload goes to
   the configured local URL (`http://localhost:11434` by default).
-- **Logging** uses `tracing` with a daily rolling file. Logs contain ids, counters, stages
-  and sanitized errors, never bodies, subjects, tokens, passwords or keys. See
-  [app/logging-and-data.md](app/logging-and-data.md).
-- **Tauri surface:** the capability file allows only the app's own commands, the event API
-  and opening `https://` URLs in the system browser (opener plugin). The webview content
+- **Logging** uses `tracing` with a daily rolling file (`logs/academic-assistant.log.<YYYY-MM-DD>`
+  in the app data directory). Logs contain ids, counters, stages and sanitized errors, never
+  bodies, subjects, tokens, passwords or keys. The start and end of each run are logged at
+  `info` level without personal data. See [app/logging-and-data.md](app/logging-and-data.md).
+- **Tauri surface:** the capability file (`src-tauri/capabilities/default.json`) grants only
+  `core:event:default` (so the webview can listen to run events) and `opener:allow-open-url`
+  restricted to `https://` URLs (system browser, opener plugin). The webview content
   security policy is `default-src 'self'` with IPC connections only.
 - **OAuth:** authorization code with PKCE and a `state` check over a loopback listener on
-  `127.0.0.1`; public client, no client secret. After sign-in the signed-in address must
-  match the account address or the token is discarded. See
-  [infra/microsoft-graph.md](infra/microsoft-graph.md).
+  `127.0.0.1`; public client, no client secret. After sign-in the account email must match
+  the signed-in mailbox's `mail` or `userPrincipalName`, otherwise the token is discarded.
+  Changing a Microsoft account's email or tenant discards its stored sign-in, so it has to be
+  signed in again. See [infra/microsoft-graph.md](infra/microsoft-graph.md).
 
 ## Extension points
 
@@ -164,13 +168,13 @@ The database is the source of truth; the UI only renders what the commands retur
    settings (`Settings`, `SettingsDto`, Settings screen).
 3. The analyzer, validation and pipeline are provider-agnostic and stay untouched.
 
-### Future sources
+### Other sources
 
-The pipeline talks to sources through `EmailProvider` and to storage through repositories, so
-other sources (Moodle, Blackboard, calendars) would be new adapters plus a source-agnostic
-item type. One planned source is scraping course web pages to feed the **course catalog**:
-the catalog is already a first-class input of the analyzer (course options and aliases), so
-a scraper would write universities, courses and aliases through `CatalogRepository`
-without touching the analyzer. None of this exists in Phase 1.
+The pipeline talks to sources through `EmailProvider` and to storage through repositories.
+It is built around the `Email` type, so a source that is not a mailbox (Moodle, Blackboard,
+calendars) would need a source-agnostic item type in addition to a new adapter. The course
+catalog is a first-class input of the analyzer (course options and aliases) and is written
+only through `CatalogRepository`, so anything that produces universities, courses and aliases
+can feed it without touching the analyzer.
 
 See [development.md](development.md) for the concrete steps to add code to each layer.

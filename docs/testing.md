@@ -12,7 +12,7 @@ need a real service are marked `#[ignore]` and run only when you ask for them.
 | Core pipeline integration | `crates/core/tests/pipeline.rs` (+ `tests/support/` fakes) | `cargo test -p academic-core --test pipeline` |
 | Infra unit tests | `#[cfg(test)]` modules in `crates/infra/src/` | `cargo test -p academic-infra --lib` |
 | Infra integration | `crates/infra/tests/*.rs` (+ `fixtures/`, `support/`) | `cargo test -p academic-infra` |
-| Tauri crate | unit tests in `src-tauri/src/` (DTO JSON shape, error mapping, validation) | `cargo test -p academic-assistant` |
+| Tauri crate | unit tests in `src-tauri/src/` (DTO JSON shape, error mapping, validation, commands over the `test_support` harness) | `cargo test -p academic-assistant` |
 | Frontend | `src/**/*.test.ts(x)` (Vitest + Testing Library + jsdom) | `npm run test` |
 | Everything (Rust) | | `cargo test --workspace` |
 
