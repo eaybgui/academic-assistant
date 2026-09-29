@@ -688,3 +688,21 @@ Tests: unit tests for DTO conversions (serde JSON shape of `AccountInput` for bo
 
 ## 7. Planner checkpoints
 After each wave: merge feature branches into `phase-1-email-analysis` (`git merge --no-ff`), run all gates on the merged tree, review diffs against contracts and spec, dispatch fix tasks when needed. At the end: code review over the whole phase branch, final gates, `npx tauri build --debug --no-bundle`, and a summary for the user with the manual acceptance checklist (spec §13).
+
+---
+
+## 8. Execution record (added after implementation)
+
+Review-driven tasks added by the planner after the Wave 1 and final integration reviews:
+
+| Task | Branch | Scope |
+|---|---|---|
+| T16 | `feature/t16-ui-review-fixes` | Frontend: edit modals, app-level check-run provider, inline errors, accessibility, shared hooks/components |
+| T17 | `feature/t17-mail-review-fixes` | IMAP/Graph: skip unparseable messages, `since` enforcement, loopback hardening, token redaction, refresh without rotation, timeouts, batch size/order, tenant validation |
+| T18 | `feature/t18-core-review-fixes` | Dates (time attachment boundary, year inference), quote stripping, university resolution order |
+| T19 | `feature/t19-infra-review-fixes` | jev decoding/status handling, shared HTTP util, UTF-8 keyring storage, Unicode search, atomic migrations, FK → NotFound |
+| T20 | `feature/t20-polish` | Graph timeout builder (no env var), IMAP greeting timeout, modal reset on cancel |
+| T21 | `feature/t21-integration-fixes` | AUTOINCREMENT account ids, mail-or-UPN sign-in match, token discard on email/tenant change, capability narrowed to `core:event:default`, run logging, panic supervision, lock released before `run:finished` |
+| T22 | `feature/t22-doc-corrections` | Documentation corrected against the final code |
+
+Final verification on `phase-1-email-analysis`: 106 frontend tests, 455 Rust tests (5 live tests ignored), fmt/clippy clean, `npx tauri build --debug --no-bundle` succeeds, app smoke-launched (database and log created). Manual acceptance (spec §13) pending with the user.
