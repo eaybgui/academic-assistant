@@ -123,7 +123,7 @@ Run with a real Ollama and, separately, with jev (see [setup.md](setup.md) for p
    the Entra client ID in Settings, save the account, **Sign in with Microsoft**, then **Test**.
    If your tenant needs admin approval, confirm the message "Your organization requires admin
    approval for this app" is shown.
-3. In **Catalog**, add the universities and a few courses with aliases.
+3. In **University catalog**, add the universities and a few courses with aliases.
 4. On the **Dashboard**, press **Check now**. Progress appears per account. When it finishes,
    the last check shows its status and new results appear with category, priority, course and
    dates.

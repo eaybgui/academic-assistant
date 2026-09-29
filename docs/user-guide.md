@@ -8,15 +8,16 @@ you have not installed or configured anything yet, start with [setup.md](setup.m
 1. **Settings**: pick the AI provider. With **Ollama**, make sure Ollama is running and the
    model is pulled (`ollama pull qwen3:8b`). With **jev**, use Replace key to enter your API
    key. For Microsoft 365, enter the Entra application (client) ID.
-2. **Catalog** (optional but recommended): add your universities and courses, with aliases
+2. **University catalog** (optional but recommended): add your universities and courses, with aliases
    such as course codes. The AI uses them to name the course of each email.
 3. **Accounts**: add each mailbox and press **Test**.
 4. **Dashboard**: press **Check now**.
 
 ## The screens
 
-The left sidebar links to Dashboard, Results (with a badge showing the number of unseen
-results), Runs, Accounts, Catalog and Settings.
+The left sidebar (collapse it to icons with the arrow button at its top; the app remembers your
+choice) links to Dashboard, Results (with a badge showing the number of unseen
+results), Runs, Accounts, University catalog and Settings.
 
 ### Dashboard
 
@@ -77,7 +78,7 @@ One row per account: provider, email, default university, folders and last sync 
 - **Delete**: removes the account, its stored secrets and **all its results**. Disable the
   account instead to keep its history.
 
-### Catalog
+### University catalog
 
 Universities and their courses. Each course has a name and optional aliases (comma separated;
 codes and abbreviations work well). Deleting a university deletes its courses; accounts that

@@ -102,7 +102,7 @@ export default function CatalogPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-neutral-900">Catalog</h1>
+        <h1 className="text-2xl font-semibold text-neutral-900">University catalog</h1>
         <button
           type="button"
           onClick={openAddUniversity}

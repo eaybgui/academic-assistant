@@ -105,6 +105,18 @@ describe('Modal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('is centered and height-capped so tall content scrolls inside the viewport', () => {
+    render(
+      <Modal open title="Add account" onClose={() => {}}>
+        <p>Modal body</p>
+      </Modal>,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveClass('m-auto', 'max-h-[calc(100vh-2rem)]');
+    expect(screen.getByText('Modal body').parentElement).toHaveClass('overflow-y-auto');
+  });
+
   it('does not render the body while closed', () => {
     render(
       <Modal open={false} title="Add account" onClose={() => {}}>

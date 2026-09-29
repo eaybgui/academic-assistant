@@ -16,7 +16,8 @@ src/
   App.tsx                    Route table
   index.css                  Tailwind entry point (`@import "tailwindcss";`)
   components/
-    Layout.tsx                Sidebar navigation + content outlet
+    Layout.tsx                Collapsible sidebar navigation + content outlet
+    navIcons.tsx              Inline SVG icons for the sidebar
     Modal.tsx                 Native <dialog>-based modal
     ErrorMessage.tsx           Inline CommandError renderer
     forms/                    Field, TextInput, Textarea, Select, Toggle, ConfirmDialog, icons
@@ -52,6 +53,22 @@ re-initialized whenever a different item (or "add") is opened. On open, focus mo
 focusable element of the body (falling back to the dialog itself). The dialog closes on Escape, the
 close button, or a backdrop click - the latter only when both `mousedown` and `mouseup` land on the
 backdrop, so dragging out of a text field does not dismiss it.
+
+The dialog carries `m-auto`: Tailwind's preflight sets `margin: 0` on every element, which cancels
+the browser's `margin: auto` that centers a modal `<dialog>`. It is also capped at
+`max-h-[calc(100vh-2rem)]` and laid out as a flex column, so on tall content only the body scrolls
+while the header and footer stay visible. Every modal in the app uses this component and is
+therefore centered.
+
+## Sidebar (`src/components/Layout.tsx`)
+
+Each nav item shows an icon (`navIcons.tsx`, 20px outline SVGs, `aria-hidden`) and its label. A
+toggle button at the top ("Collapse sidebar" / "Expand sidebar", with `aria-expanded`) narrows the
+sidebar to icons only (`w-16`) and hides the app title. When collapsed, each link keeps its
+accessible name (the label is rendered `sr-only`) and a `title` tooltip, and the Results unseen
+badge becomes a small red dot on the icon with an `sr-only` "N unseen" text. The preference is
+stored in `localStorage` under `academic-assistant.sidebar-collapsed`; reads and writes are wrapped
+in try/catch and fall back to expanded.
 
 ## Check-run state (`src/features/check-run/`)
 
@@ -127,8 +144,8 @@ because of a typo.
 4. Reuse `Layout` (already wraps every route via `App.tsx`) and `Modal` for any dialog; do not
    fork their implementation.
 5. Register the route in `src/App.tsx` if it's a new top-level page, and add a link in
-   `src/components/Layout.tsx`'s `NAV_ITEMS` (that file is otherwise stable — only extend the nav
-   list, don't change its behavior).
+   `src/components/Layout.tsx`'s `NAV_ITEMS` with an icon from `navIcons.tsx` (that file is
+   otherwise stable — only extend the nav list, don't change its behavior).
 
 ## Testing
 
