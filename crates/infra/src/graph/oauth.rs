@@ -15,7 +15,7 @@ use academic_core::ports::ProviderError;
 
 use super::loopback::LoopbackServer;
 use super::mapping::{map_oauth_error, map_token_error_body, map_transport_error};
-use super::{OAuthConfig, TokenSet, SCOPES};
+use super::{request_timeout, OAuthConfig, TokenSet, SCOPES};
 
 /// A PKCE verifier/challenge pair, generated fresh for every sign-in attempt.
 /// The challenge method is always `S256`.
@@ -42,13 +42,38 @@ fn random_url_safe_token(byte_len: usize) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
+/// Rejects a tenant that doesn't look like a Microsoft tenant id/domain
+/// (`^[A-Za-z0-9.-]+$` — a GUID, a verified domain, or a well-known alias like
+/// `organizations`/`common`/`consumers`) before it is interpolated into a URL path
+/// segment. Called by every path that builds a login/token URL from an
+/// [`OAuthConfig`] (`sign_in`, `request_token`), so [`authorize_url`] can assume
+/// `config.tenant` is already valid and stay infallible.
+fn validate_tenant(tenant: &str) -> Result<(), ProviderError> {
+    let valid = !tenant.is_empty()
+        && tenant
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+    if valid {
+        Ok(())
+    } else {
+        Err(ProviderError::Auth("Invalid Microsoft tenant".into()))
+    }
+}
+
 /// Builds the `/authorize` URL the system browser is opened at.
+///
+/// Assumes `config.tenant` has already been validated by the caller (every public
+/// entry point that builds a URL from an `OAuthConfig` — `sign_in`, `refresh` —
+/// calls [`validate_tenant`] first); never panics even if that assumption somehow
+/// doesn't hold, falling back to the raw, unparsed URL instead.
 pub fn authorize_url(config: &OAuthConfig, redirect_uri: &str, pkce: &Pkce, state: &str) -> String {
-    let mut url = Url::parse(&format!(
+    let base = format!(
         "{}/{}/oauth2/v2.0/authorize",
         config.login_base_url, config.tenant
-    ))
-    .expect("login_base_url and tenant form a valid absolute URL");
+    );
+    let Ok(mut url) = Url::parse(&base) else {
+        return base;
+    };
 
     url.query_pairs_mut()
         .append_pair("client_id", &config.client_id)
@@ -73,6 +98,8 @@ pub async fn sign_in(
     open_browser: &(dyn Fn(&str) -> Result<(), String> + Send + Sync),
     timeout: Duration,
 ) -> Result<TokenSet, ProviderError> {
+    validate_tenant(&config.tenant)?;
+
     let server = LoopbackServer::bind().await?;
     let redirect_uri = server.redirect_uri();
     let pkce = new_pkce();
@@ -104,14 +131,18 @@ pub async fn sign_in(
     exchange_code(http, config, &redirect_uri, &code, &pkce.verifier).await
 }
 
-/// Exchanges a refresh token for a new access token (and, when Microsoft rotates it,
-/// a new refresh token — the caller is responsible for persisting it).
+/// Exchanges a refresh token for a new access token.
+///
+/// Microsoft does not always rotate the refresh token on this grant: when the
+/// response omits one, the token passed in is still valid and is reused (the caller
+/// is responsible for persisting whichever refresh token comes back, rotated or
+/// not).
 pub async fn refresh(
     http: &reqwest::Client,
     config: &OAuthConfig,
     refresh_token: &str,
 ) -> Result<TokenSet, ProviderError> {
-    request_token(
+    let response = request_token(
         http,
         config,
         &[
@@ -121,7 +152,15 @@ pub async fn refresh(
             ("scope", SCOPES),
         ],
     )
-    .await
+    .await?;
+
+    Ok(TokenSet {
+        access_token: response.access_token,
+        refresh_token: response
+            .refresh_token
+            .unwrap_or_else(|| refresh_token.to_string()),
+        expires_at: Utc::now() + ChronoDuration::seconds(response.expires_in.max(0)),
+    })
 }
 
 async fn exchange_code(
@@ -131,7 +170,7 @@ async fn exchange_code(
     code: &str,
     verifier: &str,
 ) -> Result<TokenSet, ProviderError> {
-    request_token(
+    let response = request_token(
         http,
         config,
         &[
@@ -143,7 +182,20 @@ async fn exchange_code(
             ("scope", SCOPES),
         ],
     )
-    .await
+    .await?;
+
+    // Unlike a refresh, the first token exchange has no previous refresh token to
+    // fall back to: a missing one here means `offline_access` wasn't actually
+    // granted, a genuine (if unlikely) protocol problem.
+    let refresh_token = response.refresh_token.ok_or_else(|| {
+        ProviderError::Protocol("Microsoft did not return a refresh token".into())
+    })?;
+
+    Ok(TokenSet {
+        access_token: response.access_token,
+        refresh_token,
+        expires_at: Utc::now() + ChronoDuration::seconds(response.expires_in.max(0)),
+    })
 }
 
 /// Encodes `pairs` as an `application/x-www-form-urlencoded` body. Used instead of
@@ -164,11 +216,16 @@ struct TokenResponse {
     expires_in: i64,
 }
 
+/// Posts `form` to the `/token` endpoint and returns the raw response. Shared by
+/// [`refresh`] and `exchange_code`, which each decide differently how to handle a
+/// response with no `refresh_token`.
 async fn request_token(
     http: &reqwest::Client,
     config: &OAuthConfig,
     form: &[(&str, &str)],
-) -> Result<TokenSet, ProviderError> {
+) -> Result<TokenResponse, ProviderError> {
+    validate_tenant(&config.tenant)?;
+
     let url = format!(
         "{}/{}/oauth2/v2.0/token",
         config.login_base_url, config.tenant
@@ -177,6 +234,7 @@ async fn request_token(
     let response = http
         .post(url)
         .header("Content-Type", "application/x-www-form-urlencoded")
+        .timeout(request_timeout())
         .body(encode_form(form))
         .send()
         .await
@@ -189,19 +247,8 @@ async fn request_token(
         return Err(map_token_error_body(status, &body));
     }
 
-    let parsed: TokenResponse = serde_json::from_str(&body).map_err(|_| {
-        ProviderError::Protocol("Microsoft returned an invalid token response".into())
-    })?;
-
-    let refresh_token = parsed.refresh_token.ok_or_else(|| {
-        ProviderError::Protocol("Microsoft did not return a refresh token".into())
-    })?;
-
-    Ok(TokenSet {
-        access_token: parsed.access_token,
-        refresh_token,
-        expires_at: Utc::now() + ChronoDuration::seconds(parsed.expires_in.max(0)),
-    })
+    serde_json::from_str(&body)
+        .map_err(|_| ProviderError::Protocol("Microsoft returned an invalid token response".into()))
 }
 
 #[cfg(test)]
@@ -254,5 +301,34 @@ mod tests {
         assert_eq!(pairs.get("code_challenge").unwrap(), &pkce.challenge);
         assert_eq!(pairs.get("code_challenge_method").unwrap(), "S256");
         assert_eq!(pairs.get("prompt").unwrap(), "select_account");
+    }
+
+    #[test]
+    fn authorize_url_never_panics_even_with_an_unvalidated_tenant() {
+        // authorize_url itself performs no validation (callers do); it must still
+        // never panic if an invalid tenant somehow reaches it.
+        let config = OAuthConfig {
+            client_id: "client-123".into(),
+            tenant: "not a valid tenant".into(),
+            login_base_url: "https://login.microsoftonline.com".into(),
+        };
+        let pkce = new_pkce();
+        let _ = authorize_url(&config, "http://localhost:5555", &pkce, "state-abc");
+    }
+
+    #[test]
+    fn validate_tenant_accepts_common_tenant_forms() {
+        assert!(validate_tenant("organizations").is_ok());
+        assert!(validate_tenant("common").is_ok());
+        assert!(validate_tenant("contoso.onmicrosoft.com").is_ok());
+        assert!(validate_tenant("11111111-2222-3333-4444-555555555555").is_ok());
+    }
+
+    #[test]
+    fn validate_tenant_rejects_empty_and_unsafe_input() {
+        assert!(matches!(validate_tenant(""), Err(ProviderError::Auth(_))));
+        assert!(validate_tenant("../../etc/passwd").is_err());
+        assert!(validate_tenant("tenant with spaces").is_err());
+        assert!(validate_tenant("tenant/with/slash").is_err());
     }
 }

@@ -77,6 +77,86 @@ async fn refresh_maps_invalid_grant_to_auth_with_reconnect_message() {
 }
 
 #[tokio::test]
+async fn refresh_reuses_the_passed_in_refresh_token_when_the_response_omits_one() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/organizations/oauth2/v2.0/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "new-access-token",
+            "expires_in": 3600
+        })))
+        .mount(&server)
+        .await;
+
+    let http = reqwest::Client::new();
+    let config = test_config(server.uri());
+
+    let tokens = oauth::refresh(&http, &config, "original-refresh-token")
+        .await
+        .expect("refresh should succeed even without a rotated refresh token");
+
+    assert_eq!(tokens.access_token, "new-access-token");
+    assert_eq!(tokens.refresh_token, "original-refresh-token");
+}
+
+#[tokio::test]
+async fn refresh_rejects_an_invalid_tenant_without_making_a_network_call() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let http = reqwest::Client::new();
+    let config = OAuthConfig {
+        client_id: "test-client-id".into(),
+        tenant: "not a valid tenant".into(),
+        login_base_url: server.uri(),
+    };
+
+    let err = oauth::refresh(&http, &config, "some-refresh-token")
+        .await
+        .expect_err("an invalid tenant should be rejected");
+
+    assert!(matches!(
+        err,
+        ProviderError::Auth(msg) if msg == "Invalid Microsoft tenant"
+    ));
+    server.verify().await;
+}
+
+#[tokio::test]
+async fn sign_in_rejects_an_invalid_tenant_before_opening_the_browser() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let http = reqwest::Client::new();
+    let config = OAuthConfig {
+        client_id: "test-client-id".into(),
+        tenant: "invalid/tenant".into(),
+        login_base_url: server.uri(),
+    };
+    let open_browser = |_: &str| -> Result<(), String> {
+        panic!("open_browser must not be called for an invalid tenant");
+    };
+
+    let err = oauth::sign_in(&http, &config, &open_browser, Duration::from_secs(1))
+        .await
+        .expect_err("an invalid tenant should be rejected");
+
+    assert!(matches!(
+        err,
+        ProviderError::Auth(msg) if msg == "Invalid Microsoft tenant"
+    ));
+    server.verify().await;
+}
+
+#[tokio::test]
 async fn refresh_maps_admin_consent_error_to_auth() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))

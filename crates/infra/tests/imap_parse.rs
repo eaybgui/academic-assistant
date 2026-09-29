@@ -4,7 +4,7 @@
 
 use academic_core::domain::EmailBody;
 use academic_core::ports::ProviderError;
-use academic_infra::imap::parse_message;
+use academic_infra::imap::{parse_fetched_messages, parse_message};
 use chrono::{TimeZone, Utc};
 
 fn fixture(name: &str) -> Vec<u8> {
@@ -135,4 +135,52 @@ fn missing_date_everywhere_is_a_protocol_error() {
         b"From: secretaria@uv.es\r\nTo: alumno@uv.es\r\nSubject: sin fecha\r\n\r\nCuerpo.\r\n";
     let err = parse_message(1, "INBOX", 1, raw, None).unwrap_err();
     assert!(matches!(err, ProviderError::Protocol(_)));
+}
+
+#[test]
+fn parse_fetched_messages_skips_unparseable_messages_but_still_advances_past_them() {
+    let good = fixture("plain_text_accents.eml");
+    let fetched = vec![
+        (101u32, good.clone(), None),
+        (102u32, Vec::new(), None), // empty bytes: unparsable, per `unparsable_bytes_are_a_protocol_error`.
+        (103u32, good, None),
+    ];
+
+    let (emails, max_uid) = parse_fetched_messages(1, "INBOX", &fetched);
+
+    assert_eq!(emails.len(), 2);
+    assert!(emails.iter().all(|e| e.provider_message_id != "102"));
+    assert_eq!(max_uid, Some(103));
+}
+
+#[test]
+fn parse_fetched_messages_returns_an_empty_batch_and_no_high_water_mark_when_every_message_fails() {
+    let fetched = vec![(1u32, Vec::new(), None), (2u32, Vec::new(), None)];
+
+    let (emails, max_uid) = parse_fetched_messages(1, "INBOX", &fetched);
+
+    assert!(emails.is_empty());
+    // The cursor high-water mark still advances past every fetched UID, even when
+    // none of them could be parsed.
+    assert_eq!(max_uid, Some(2));
+}
+
+#[test]
+fn parse_fetched_messages_sorts_oldest_first_breaking_ties_by_provider_id() {
+    let good = fixture("plain_text_accents.eml");
+    let earlier = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+    let later = Utc.with_ymd_and_hms(2024, 6, 1, 0, 0, 0).unwrap();
+    let fetched = vec![
+        (301u32, good.clone(), Some(later)),
+        (300u32, good.clone(), Some(earlier)),
+        (302u32, good, Some(earlier)), // ties 300 on date; provider id (uid) breaks the tie.
+    ];
+
+    let (emails, _) = parse_fetched_messages(1, "INBOX", &fetched);
+
+    let ids: Vec<&str> = emails
+        .iter()
+        .map(|e| e.provider_message_id.as_str())
+        .collect();
+    assert_eq!(ids, vec!["300", "302", "301"]);
 }

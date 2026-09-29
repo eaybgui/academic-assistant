@@ -122,6 +122,41 @@ fn extract_body(message: &Message<'_>) -> EmailBody {
     EmailBody::Text(String::new())
 }
 
+/// One message as fetched from the server: `(uid, raw RFC 822 bytes, INTERNALDATE)`.
+pub type FetchedMessage = (u32, Vec<u8>, Option<DateTime<Utc>>);
+
+/// Parses each [`FetchedMessage`] fetched for one `UID FETCH`
+/// batch into an [`Email`], skipping (and logging, by UID only, never content) any
+/// message that fails to parse instead of failing the whole batch — one malformed
+/// message must not block the rest of the folder from syncing. Every fetched UID,
+/// parsed or not, counts toward the returned high-water mark so the cursor still
+/// advances past it. The returned emails are sorted oldest first (`received_at`, then
+/// `provider_message_id` to break ties), per the `EmailProvider` contract.
+///
+/// Pure aside from the `tracing::warn!` call on a skipped message, so it is testable
+/// without a live IMAP session.
+pub fn parse_fetched_messages(
+    account_id: AccountId,
+    folder: &str,
+    fetched: &[FetchedMessage],
+) -> (Vec<Email>, Option<u32>) {
+    let mut emails = Vec::with_capacity(fetched.len());
+    let mut max_uid: Option<u32> = None;
+    for (uid, raw, internal_date) in fetched {
+        max_uid = Some(max_uid.map_or(*uid, |current| current.max(*uid)));
+        match parse_message(account_id, folder, *uid, raw, *internal_date) {
+            Ok(email) => emails.push(email),
+            Err(_) => tracing::warn!(uid = *uid, "skipping IMAP message that failed to parse"),
+        }
+    }
+    emails.sort_by(|a, b| {
+        a.received_at
+            .cmp(&b.received_at)
+            .then_with(|| a.provider_message_id.cmp(&b.provider_message_id))
+    });
+    (emails, max_uid)
+}
+
 fn first_part_of_type<'x, F>(
     message: &'x Message<'x>,
     indices: &[u32],

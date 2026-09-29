@@ -8,7 +8,8 @@ Public client, no client secret.
 ## Module layout
 
 - `mod.rs` — constants (`LOGIN_BASE_URL`, `GRAPH_BASE_URL`, `SCOPES`), `OAuthConfig`,
-  `TokenSet`, and `signed_in_email` (`GET /me`, used both by
+  `TokenSet` (its `Debug` output redacts `access_token` and `refresh_token`), the shared
+  60 s HTTP request timeout, and `signed_in_email` (`GET /me`, used both by
   `MicrosoftGraphEmailProvider::test_connection` and right after sign-in to confirm
   the token belongs to the expected account).
 - `oauth.rs` (`pub mod oauth`) — PKCE (`new_pkce`), `authorize_url`, `sign_in`
@@ -42,6 +43,11 @@ setting (`Settings::microsoft_client_id`); each account additionally has its own
 
 ## Sign-in flow (`oauth::sign_in`)
 
+0. The tenant is validated first (`^[A-Za-z0-9.-]+$`, non-empty); anything else fails with
+   `ProviderError::Auth("Invalid Microsoft tenant")` before any URL is built, listener
+   started or browser opened. The same check guards the `/token` URL in `refresh` and the
+   code exchange. `authorize_url` therefore assumes an already-validated tenant; it never
+   panics (on an unparseable URL it returns the raw concatenation).
 1. `LoopbackServer::bind()` binds `127.0.0.1:0` and derives
    `redirect_uri = "http://localhost:{port}"`.
 2. `oauth::new_pkce()` generates a verifier (32 random bytes, base64url, no padding)
@@ -55,8 +61,10 @@ setting (`Settings::microsoft_client_id`); each account additionally has its own
    the loopback listener instead).
 5. `LoopbackServer::wait_for_redirect` waits (up to the given `timeout`, the design
    spec's guidance is 5 minutes) for `GET /?code=...&state=...` (or `?error=...`).
-   Any other request (notably a browser's `/favicon.ico`) gets a 404 and the
-   listener keeps waiting.
+   Only the root path `/` is accepted; any other path or method (notably a browser's
+   `/favicon.ico`) gets a 404 and the listener keeps waiting. Each connection is capped at
+   8 KB of request data and 2 s to send it (bounded by the remaining overall timeout), so
+   an idle or stalled connection is dropped and cannot block the real redirect.
 6. The returned `state` is checked against the one generated in step 2; a mismatch
    fails with `ProviderError::Auth`.
 7. An `error` query parameter (the user cancelled, or Microsoft rejected the
@@ -79,10 +87,14 @@ refresh).
   `SecretStore::get(&account_refresh_token_key(account_id))`; if absent, the
   provider returns `ProviderError::Auth("Sign in to this account")` without any
   network call.
-- A successful refresh calls `oauth::refresh`, then immediately persists the
-  (possibly rotated) refresh token back to the `SecretStore` before caching the new
+- A successful refresh calls `oauth::refresh`. Microsoft does not always rotate the
+  refresh token: when the response omits one, `oauth::refresh` reuses the token passed in
+  (the initial code exchange still requires one). The provider writes the refresh token
+  to the `SecretStore` only when it differs from the stored one, before caching the new
   access token — so a crash between refresh and the next use never leaves a stale
-  refresh token behind.
+  refresh token behind, and unchanged tokens cause no credential-store write.
+- The token cache mutex is poison-tolerant (a panic elsewhere cannot make later calls
+  panic).
 - `test_connection` is exactly "refresh, then `GET /me`".
 
 ## Fetching mail (`EmailProvider::fetch_new`)
@@ -97,13 +109,19 @@ refresh).
 - Every request carries `Prefer: outlook.body-content-type="text",
   odata.maxpagesize=50`.
 - **400 fallback**: if the very first (filtered, no-cursor) request returns 400,
-  it is retried once without `$filter`; from then on, every mapped message with
-  `received_at < since` is discarded client-side instead.
-- Pagination follows `@odata.nextLink` until either 200 messages
-  (`academic_core::domain::MAX_BATCH`) have been collected or the response carries
-  `@odata.deltaLink` instead. `next_cursor` is always the last link obtained from
-  the last response processed — a `nextLink` when capped at 200 (so the next sync
-  resumes mid-page), or the `deltaLink` when the feed is exhausted.
+  it is retried once without `$filter`. The saved link from that path has no `$filter`,
+  so every mapped message with `received_at < since` is discarded client-side on every
+  page of **every** call (with or without a cursor, not only after the fallback in the
+  current run). Discarded messages do not count toward the batch limit.
+- Pagination follows `@odata.nextLink` until the response carries `@odata.deltaLink`,
+  or fewer than one page (50) of room remains below `MAX_BATCH` (200): the check happens
+  before requesting the next page, so a batch never exceeds `MAX_BATCH` and the saved
+  cursor stays page-aligned. `next_cursor` is always the last link obtained — the
+  unfetched `nextLink` when capped, or the `deltaLink` when the feed is exhausted.
+- A message that cannot be mapped is **skipped** (a `tracing::warn!` with only its Graph
+  id, never content) instead of failing the batch, so one bad message cannot block the
+  folder; the cursor still advances past it.
+- Returned emails are sorted oldest first (`received_at`, ties by provider message id).
 - Entries with `@removed` (deletions reported by the delta feed) are skipped; this
   app has no concept of removing an already-stored result, so they are simply
   ignored.
@@ -122,7 +140,8 @@ refresh).
 | Token/redirect error description contains `AADSTS65001` or `AADSTS90094` | `Auth` | "Your organization requires admin approval for this app" |
 | Other token endpoint error | `Auth` | "Microsoft sign-in failed ({error code})" |
 | Graph API 401/403 | `Auth` | "Microsoft Graph rejected the request. Reconnect the account" |
-| DNS/TCP/TLS/timeout | `Connection` | sanitized `reqwest` error text (no bodies) |
+| DNS/TCP/TLS/timeout (every Graph/OAuth request has a 60 s timeout) | `Connection` | sanitized `reqwest` error text (no bodies) |
+| Invalid tenant (not `^[A-Za-z0-9.-]+$`) | `Auth` | "Invalid Microsoft tenant" |
 | Other non-2xx Graph responses, malformed JSON, missing next/delta link | `Protocol` | sanitized detail |
 
 Access tokens, refresh tokens, authorization codes and PKCE verifiers are never
@@ -135,13 +154,20 @@ Microsoft's own `error_description` text, which carry no secrets, are included).
   error classification, message/profile JSON mapping, PKCE challenge computation,
   the authorize URL's query parameters, and delta URL construction.
 - `crates/infra/tests/graph_oauth.rs` (wiremock): token exchange form fields;
-  `invalid_grant` and `AADSTS65001` mapping; a full `sign_in` run where the
+  `invalid_grant` and `AADSTS65001` mapping; refresh reusing the passed-in refresh token
+  when the response has none; invalid tenants rejected by `refresh` and `sign_in` without
+  network calls or opening the browser; a full `sign_in` run where the
   `open_browser` callback performs the redirect GET itself (parsing
   `redirect_uri`/`state` out of the authorize URL) against a mocked token endpoint;
   a mismatched-`state` case that must never reach the token endpoint.
 - `crates/infra/tests/graph_provider.rs` (wiremock): `test_connection` refreshing
   and calling `/me`; the missing-refresh-token case; access-token caching across
-  two calls (token endpoint hit once); the first request's `$filter`/`Prefer`
+  two calls (token endpoint hit once); a refresh without rotation leaving the stored
+  token untouched (spy `SecretStore` counts `set` calls); an unmappable message skipped
+  while the rest and the cursor are returned; a fallback-path cursor still dropping old
+  messages on a later call; oldest-first ordering; the page-aligned cap across four
+  pages; a slow response timing out (`set_delay` with a 50 ms timeout set through the
+  test-only env var `ACADEMIC_ASSISTANT_GRAPH_TEST_TIMEOUT_MS`); the first request's `$filter`/`Prefer`
   header and full message mapping; `nextLink` → `deltaLink` pagination; resuming
   directly from a cursor link; `@removed` entries ignored; the 200-message cap
   (asserting the *unfetched* `nextLink` becomes the cursor); the 400-without-filter
@@ -150,6 +176,9 @@ Microsoft's own `error_description` text, which carry no secrets, are included).
   (`message_exam_change.json`, a Spanish exam-reschedule notice) and a token
   response (`token_response.json`, unused by the current tests but kept for future
   ones that want a canned success body).
+- Unit tests in `loopback.rs`: other paths get 404 while the listener keeps waiting, and
+  an idle connection does not block a later valid redirect. `TokenSet` `Debug` redaction
+  and tenant validation are unit-tested in `mod.rs` and `oauth.rs`.
 
 ## Known limitations
 

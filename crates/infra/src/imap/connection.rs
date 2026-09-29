@@ -18,6 +18,10 @@ use academic_core::ports::ProviderError;
 pub(crate) type ImapSession = async_imap::Session<TlsStream<TcpStream>>;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+/// Timeout for the LOGIN command itself, once the TCP/TLS connection is already
+/// established — matches [`super::COMMAND_TIMEOUT`], used for every other IMAP
+/// command issued after login.
+const LOGIN_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Opens an implicit-TLS connection to `host:port` and logs in with `username`/`password`.
 pub(crate) async fn connect(
@@ -43,10 +47,11 @@ pub(crate) async fn connect(
         .await
         .map_err(|e| ProviderError::Connection(format!("no greeting from {host}:{port}: {e}")))?;
 
-    client
-        .login(username, password)
-        .await
-        .map_err(|(err, _client)| map_login_error(err))
+    match timeout(LOGIN_TIMEOUT, client.login(username, password)).await {
+        Ok(Ok(session)) => Ok(session),
+        Ok(Err((err, _client))) => Err(map_login_error(err)),
+        Err(_) => Err(timed_out("LOGIN", host, port)),
+    }
 }
 
 async fn tls_connect(host: &str, tcp: TcpStream) -> Result<TlsStream<TcpStream>, ProviderError> {
