@@ -553,7 +553,9 @@ pub mod oauth {
     pub async fn refresh(http: &reqwest::Client, config: &OAuthConfig, refresh_token: &str) -> Result<TokenSet, ProviderError>;
 }
 /// GET /me → returns mail or userPrincipalName.
-pub async fn signed_in_email(http: &reqwest::Client, graph_base_url: &str, access_token: &str) -> Result<String, ProviderError>;
+pub struct SignedInIdentity { pub mail: Option<String>, pub user_principal_name: Option<String> }
+/// GET /me → both identifiers; the account email must match either (case-insensitive).
+pub async fn signed_in_identity(http: &reqwest::Client, graph_base_url: &str, access_token: &str) -> Result<SignedInIdentity, ProviderError>;
 pub struct MicrosoftGraphEmailProvider { .. }
 impl MicrosoftGraphEmailProvider {
     pub fn new(account_id: AccountId, http: reqwest::Client, oauth: OAuthConfig, graph_base_url: String,
@@ -662,7 +664,7 @@ Behavior: spec §10 and §12.
 - `commands/{runs,results,accounts,catalog,settings}.rs` implementing every command in spec §10.2 with exactly the argument names of the T2 table (Tauri maps camelCase JS keys to snake_case params). Validation in commands: non-empty trimmed names; email contains `@`; port 1–65535; initial_sync_days 1–365; folders non-empty; `search` trimmed (empty → None); `limit` clamped 1–200; settings URLs start with `http://` or `https://`; model names non-empty.
 - `check_now`: `runner.prepare(Manual)?`, spawn `runner.execute` with `tauri::async_runtime::spawn`, return run id.
 - `get_dashboard`: `latest` run, `running_run`, `unseen_counts`, `query(seen=false, sort, limit 100)`, attention list (enabled accounts with any sync state `error` → its last_error; IMAP without password / Graph without refresh token → "Sign in to this account" / "The password is missing").
-- `add_account`: insert, then store the IMAP password (on secret failure delete the inserted account and return internal). `update_account`: provider kind change → validation; password stored only when provided. `remove_account`: delete both secret keys, then the account. `test_account`: factory create + `test_connection` → `ConnectionTestDto`. `connect_microsoft_account`: client id required; `oauth::sign_in` with `open_browser` using `tauri_plugin_opener::open_url`, 5-minute timeout; verify `signed_in_email` equals account email (case-insensitive) else validation error "Signed in as <x>, expected <y>" and nothing stored; store refresh token.
+- `add_account`: insert, then store the IMAP password (on secret failure delete the inserted account and return internal). `update_account`: provider kind change → validation; password stored only when provided. `remove_account`: delete both secret keys, then the account. `test_account`: factory create + `test_connection` → `ConnectionTestDto`. `connect_microsoft_account`: client id required; `oauth::sign_in` with `open_browser` using `tauri_plugin_opener::open_url`, 5-minute timeout; verify the account email equals `mail` or `userPrincipalName` from `signed_in_identity` (case-insensitive) else validation error "Signed in as <x>, expected <y>" and nothing stored; store refresh token.
 - `test_ai_provider`: `ModelProvider::current` then one Noul question (`"This text is a greeting."` on state `"Hello"`), ok when an answer is returned.
 - Commands never return or log secrets, bodies or subjects.
 
