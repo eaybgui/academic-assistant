@@ -3,11 +3,13 @@
 use std::time::Duration;
 
 use academic_core::domain::{
-    account_password_key, account_refresh_token_key, Account, AccountId, ProviderConfig,
-    ProviderKind,
+    account_password_key, account_refresh_token_key, Account, AccountDraft, AccountId,
+    ProviderConfig, ProviderKind,
 };
 use academic_infra::graph::oauth;
-use academic_infra::graph::{signed_in_email, OAuthConfig, GRAPH_BASE_URL, LOGIN_BASE_URL};
+use academic_infra::graph::{
+    signed_in_identity, OAuthConfig, SignedInIdentity, GRAPH_BASE_URL, LOGIN_BASE_URL,
+};
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
@@ -26,6 +28,8 @@ const PASSWORD_REQUIRED: &str = "Enter the password";
 const PROVIDER_CHANGE_MESSAGE: &str = "The provider type can't be changed";
 const CLIENT_ID_REQUIRED: &str = "Set the Microsoft client ID in Settings";
 const NOT_MICROSOFT_MESSAGE: &str = "This account doesn't use Microsoft sign-in";
+/// Logged instead of the user-facing mismatch message, which contains addresses.
+const MISMATCH_LOG_MESSAGE: &str = "signed-in account mismatch";
 
 #[tauri::command]
 pub async fn get_accounts(state: State<'_, AppState>) -> Result<Vec<AccountDto>, CommandError> {
@@ -95,8 +99,9 @@ fn accounts(state: &AppState) -> Result<Vec<AccountDto>, CommandError> {
         .collect()
 }
 
-/// Inserts the account, then stores the IMAP password. If storing the password
-/// fails the inserted account is removed again so no half-configured account stays.
+/// Inserts the account, then prepares its secrets (see [`store_new_account_secrets`]).
+/// If that fails the inserted account is removed again so no half-configured
+/// account stays.
 fn create_account(state: &AppState, input: AccountInput) -> Result<AccountDto, CommandError> {
     let ValidatedAccount { draft, password } = validation::account(input)?;
     if draft.provider.kind() == ProviderKind::Imap && password.is_none() {
@@ -104,22 +109,35 @@ fn create_account(state: &AppState, input: AccountInput) -> Result<AccountDto, C
     }
 
     let account = state.accounts.insert(&draft, state.clock.now())?;
-    if let Some(password) = password {
-        if let Err(error) = state
-            .secrets
-            .set(&account_password_key(account.id), &password)
-        {
-            if let Err(rollback) = state.accounts.delete(account.id) {
-                tracing::warn!(account_id = account.id, %rollback, "could not roll back account");
-            }
-            return Err(error.into());
+    if let Err(error) = store_new_account_secrets(state, account.id, password.as_deref()) {
+        if let Err(rollback) = state.accounts.delete(account.id) {
+            tracing::warn!(account_id = account.id, %rollback, "could not roll back account");
         }
+        return Err(error);
     }
     account_dto(state, &account)
 }
 
+/// Deletes any secret already stored under the new account's keys (defense in
+/// depth: a new account must never inherit a leftover password or refresh token),
+/// then stores the IMAP password when there is one.
+fn store_new_account_secrets(
+    state: &AppState,
+    id: AccountId,
+    password: Option<&str>,
+) -> Result<(), CommandError> {
+    state.secrets.delete(&account_password_key(id))?;
+    state.secrets.delete(&account_refresh_token_key(id))?;
+    if let Some(password) = password {
+        state.secrets.set(&account_password_key(id), password)?;
+    }
+    Ok(())
+}
+
 /// Updates the account. The provider type cannot change and the IMAP password is
-/// replaced only when the input carries one.
+/// replaced only when the input carries one. A Microsoft account whose email or
+/// tenant changes loses its refresh token: the stored sign-in belongs to the old
+/// mailbox, so the account must be signed in again.
 fn edit_account(
     state: &AppState,
     id: AccountId,
@@ -135,7 +153,27 @@ fn edit_account(
     if let Some(password) = password {
         state.secrets.set(&account_password_key(id), &password)?;
     }
+    if invalidates_sign_in(&existing, &draft) {
+        state.secrets.delete(&account_refresh_token_key(id))?;
+    }
     account_dto(state, &account)
+}
+
+/// True when `draft` changes the mailbox a Microsoft account is signed in to: its
+/// email address (case-insensitive) or its tenant.
+fn invalidates_sign_in(existing: &Account, draft: &AccountDraft) -> bool {
+    match (&existing.provider, &draft.provider) {
+        (
+            ProviderConfig::MicrosoftGraph { tenant: old },
+            ProviderConfig::MicrosoftGraph { tenant: new },
+        ) => {
+            old != new
+                || !existing
+                    .email_address
+                    .eq_ignore_ascii_case(&draft.email_address)
+        }
+        _ => false,
+    }
 }
 
 /// Deletes both possible secrets first (a missing secret is not an error), then
@@ -181,23 +219,50 @@ async fn sign_in_microsoft(
     };
 
     let tokens = oauth::sign_in(&state.http, &config, open_browser, SIGN_IN_TIMEOUT).await?;
-    let signed_in = signed_in_email(&state.http, GRAPH_BASE_URL, &tokens.access_token).await?;
-    ensure_expected_email(&account.email_address, &signed_in)?;
+    let identity = signed_in_identity(&state.http, GRAPH_BASE_URL, &tokens.access_token).await?;
+    store_sign_in(state, id, &identity, &tokens.refresh_token)
+}
 
+/// Stores the refresh token for account `id` when the signed-in identity is the
+/// account's own address. The account is loaded again here because the sign-in
+/// waits on the user: it may have been removed or edited meanwhile, and nothing is
+/// stored for an account that no longer exists.
+fn store_sign_in(
+    state: &AppState,
+    id: AccountId,
+    identity: &SignedInIdentity,
+    refresh_token: &str,
+) -> Result<AccountDto, CommandError> {
+    let account = find_account(state, id)?;
+    ensure_expected_identity(&account.email_address, identity)?;
     state
         .secrets
-        .set(&account_refresh_token_key(id), &tokens.refresh_token)?;
+        .set(&account_refresh_token_key(id), refresh_token)?;
     account_dto(state, &account)
 }
 
-fn ensure_expected_email(expected: &str, signed_in: &str) -> Result<(), CommandError> {
-    if expected.eq_ignore_ascii_case(signed_in) {
-        Ok(())
-    } else {
-        Err(CommandError::validation(format!(
-            "Signed in as {signed_in}, expected {expected}"
-        )))
+/// Accepts the sign-in when `expected` equals the identity's `mail` or
+/// `userPrincipalName`, ignoring case and surrounding whitespace.
+fn ensure_expected_identity(
+    expected: &str,
+    identity: &SignedInIdentity,
+) -> Result<(), CommandError> {
+    let expected = expected.trim();
+    let candidates = [&identity.mail, &identity.user_principal_name];
+    let matches = candidates
+        .iter()
+        .copied()
+        .flatten()
+        .any(|candidate| candidate.trim().eq_ignore_ascii_case(expected));
+    if matches {
+        return Ok(());
     }
+    let signed_in = candidates.iter().copied().flatten().next();
+    Err(CommandError::validation(format!(
+        "Signed in as {}, expected {expected}",
+        signed_in.map_or("", String::as_str)
+    ))
+    .with_log_message(MISMATCH_LOG_MESSAGE))
 }
 
 #[cfg(test)]
@@ -409,14 +474,155 @@ mod tests {
         assert_eq!(error.message, "This account doesn't use Microsoft sign-in");
     }
 
+    fn identity(mail: Option<&str>, upn: Option<&str>) -> SignedInIdentity {
+        SignedInIdentity {
+            mail: mail.map(str::to_string),
+            user_principal_name: upn.map(str::to_string),
+        }
+    }
+
     #[test]
-    fn the_signed_in_email_must_match_case_insensitively() {
-        assert!(ensure_expected_email("Me@UAH.es", "me@uah.es").is_ok());
-        let error = ensure_expected_email("me@uah.es", "other@uah.es").unwrap_err();
+    fn the_account_email_may_match_mail_or_user_principal_name() {
+        let both = identity(Some("alias@uah.es"), Some("Me@UAH.es"));
+        assert!(ensure_expected_identity("me@uah.es", &both).is_ok());
+        assert!(ensure_expected_identity(" ALIAS@uah.es ", &both).is_ok());
+        assert!(ensure_expected_identity("me@uah.es", &identity(None, Some("me@uah.es"))).is_ok());
+    }
+
+    #[test]
+    fn a_different_signed_in_identity_is_rejected_without_logging_the_addresses() {
+        let error = ensure_expected_identity(
+            "me@uah.es",
+            &identity(Some("other@uah.es"), Some("upn@uah.es")),
+        )
+        .unwrap_err();
         assert_eq!(error.kind, CommandErrorKind::Validation);
         assert_eq!(
             error.message,
             "Signed in as other@uah.es, expected me@uah.es"
         );
+        assert_eq!(error.message_for_log(), "signed-in account mismatch");
+    }
+
+    #[test]
+    fn signing_in_stores_the_refresh_token_when_the_identity_matches() {
+        let h = harness();
+        let id = create_account(&h.state, graph_input()).unwrap().id;
+
+        let dto = store_sign_in(
+            &h.state,
+            id,
+            &identity(None, Some("me@uah.es")),
+            "test-token",
+        )
+        .unwrap();
+
+        assert!(dto.credentials_configured);
+        assert_eq!(
+            h.secrets.get(&account_refresh_token_key(id)).unwrap(),
+            Some("test-token".to_string())
+        );
+    }
+
+    #[test]
+    fn signing_in_as_someone_else_stores_nothing() {
+        let h = harness();
+        let id = create_account(&h.state, graph_input()).unwrap().id;
+
+        let error = store_sign_in(
+            &h.state,
+            id,
+            &identity(Some("other@uah.es"), None),
+            "test-token",
+        )
+        .unwrap_err();
+
+        assert_eq!(error.kind, CommandErrorKind::Validation);
+        assert_eq!(h.secrets.get(&account_refresh_token_key(id)).unwrap(), None);
+    }
+
+    #[test]
+    fn signing_in_to_an_account_removed_meanwhile_stores_nothing() {
+        let h = harness();
+        let id = create_account(&h.state, graph_input()).unwrap().id;
+        delete_account(&h.state, id).unwrap();
+
+        let error = store_sign_in(
+            &h.state,
+            id,
+            &identity(Some("me@uah.es"), None),
+            "test-token",
+        )
+        .unwrap_err();
+
+        assert_eq!(error.kind, CommandErrorKind::NotFound);
+        assert_eq!(h.secrets.get(&account_refresh_token_key(id)).unwrap(), None);
+    }
+
+    #[test]
+    fn a_new_account_never_inherits_leftover_secrets() {
+        let h = harness();
+        // The first account created in a fresh database gets id 1.
+        h.secrets.set(&account_password_key(1), "old-pw").unwrap();
+        h.secrets
+            .set(&account_refresh_token_key(1), "old-token")
+            .unwrap();
+
+        let id = create_account(&h.state, graph_input()).unwrap().id;
+
+        assert_eq!(id, 1);
+        assert_eq!(stored_password(&h, id), None);
+        assert_eq!(h.secrets.get(&account_refresh_token_key(id)).unwrap(), None);
+    }
+
+    fn signed_in_graph_account(h: &Harness) -> AccountId {
+        let id = create_account(&h.state, graph_input()).unwrap().id;
+        h.secrets
+            .set(&account_refresh_token_key(id), "test-token")
+            .unwrap();
+        id
+    }
+
+    fn refresh_token_kept(h: &Harness, id: AccountId) -> bool {
+        h.secrets
+            .get(&account_refresh_token_key(id))
+            .unwrap()
+            .is_some()
+    }
+
+    #[test]
+    fn editing_a_graph_accounts_email_or_tenant_drops_the_refresh_token() {
+        let h = harness();
+
+        let id = signed_in_graph_account(&h);
+        let mut input = graph_input();
+        input.email_address = "new@uah.es".into();
+        let dto = edit_account(&h.state, id, input).unwrap();
+        assert!(!dto.credentials_configured);
+        assert!(!refresh_token_kept(&h, id));
+
+        h.secrets
+            .set(&account_refresh_token_key(id), "test-token")
+            .unwrap();
+        let mut input = graph_input();
+        input.email_address = "new@uah.es".into();
+        input.provider = ProviderInput::MicrosoftGraph {
+            tenant: "contoso.onmicrosoft.com".into(),
+        };
+        edit_account(&h.state, id, input).unwrap();
+        assert!(!refresh_token_kept(&h, id));
+    }
+
+    #[test]
+    fn editing_a_graph_account_keeps_the_refresh_token_when_the_mailbox_is_unchanged() {
+        let h = harness();
+        let id = signed_in_graph_account(&h);
+
+        let mut input = graph_input();
+        input.name = "Renamed".into();
+        input.email_address = "ME@UAH.ES".into();
+        edit_account(&h.state, id, input).unwrap();
+
+        assert!(refresh_token_kept(&h, id));
     }
 }

@@ -36,6 +36,7 @@ pub struct AppState {
     pub models: Arc<dyn ModelProvider>,
     pub http: reqwest::Client,
     pub clock: Arc<dyn Clock>,
+    pub observer: Arc<dyn RunObserver>,
     pub runner: Arc<CheckRunner>,
     /// Keeps the non-blocking log writer flushing for the lifetime of the app.
     _log_guard: Option<WorkerGuard>,
@@ -65,7 +66,7 @@ impl AppState {
             },
             factory.clone(),
             models.clone(),
-            observer,
+            observer.clone(),
             clock.clone(),
         ));
         Self {
@@ -80,6 +81,7 @@ impl AppState {
             models,
             http,
             clock,
+            observer,
             runner,
             _log_guard: None,
         }

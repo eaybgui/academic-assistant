@@ -1203,6 +1203,71 @@ async fn date_candidates_are_resolved_against_the_local_offset() {
 }
 
 // ---------------------------------------------------------------------------
+// Run lock
+// ---------------------------------------------------------------------------
+
+/// Observer that records what `running_run()` reports at the moment `finished`
+/// is called.
+#[derive(Default)]
+struct RunLockProbe {
+    runner: std::sync::Mutex<Option<std::sync::Weak<CheckRunner>>>,
+    running_at_finish: std::sync::Mutex<Vec<Option<i64>>>,
+}
+
+impl academic_core::ports::RunObserver for RunLockProbe {
+    fn progress(&self, _progress: &academic_core::domain::RunProgress) {}
+
+    fn finished(&self, _run_id: i64, _status: RunStatus) {
+        let runner = self
+            .runner
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade);
+        let running = runner.and_then(|runner| runner.running_run());
+        self.running_at_finish.lock().unwrap().push(running);
+    }
+}
+
+#[tokio::test]
+async fn the_run_lock_is_released_before_the_observer_is_told_the_run_finished() {
+    let account = account_with_inbox(1, "student@example.edu");
+    let store = Arc::new(TestStore::new(
+        vec![account],
+        empty_catalog(),
+        Settings::default(),
+    ));
+    let providers = Arc::new(FakeEmailProviderFactory::new());
+    providers.queue_responses(
+        1,
+        vec![Ok(academic_core::domain::FetchBatch {
+            emails: vec![],
+            next_cursor: imap_cursor(1),
+        })],
+    );
+    let model = Arc::new(FakeStructuredModel::new(vec![]));
+    let probe = Arc::new(RunLockProbe::default());
+    let clock = Arc::new(FakeClock::new(base_time(), utc_offset()));
+    let runner = Arc::new(CheckRunner::new(
+        repos(&store),
+        providers,
+        Arc::new(FakeModelProvider::new(model)),
+        probe.clone(),
+        clock,
+    ));
+    *probe.runner.lock().unwrap() = Some(Arc::downgrade(&runner));
+
+    let prepared = runner
+        .prepare(RunTrigger::Manual)
+        .expect("prepare succeeds");
+    let run_id = prepared.run_id;
+    assert_eq!(runner.running_run(), Some(run_id));
+    runner.execute(prepared).await;
+
+    assert_eq!(*probe.running_at_finish.lock().unwrap(), vec![None]);
+}
+
+// ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
 

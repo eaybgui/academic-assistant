@@ -120,33 +120,47 @@ impl CheckRunner {
     /// Executes a prepared run to completion. Never panics on a provider or model
     /// error: every account is processed independently (spec §5 step 3), and the
     /// run's final status/counters/summary are always recorded before returning.
-    /// Releases the single-run lock when it returns, on every path (the lock
-    /// guard lives inside `run` and is dropped when this function's local
-    /// bindings go out of scope).
+    /// The single-run lock is released before the observer is told the run
+    /// finished, so a consumer reacting to that notification never sees the run
+    /// as still running.
     pub async fn execute(&self, run: PreparedRun) -> RunStatus {
         let PreparedRun {
             run_id,
             model,
             settings,
             accounts,
-            _lock,
+            _lock: lock_guard,
         } = run;
 
+        let status = self
+            .process_run(run_id, model.as_ref(), &settings, &accounts)
+            .await;
+        drop(lock_guard);
+        self.observer.finished(run_id, status);
+        status
+    }
+
+    /// Processes every account of the run and records the run's final outcome.
+    async fn process_run(
+        &self,
+        run_id: RunId,
+        model: &dyn StructuredModel,
+        settings: &Settings,
+        accounts: &[Account],
+    ) -> RunStatus {
         let catalog = match self.repos.catalog.catalog() {
             Ok(catalog) => catalog,
-            Err(error) => {
-                return self.fail_before_processing(run_id, &accounts, &error.to_string())
-            }
+            Err(error) => return self.fail_before_processing(run_id, accounts, &error.to_string()),
         };
 
         let ctx = RunContext {
             repos: &self.repos,
             providers: self.providers.as_ref(),
-            model: model.as_ref(),
+            model,
             observer: self.observer.as_ref(),
             clock: self.clock.as_ref(),
             run_id,
-            settings: &settings,
+            settings,
             catalog: &catalog,
         };
 
@@ -154,7 +168,7 @@ impl CheckRunner {
         let mut failed_accounts = 0u32;
         let accounts_processed = accounts.len() as u32;
 
-        for account in &accounts {
+        for account in accounts {
             let result = account::process_account(&ctx, account).await;
             total_counters.add(&result.counters);
             if result.status == RunAccountStatus::Failed {
@@ -172,8 +186,6 @@ impl CheckRunner {
             &total_counters,
             error_summary(status, failed_accounts, accounts_processed).as_deref(),
         );
-
-        self.observer.finished(run_id, status);
         status
     }
 
@@ -213,7 +225,6 @@ impl CheckRunner {
             &Counters::default(),
             Some(&summary),
         );
-        self.observer.finished(run_id, RunStatus::Failed);
         RunStatus::Failed
     }
 }

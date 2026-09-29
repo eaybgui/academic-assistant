@@ -2,7 +2,7 @@
 //! configured, the aggregated last sync, and the dashboard "needs attention" list.
 
 use academic_core::domain::{
-    account_password_key, account_refresh_token_key, Account, ProviderConfig, SyncStatus,
+    account_password_key, account_refresh_token_key, Account, ProviderConfig, SyncState, SyncStatus,
 };
 use academic_core::ports::{SecretError, SecretStore};
 
@@ -29,8 +29,22 @@ pub fn credentials_configured(
 
 pub fn account_dto(state: &AppState, account: &Account) -> Result<AccountDto, CommandError> {
     let configured = credentials_configured(state.secrets.as_ref(), account)?;
-    let last_sync = LastSyncDto::from_states(&state.sync.list_for_account(account.id)?);
+    let last_sync = LastSyncDto::from_states(&current_sync_states(state, account)?);
     Ok(AccountDto::new(account, configured, last_sync))
+}
+
+/// The account's sync states restricted to the folders it still has configured, so
+/// the state (and any error) of a folder that was removed no longer counts.
+fn current_sync_states(
+    state: &AppState,
+    account: &Account,
+) -> Result<Vec<SyncState>, CommandError> {
+    Ok(state
+        .sync
+        .list_for_account(account.id)?
+        .into_iter()
+        .filter(|sync| account.folders.contains(&sync.folder))
+        .collect())
 }
 
 /// Enabled accounts that need the user's attention, one entry per account. A
@@ -50,9 +64,7 @@ pub fn attention(state: &AppState) -> Result<Vec<AttentionDto>, CommandError> {
 }
 
 fn attention_message(state: &AppState, account: &Account) -> Result<Option<String>, CommandError> {
-    let sync_error = state
-        .sync
-        .list_for_account(account.id)?
+    let sync_error = current_sync_states(state, account)?
         .into_iter()
         .find(|sync| sync.status == SyncStatus::Error);
     if let Some(sync) = sync_error {
@@ -166,6 +178,29 @@ mod tests {
         let entries = attention(&h.state).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].message, "Connection failed: timeout");
+    }
+
+    #[test]
+    fn sync_errors_of_removed_folders_are_ignored() {
+        let h = harness();
+        let account = add(&h, &imap_draft("IMAP"));
+        h.secrets
+            .set(&account_password_key(account.id), "test-pw")
+            .unwrap();
+        let now = Utc::now();
+        h.state
+            .sync
+            .record_failure(account.id, "Removed", "Connection failed: timeout", now)
+            .unwrap();
+        h.state
+            .sync
+            .record_success(account.id, "INBOX", &cursor(), now)
+            .unwrap();
+
+        assert!(attention(&h.state).unwrap().is_empty());
+        let dto = account_dto(&h.state, &account).unwrap();
+        assert_eq!(dto.last_sync.status, SyncStatus::Ok);
+        assert_eq!(dto.last_sync.error, None);
     }
 
     #[test]

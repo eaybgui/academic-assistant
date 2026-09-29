@@ -65,15 +65,15 @@ Tauri maps them to the snake_case Rust parameters.
 
 | Command | Arguments | Result | Behavior |
 |---|---|---|---|
-| `check_now` | none | run id | `runner.prepare(Manual)`, then `runner.execute` on `tauri::async_runtime::spawn`; returns as soon as the run row exists. |
+| `check_now` | none | run id | `runner.prepare(Manual)`, then `runner.execute` on `tauri::async_runtime::spawn` (supervised, see below); returns as soon as the run row exists. Logs `check started` with the run id. |
 | `get_dashboard` | `sort` | `DashboardDto` | Last run, running run id, attention list, unseen counts and up to 100 unseen results (`seen=false`, given sort, offset 0). |
 | `get_run_history` | `limit` | `RunDto[]` | Newest first; `limit` clamped to 1..200. |
 | `get_results` | `query` | `Page<ResultDto>` | `search` trimmed (blank means none); `limit` clamped to 1..200; negative `offset` becomes 0. |
 | `set_result_seen` | `id`, `seen` | `ResultDto` | Marks seen or new; unknown id is `not_found`. |
 | `mark_all_seen` | none | rows updated | |
 | `get_accounts` | none | `AccountDto[]` | |
-| `add_account` | `input` | `AccountDto` | Insert, then store the IMAP password; if the secret cannot be stored the inserted row is deleted again. IMAP password is required. |
-| `update_account` | `id`, `input` | `AccountDto` | Provider type cannot change. IMAP password replaced only when non-empty. |
+| `add_account` | `input` | `AccountDto` | Insert, delete both secret keys for the new id (defensive: a new account never inherits a leftover secret), then store the IMAP password; if the secrets cannot be prepared the inserted row is deleted again. IMAP password is required. A Microsoft tenant must match `^[A-Za-z0-9.-]+$` ("Enter a valid tenant"). |
+| `update_account` | `id`, `input` | `AccountDto` | Provider type cannot change. IMAP password replaced only when non-empty. For a Microsoft account, changing the email (case-insensitive) or the tenant deletes the stored refresh token after the update, so the account shows "Sign in to this account". Tenant validated as in `add_account`. |
 | `remove_account` | `id` | nothing | Deletes both secret keys (missing is fine), then the account and, by cascade, its data. |
 | `test_account` | `id` | `ConnectionTestDto` | `factory.create` then `test_connection`; `errorKind` is the provider error kind (`auth`, `connection`, `protocol`). |
 | `connect_microsoft_account` | `id` | `AccountDto` | See below. |
@@ -90,7 +90,19 @@ Tauri maps them to the snake_case Rust parameters.
 
 One entry per enabled account, first reason wins: a sync state with status `error`
 (its `last_error`), else a missing credential ("The password is missing. Edit the
-account to set it" for IMAP, "Sign in to this account" for Microsoft).
+account to set it" for IMAP, "Sign in to this account" for Microsoft). Only sync states
+of folders still in the account's `folders` count; the state of a removed folder is
+ignored (also for `lastSync`).
+
+### Run supervision
+
+`check_now` spawns the execution and a supervisor task that awaits it. If the execution
+task panics (or is cancelled) the run would stay `running`, so the supervisor logs the
+failure at `error`, marks the run `failed` with error summary "Interrupted" (unless it
+had already finished) and calls the observer's `finished`, which emits `run:finished`
+with status `failed` so the UI recovers. The pipeline releases the single-run lock
+before it notifies the observer, so a dashboard refetch after `run:finished` never sees
+the run as running.
 
 ### `AccountDto` derived fields
 
@@ -98,6 +110,7 @@ account to set it" for IMAP, "Sign in to this account" for Microsoft).
   secret store.
 - `lastSync`: `at` is the latest `last_run_at`; `status` is `error` if any folder errored,
   else `ok` if any folder succeeded, else `never`; `error` is the first folder error.
+  Only the account's current `folders` are considered.
 
 ### `connect_microsoft_account`
 
@@ -105,10 +118,19 @@ account to set it" for IMAP, "Sign in to this account" for Microsoft).
    (otherwise a validation error).
 2. `oauth::sign_in` with a 5-minute timeout; the authorize URL is opened in the system
    browser through the opener plugin.
-3. `signed_in_email` must equal the account email, compared case-insensitively;
-   otherwise a validation error "Signed in as <x>, expected <y>" and nothing is stored.
-4. The refresh token is stored under `account_refresh_token_key(id)`; the updated
+3. `signed_in_identity` (`GET /me`) returns `mail` and `userPrincipalName`. After the
+   OAuth wait the account is loaded again: if it was removed meanwhile the command
+   returns `not_found` and stores nothing.
+4. The account email must equal `mail` or `userPrincipalName`, compared case-insensitively
+   and trimmed; otherwise a validation error "Signed in as <x>, expected <y>" and nothing
+   is stored. The addresses appear only in that user-facing message; the log line says
+   just "signed-in account mismatch".
+5. The refresh token is stored under `account_refresh_token_key(id)`; the updated
    `AccountDto` is returned. The access token is never kept.
+
+Account ids are never reused (`accounts.id` is `AUTOINCREMENT`, see
+`docs/infra/database.md`), so a refresh token orphaned by a removed account cannot be
+picked up by a later account.
 
 ## DTO conventions
 
@@ -131,10 +153,15 @@ Emitted by `TauriRunObserver` for every `RunObserver` callback of the pipeline.
 
 ## Capabilities
 
-`src-tauri/capabilities/default.json` (window `main`): `core:default` (includes the
-event `listen`/`unlisten` permissions the frontend needs) and `opener:allow-open-url`
-restricted to `https://*`. App commands defined with `#[tauri::command]` are allowed by
-default in Tauri 2, so no per-command permission is listed.
+`src-tauri/capabilities/default.json` (window `main`): `core:event:default` and
+`opener:allow-open-url` restricted to `https://*`.
+
+Least privilege: the frontend only calls the app's own commands (`invoke`), listens to
+the `run:*` events and opens result links, so it needs the event permissions
+(`listen`/`unlisten`, part of `core:event:default`) and nothing else. `core:default`
+would additionally grant the path, window, webview, app, image, resources, menu and tray
+APIs, which the app does not use. App commands defined with `#[tauri::command]` are
+allowed by default in Tauri 2, so no per-command permission is listed.
 
 ## Testing
 

@@ -30,6 +30,10 @@ pub struct CommandError {
     pub message: String,
     #[serde(skip)]
     detail: Option<String>,
+    /// Replaces `message` in the log line when `message` carries personal data
+    /// (e.g. email addresses) that must not reach the log file.
+    #[serde(skip)]
+    log_message: Option<String>,
 }
 
 impl CommandError {
@@ -46,12 +50,23 @@ impl CommandError {
             kind,
             message: message.into(),
             detail: None,
+            log_message: None,
         }
     }
 
     fn with_detail(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
         self
+    }
+
+    /// Logs `log_message` instead of the user-facing message.
+    pub fn with_log_message(mut self, log_message: impl Into<String>) -> Self {
+        self.log_message = Some(log_message.into());
+        self
+    }
+
+    pub(crate) fn message_for_log(&self) -> &str {
+        self.log_message.as_deref().unwrap_or(&self.message)
     }
 
     fn internal(message: &str, detail: impl Into<String>) -> Self {
@@ -65,7 +80,7 @@ impl CommandError {
         tracing::warn!(
             command,
             kind = ?self.kind,
-            message = %self.message,
+            message = %self.message_for_log(),
             detail = self.detail.as_deref().unwrap_or(""),
             "command failed"
         );
@@ -124,6 +139,22 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&error).unwrap(),
             json!({ "kind": "validation", "message": "Enter a name" })
+        );
+    }
+
+    #[test]
+    fn the_log_message_replaces_the_user_message_in_logs_only() {
+        let error = CommandError::validation("Signed in as a@b.es, expected c@d.es")
+            .with_log_message("signed-in account mismatch");
+        assert_eq!(error.message_for_log(), "signed-in account mismatch");
+        assert_eq!(error.message, "Signed in as a@b.es, expected c@d.es");
+        assert_eq!(
+            serde_json::to_value(&error).unwrap()["message"],
+            "Signed in as a@b.es, expected c@d.es"
+        );
+        assert_eq!(
+            CommandError::validation("Enter a name").message_for_log(),
+            "Enter a name"
         );
     }
 

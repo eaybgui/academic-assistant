@@ -16,7 +16,7 @@ use academic_core::domain::{
 use academic_core::ports::{EmailProvider, ProviderError, SecretStore};
 
 use super::mapping::{map_graph_error_status, map_message, map_transport_error};
-use super::{oauth, signed_in_email_with_timeout, OAuthConfig, DEFAULT_REQUEST_TIMEOUT};
+use super::{oauth, signed_in_identity_with_timeout, OAuthConfig, DEFAULT_REQUEST_TIMEOUT};
 
 /// Fields requested for every message; keeps the payload small and matches exactly
 /// what [`super::mapping::map_message`] reads.
@@ -158,7 +158,7 @@ impl MicrosoftGraphEmailProvider {
 impl EmailProvider for MicrosoftGraphEmailProvider {
     async fn test_connection(&self) -> Result<(), ProviderError> {
         let access_token = self.access_token().await?;
-        signed_in_email_with_timeout(
+        signed_in_identity_with_timeout(
             &self.http,
             &self.graph_base_url,
             &access_token,

@@ -69,6 +69,11 @@ dependency in the root `Cargo.toml`.
 - **Domain enums** (`provider_type`, `status`, `category`, `priority`, `kind`,
   `outcome`, `trigger`, `error_kind`, ...): stored as their `as_str()` snake_case
   text and parsed back with `FromStr`, via the shared `util::parse_enum` helper.
+- **`accounts.id`**: `INTEGER PRIMARY KEY AUTOINCREMENT`, so the id of a deleted
+  account is never handed to a later one. Secrets are keyed by account id in the
+  credential store; reusing an id could give a new account the refresh token or password
+  left behind by a removed one. (`db_accounts.rs` checks that deleting the highest id and
+  inserting again yields a greater id.)
 - **`accounts.config`**: JSON *without* the type tag — `{"host","port","username"}`
   for IMAP, `{"tenant"}` for Microsoft Graph — because the tag is already stored
   separately in `provider_type`. `accounts.folders`, `courses.aliases` and every

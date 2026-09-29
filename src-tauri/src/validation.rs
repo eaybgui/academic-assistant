@@ -4,6 +4,7 @@
 //! returns the trimmed/normalized value that the commands then hand to the domain.
 
 use academic_core::domain::{AccountDraft, ProviderConfig, ResultQuery, Settings};
+use academic_infra::graph::oauth;
 
 use crate::dto::{AccountInput, ProviderInput, ResultQueryInput, SettingsInput};
 use crate::error::CommandError;
@@ -164,10 +165,21 @@ fn provider(input: ProviderInput) -> Result<(ProviderConfig, Option<String>), Co
         }
         ProviderInput::MicrosoftGraph { tenant } => Ok((
             ProviderConfig::MicrosoftGraph {
-                tenant: required_text(&tenant, "Enter a tenant")?,
+                tenant: tenant_id(&tenant)?,
             },
             None,
         )),
+    }
+}
+
+/// Trims the Microsoft tenant and requires the shape the sign-in flow accepts
+/// (a GUID, a domain or an alias such as `organizations`).
+fn tenant_id(value: &str) -> Result<String, CommandError> {
+    let tenant = required_text(value, "Enter a tenant")?;
+    if oauth::is_valid_tenant(&tenant) {
+        Ok(tenant)
+    } else {
+        Err(CommandError::validation("Enter a valid tenant"))
     }
 }
 
@@ -372,6 +384,31 @@ mod tests {
                 tenant: "organizations".into()
             }
         );
+    }
+
+    #[test]
+    fn graph_tenant_must_be_a_guid_domain_or_alias() {
+        for tenant in [
+            "organizations",
+            "contoso.onmicrosoft.com",
+            "11111111-2222-3333-4444-555555555555",
+        ] {
+            let mut input = imap_input();
+            input.provider = ProviderInput::MicrosoftGraph {
+                tenant: tenant.into(),
+            };
+            assert!(account(input).is_ok(), "{tenant}");
+        }
+        for tenant in ["tenant with spaces", "../etc", "a/b", "t?x=1"] {
+            let mut input = imap_input();
+            input.provider = ProviderInput::MicrosoftGraph {
+                tenant: tenant.into(),
+            };
+            assert_eq!(message(account(input)), "Enter a valid tenant", "{tenant}");
+        }
+        let mut input = imap_input();
+        input.provider = ProviderInput::MicrosoftGraph { tenant: " ".into() };
+        assert_eq!(message(account(input)), "Enter a tenant");
     }
 
     #[test]
