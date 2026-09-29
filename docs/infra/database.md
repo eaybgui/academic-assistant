@@ -197,7 +197,7 @@ cargo test -p academic-infra
 ## Known limitations
 
 - `Database` does not create missing parent directories for the path passed to
-  `open`; the caller (composition root, Task T14) is expected to ensure the app
+  `open`; the caller (the Tauri composition root, see `docs/app/logging-and-data.md`) is expected to ensure the app
   data directory exists first.
 - There is currently only one migration (`0001_init.sql`). The `schema_migrations`
   tracking table is ready for future migrations to be added the same way (check the

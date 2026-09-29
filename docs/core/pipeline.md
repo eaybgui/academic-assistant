@@ -1,6 +1,6 @@
 # `core::pipeline`: check pipeline (`CheckRunner`)
 
-`crates/core/src/pipeline/` (Task T12) orchestrates a manual "check now" across
+`crates/core/src/pipeline/` orchestrates a manual "check now" across
 every enabled account: connect, fetch each configured folder, and run every
 fetched email through dedup → deterministic filters → date extraction → AI
 analysis → persistence (spec §5, §5.1). It depends only on the ports in

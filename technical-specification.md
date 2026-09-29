@@ -23,7 +23,7 @@ Tauri Desktop
 │
 └── Rust (Cargo workspace)
     ├── crates/core      domain, ports (traits), filters, date candidates,
-    │                    EmailAnalyzer, CheckRunner pipeline — no I/O
+    │                    analyzer, CheckRunner pipeline — no I/O
     ├── crates/infra     SQLite, IMAP, Microsoft Graph, jev, Ollama,
     │                    Windows Credential Manager — implements core ports
     └── src-tauri        composition root + thin Tauri commands/events
@@ -119,7 +119,7 @@ Deduplication + deterministic filters
         ↓
 New candidates
         ↓
-EmailAnalyzer → StructuredModel
+core::analyzer → StructuredModel
         ↓
 Validated structured result
         ↓
@@ -168,7 +168,7 @@ StructuredModel
 └── OllamaModel  local, emulates the primitives with JSON-schema constrained output
 ```
 
-`EmailAnalyzer` (in `core`) is provider-agnostic: it builds the question set for an email, calls `StructuredModel::ask` once, and assembles and validates the result in code. Code, not the model, generates candidates (e.g. dates found by regex) and performs all normalization and date arithmetic.
+`core::analyzer` is provider-agnostic: it builds the question set for an email, calls `StructuredModel::ask` once, and assembles and validates the result in code. Code, not the model, generates candidates (e.g. dates found by regex) and performs all normalization and date arithmetic.
 
 ## 10. AI result
 
