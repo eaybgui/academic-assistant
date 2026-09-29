@@ -109,6 +109,18 @@ fn delete_removes_the_account() {
 }
 
 #[test]
+fn account_ids_are_never_reused_after_deleting_the_highest_one() {
+    let db = Database::open_in_memory().unwrap();
+    AccountRepository::insert(&db, &imap_draft("first"), Utc::now()).unwrap();
+    let highest = AccountRepository::insert(&db, &imap_draft("second"), Utc::now()).unwrap();
+
+    db.delete(highest.id).unwrap();
+    let next = AccountRepository::insert(&db, &imap_draft("third"), Utc::now()).unwrap();
+
+    assert!(next.id > highest.id);
+}
+
+#[test]
 fn delete_missing_account_returns_not_found() {
     let db = Database::open_in_memory().unwrap();
     let err = db.delete(999).unwrap_err();

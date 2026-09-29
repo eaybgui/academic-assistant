@@ -6,7 +6,7 @@ CREATE TABLE courses (
   name TEXT NOT NULL, aliases TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL,
   UNIQUE (university_id, name));
 CREATE TABLE accounts (
-  id INTEGER PRIMARY KEY, name TEXT NOT NULL, email_address TEXT NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email_address TEXT NOT NULL,
   provider_type TEXT NOT NULL CHECK (provider_type IN ('imap','microsoft_graph')),
   config TEXT NOT NULL, folders TEXT NOT NULL,
   default_university_id INTEGER REFERENCES universities(id) ON DELETE SET NULL,
