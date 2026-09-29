@@ -61,24 +61,33 @@ impl fmt::Debug for TokenSet {
     }
 }
 
-/// Calls `GET /me` and returns the signed-in user's email address: `mail` when set,
-/// otherwise `userPrincipalName`. Used both by [`MicrosoftGraphEmailProvider::test_connection`]
-/// and, right after sign-in, to confirm the token belongs to the expected account.
-pub async fn signed_in_email(
+/// The identifiers `GET /me` reports for the signed-in user. Either may be absent
+/// (at least one is present); a mailbox address can match either of them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignedInIdentity {
+    pub mail: Option<String>,
+    pub user_principal_name: Option<String>,
+}
+
+/// Calls `GET /me` and returns the signed-in user's `mail` and `userPrincipalName`.
+/// Used both by [`MicrosoftGraphEmailProvider::test_connection`] and, right after
+/// sign-in, to confirm the token belongs to the expected account.
+pub async fn signed_in_identity(
     http: &reqwest::Client,
     graph_base_url: &str,
     access_token: &str,
-) -> Result<String, ProviderError> {
-    signed_in_email_with_timeout(http, graph_base_url, access_token, DEFAULT_REQUEST_TIMEOUT).await
+) -> Result<SignedInIdentity, ProviderError> {
+    signed_in_identity_with_timeout(http, graph_base_url, access_token, DEFAULT_REQUEST_TIMEOUT)
+        .await
 }
 
-/// [`signed_in_email`] with an explicit per-request `timeout`.
-async fn signed_in_email_with_timeout(
+/// [`signed_in_identity`] with an explicit per-request `timeout`.
+async fn signed_in_identity_with_timeout(
     http: &reqwest::Client,
     graph_base_url: &str,
     access_token: &str,
     timeout: Duration,
-) -> Result<String, ProviderError> {
+) -> Result<SignedInIdentity, ProviderError> {
     let response = http
         .get(format!("{graph_base_url}/me"))
         .bearer_auth(access_token)
@@ -97,7 +106,7 @@ async fn signed_in_email_with_timeout(
         ProviderError::Protocol("Microsoft Graph returned an invalid profile response".into())
     })?;
 
-    mapping::parse_profile_email(&body)
+    mapping::parse_profile_identity(&body)
 }
 
 #[cfg(test)]

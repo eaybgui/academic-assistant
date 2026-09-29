@@ -13,7 +13,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use academic_core::domain::{account_refresh_token_key, AccountId, SyncCursor, MAX_BATCH};
 use academic_core::ports::{EmailProvider, ProviderError, SecretError, SecretStore};
-use academic_infra::graph::{MicrosoftGraphEmailProvider, OAuthConfig};
+use academic_infra::graph::{signed_in_identity, MicrosoftGraphEmailProvider, OAuthConfig};
 use academic_infra::secrets::InMemorySecretStore;
 
 const ACCOUNT_ID: AccountId = 1;
@@ -709,4 +709,44 @@ async fn refresh_does_not_rewrite_the_secret_store_when_the_refresh_token_is_unc
             .unwrap(),
         Some("same-refresh-token".to_string())
     );
+}
+
+#[tokio::test]
+async fn signed_in_identity_returns_mail_and_user_principal_name() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/me"))
+        .and(headers("authorization", vec!["Bearer test-access-token"]))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "mail": "user@uv.es",
+            "userPrincipalName": "user@upn.example"
+        })))
+        .mount(&server)
+        .await;
+
+    let identity = signed_in_identity(&reqwest::Client::new(), &server.uri(), "test-access-token")
+        .await
+        .expect("identity should be read");
+
+    assert_eq!(identity.mail.as_deref(), Some("user@uv.es"));
+    assert_eq!(
+        identity.user_principal_name.as_deref(),
+        Some("user@upn.example")
+    );
+}
+
+#[tokio::test]
+async fn signed_in_identity_maps_rejected_tokens_to_auth_errors() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/me"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let err = signed_in_identity(&reqwest::Client::new(), &server.uri(), "test-access-token")
+        .await
+        .expect_err("a 401 should fail");
+
+    assert!(matches!(err, ProviderError::Auth(_)));
 }

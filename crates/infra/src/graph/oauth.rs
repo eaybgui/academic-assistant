@@ -42,18 +42,23 @@ fn random_url_safe_token(byte_len: usize) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-/// Rejects a tenant that doesn't look like a Microsoft tenant id/domain
+/// True when `tenant` looks like a Microsoft tenant id/domain
 /// (`^[A-Za-z0-9.-]+$` — a GUID, a verified domain, or a well-known alias like
-/// `organizations`/`common`/`consumers`) before it is interpolated into a URL path
-/// segment. Called by every path that builds a login/token URL from an
+/// `organizations`/`common`/`consumers`), i.e. it is safe to interpolate into a URL
+/// path segment. Also used to validate the tenant when an account is saved.
+pub fn is_valid_tenant(tenant: &str) -> bool {
+    !tenant.is_empty()
+        && tenant
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+}
+
+/// Rejects a tenant that fails [`is_valid_tenant`] before it is interpolated into
+/// a URL path segment. Called by every path that builds a login/token URL from an
 /// [`OAuthConfig`] (`sign_in`, `request_token`), so [`authorize_url`] can assume
 /// `config.tenant` is already valid and stay infallible.
 fn validate_tenant(tenant: &str) -> Result<(), ProviderError> {
-    let valid = !tenant.is_empty()
-        && tenant
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
-    if valid {
+    if is_valid_tenant(tenant) {
         Ok(())
     } else {
         Err(ProviderError::Auth("Invalid Microsoft tenant".into()))

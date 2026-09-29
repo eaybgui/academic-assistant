@@ -9,6 +9,8 @@ use serde_json::Value;
 use academic_core::domain::{AccountId, Address, Email, EmailBody};
 use academic_core::ports::ProviderError;
 
+use super::SignedInIdentity;
+
 /// Maps a transport-level `reqwest` failure (DNS, TCP, TLS, timeout) to a `ProviderError`.
 /// Never includes request bodies (which may carry tokens or codes) in the message.
 pub(crate) fn map_transport_error(err: reqwest::Error) -> ProviderError {
@@ -91,19 +93,27 @@ pub(crate) fn map_graph_error_status(status: StatusCode, body: &str) -> Provider
     ProviderError::Protocol(format!("Microsoft Graph returned {status}{detail}"))
 }
 
-/// Extracts the signed-in user's email address from a `GET /me` response: `mail`
-/// when non-empty, otherwise `userPrincipalName`.
-pub(crate) fn parse_profile_email(value: &Value) -> Result<String, ProviderError> {
-    value["mail"]
-        .as_str()
-        .filter(|s| !s.is_empty())
-        .or_else(|| value["userPrincipalName"].as_str())
-        .map(str::to_string)
-        .ok_or_else(|| {
-            ProviderError::Protocol(
-                "Microsoft Graph profile response has neither mail nor userPrincipalName".into(),
-            )
-        })
+/// Extracts the signed-in user's identifiers from a `GET /me` response: `mail` and
+/// `userPrincipalName`, each `None` when absent or blank. At least one must be
+/// present.
+pub(crate) fn parse_profile_identity(value: &Value) -> Result<SignedInIdentity, ProviderError> {
+    let text = |field: &str| {
+        value[field]
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+    let identity = SignedInIdentity {
+        mail: text("mail"),
+        user_principal_name: text("userPrincipalName"),
+    };
+    if identity.mail.is_none() && identity.user_principal_name.is_none() {
+        return Err(ProviderError::Protocol(
+            "Microsoft Graph profile response has neither mail nor userPrincipalName".into(),
+        ));
+    }
+    Ok(identity)
 }
 
 /// Maps one Microsoft Graph message JSON object (a `value[]` entry from a delta
@@ -272,27 +282,33 @@ mod tests {
     }
 
     #[test]
-    fn parse_profile_email_prefers_mail() {
+    fn parse_profile_identity_returns_both_identifiers() {
         let value = json!({"mail": "user@uv.es", "userPrincipalName": "user@upn.example"});
-        assert_eq!(parse_profile_email(&value).unwrap(), "user@uv.es");
+        let identity = parse_profile_identity(&value).unwrap();
+        assert_eq!(identity.mail.as_deref(), Some("user@uv.es"));
+        assert_eq!(
+            identity.user_principal_name.as_deref(),
+            Some("user@upn.example")
+        );
     }
 
     #[test]
-    fn parse_profile_email_falls_back_to_upn_when_mail_missing() {
-        let value = json!({"mail": null, "userPrincipalName": "user@upn.example"});
-        assert_eq!(parse_profile_email(&value).unwrap(), "user@upn.example");
+    fn parse_profile_identity_treats_null_or_blank_mail_as_absent() {
+        for mail in [json!(null), json!(""), json!("  ")] {
+            let value = json!({"mail": mail, "userPrincipalName": "user@upn.example"});
+            let identity = parse_profile_identity(&value).unwrap();
+            assert_eq!(identity.mail, None);
+            assert_eq!(
+                identity.user_principal_name.as_deref(),
+                Some("user@upn.example")
+            );
+        }
     }
 
     #[test]
-    fn parse_profile_email_falls_back_to_upn_when_mail_empty() {
-        let value = json!({"mail": "", "userPrincipalName": "user@upn.example"});
-        assert_eq!(parse_profile_email(&value).unwrap(), "user@upn.example");
-    }
-
-    #[test]
-    fn parse_profile_email_errors_when_both_missing() {
-        let value = json!({});
-        assert!(parse_profile_email(&value).is_err());
+    fn parse_profile_identity_errors_when_both_missing() {
+        assert!(parse_profile_identity(&json!({})).is_err());
+        assert!(parse_profile_identity(&json!({"mail": "", "userPrincipalName": null})).is_err());
     }
 
     fn sample_message() -> Value {
