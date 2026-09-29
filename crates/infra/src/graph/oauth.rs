@@ -15,7 +15,7 @@ use academic_core::ports::ProviderError;
 
 use super::loopback::LoopbackServer;
 use super::mapping::{map_oauth_error, map_token_error_body, map_transport_error};
-use super::{request_timeout, OAuthConfig, TokenSet, SCOPES};
+use super::{OAuthConfig, TokenSet, DEFAULT_REQUEST_TIMEOUT, SCOPES};
 
 /// A PKCE verifier/challenge pair, generated fresh for every sign-in attempt.
 /// The challenge method is always `S256`.
@@ -142,6 +142,16 @@ pub async fn refresh(
     config: &OAuthConfig,
     refresh_token: &str,
 ) -> Result<TokenSet, ProviderError> {
+    refresh_with_timeout(http, config, refresh_token, DEFAULT_REQUEST_TIMEOUT).await
+}
+
+/// [`refresh`] with an explicit per-request `timeout`.
+pub(super) async fn refresh_with_timeout(
+    http: &reqwest::Client,
+    config: &OAuthConfig,
+    refresh_token: &str,
+    timeout: Duration,
+) -> Result<TokenSet, ProviderError> {
     let response = request_token(
         http,
         config,
@@ -151,6 +161,7 @@ pub async fn refresh(
             ("refresh_token", refresh_token),
             ("scope", SCOPES),
         ],
+        timeout,
     )
     .await?;
 
@@ -181,6 +192,7 @@ async fn exchange_code(
             ("code_verifier", verifier),
             ("scope", SCOPES),
         ],
+        DEFAULT_REQUEST_TIMEOUT,
     )
     .await?;
 
@@ -223,6 +235,7 @@ async fn request_token(
     http: &reqwest::Client,
     config: &OAuthConfig,
     form: &[(&str, &str)],
+    timeout: Duration,
 ) -> Result<TokenResponse, ProviderError> {
     validate_tenant(&config.tenant)?;
 
@@ -234,7 +247,7 @@ async fn request_token(
     let response = http
         .post(url)
         .header("Content-Type", "application/x-www-form-urlencoded")
-        .timeout(request_timeout())
+        .timeout(timeout)
         .body(encode_form(form))
         .send()
         .await

@@ -32,6 +32,8 @@ export default function AccountsPage() {
   const catalogQuery = useQuery({ queryKey: queryKeys.catalog, queryFn: api.getCatalog });
 
   const [modalOpen, setModalOpen] = useState(false);
+  // Incremented on every open and part of the modal's `key`, so each open starts with fresh form state.
+  const [modalOpenCount, setModalOpenCount] = useState(0);
   const [modalAccount, setModalAccount] = useState<AccountDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AccountDto | null>(null);
   const [testResults, setTestResults] = useState<Record<number, string>>({});
@@ -91,11 +93,13 @@ export default function AccountsPage() {
 
   function openAddModal() {
     setModalAccount(null);
+    setModalOpenCount((count) => count + 1);
     setModalOpen(true);
   }
 
   function openEditModal(account: AccountDto) {
     setModalAccount(account);
+    setModalOpenCount((count) => count + 1);
     setModalOpen(true);
   }
 
@@ -203,7 +207,7 @@ export default function AccountsPage() {
       </ul>
 
       <AccountFormModal
-        key={modalAccount?.id ?? 'new'}
+        key={`${modalAccount?.id ?? 'new'}-${modalOpenCount}`}
         open={modalOpen}
         account={modalAccount}
         universities={universities}

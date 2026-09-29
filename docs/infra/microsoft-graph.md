@@ -9,7 +9,10 @@ Public client, no client secret.
 
 - `mod.rs` — constants (`LOGIN_BASE_URL`, `GRAPH_BASE_URL`, `SCOPES`), `OAuthConfig`,
   `TokenSet` (its `Debug` output redacts `access_token` and `refresh_token`), the shared
-  60 s HTTP request timeout, and `signed_in_email` (`GET /me`, used both by
+  60 s default HTTP request timeout (overridable per provider instance through the
+  `#[doc(hidden)]` test hook `MicrosoftGraphEmailProvider::with_request_timeout`, which applies to
+  Graph pages, `/me` and token refreshes; the public `oauth::refresh` and `signed_in_email` always
+  use the default), and `signed_in_email` (`GET /me`, used both by
   `MicrosoftGraphEmailProvider::test_connection` and right after sign-in to confirm
   the token belongs to the expected account).
 - `oauth.rs` (`pub mod oauth`) — PKCE (`new_pkce`), `authorize_url`, `sign_in`
@@ -167,7 +170,7 @@ Microsoft's own `error_description` text, which carry no secrets, are included).
   while the rest and the cursor are returned; a fallback-path cursor still dropping old
   messages on a later call; oldest-first ordering; the page-aligned cap across four
   pages; a slow response timing out (`set_delay` with a 50 ms timeout set through the
-  test-only env var `ACADEMIC_ASSISTANT_GRAPH_TEST_TIMEOUT_MS`); the first request's `$filter`/`Prefer`
+  test-only `with_request_timeout` builder); the first request's `$filter`/`Prefer`
   header and full message mapping; `nextLink` → `deltaLink` pagination; resuming
   directly from a cursor link; `@removed` entries ignored; the 200-message cap
   (asserting the *unfetched* `nextLink` becomes the cursor); the 400-without-filter
