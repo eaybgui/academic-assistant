@@ -58,10 +58,19 @@ impl TauriRunObserver {
 
 impl RunObserver for TauriRunObserver {
     fn progress(&self, progress: &RunProgress) {
+        if matches!(progress.stage, RunStage::Done | RunStage::Failed) {
+            tracing::info!(
+                run_id = progress.run_id,
+                account_id = progress.account_id,
+                stage = ?progress.stage,
+                "account processed"
+            );
+        }
         self.emit(EVENT_RUN_PROGRESS, RunProgressPayload::from(progress));
     }
 
     fn finished(&self, run_id: RunId, status: RunStatus) {
+        tracing::info!(run_id, status = ?status, "check finished");
         self.emit(EVENT_RUN_FINISHED, RunFinishedPayload { run_id, status });
     }
 }

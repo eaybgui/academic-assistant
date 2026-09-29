@@ -1,6 +1,10 @@
 //! Commands: `check_now`, `get_dashboard`, `get_run_history`.
 
-use academic_core::domain::{ResultQuery, ResultSort, RunId, RunTrigger};
+use std::sync::Arc;
+
+use academic_core::domain::{Counters, ResultQuery, ResultSort, RunId, RunStatus, RunTrigger};
+use academic_core::ports::{Clock, RunObserver, RunRepository};
+use tauri::async_runtime::JoinHandle;
 use tauri::State;
 
 use super::logged;
@@ -12,6 +16,9 @@ use crate::validation;
 
 /// Maximum number of unseen results shown on the dashboard.
 const DASHBOARD_RESULT_LIMIT: u32 = 100;
+/// Error summary of a run whose execution task ended abnormally (same text the
+/// startup recovery uses for runs interrupted by a crash).
+const INTERRUPTED_SUMMARY: &str = "Interrupted";
 
 #[tauri::command]
 pub async fn check_now(state: State<'_, AppState>) -> Result<RunId, CommandError> {
@@ -35,15 +42,57 @@ pub async fn get_run_history(
 }
 
 /// Validates preconditions and creates the run row, then executes the run in the
-/// background. Progress and completion are reported through the run observer.
+/// background. Progress and completion are reported through the run observer; a
+/// supervisor task recovers the run if the execution task panics.
 fn start_check(state: &AppState) -> Result<RunId, CommandError> {
     let prepared = state.runner.prepare(RunTrigger::Manual)?;
     let run_id = prepared.run_id;
+    tracing::info!(run_id, "check started");
     let runner = state.runner.clone();
-    tauri::async_runtime::spawn(async move {
-        runner.execute(prepared).await;
-    });
+    let execution = tauri::async_runtime::spawn(async move { runner.execute(prepared).await });
+    tauri::async_runtime::spawn(supervise(
+        execution,
+        run_id,
+        state.runs.clone(),
+        state.observer.clone(),
+        state.clock.clone(),
+    ));
     Ok(run_id)
+}
+
+/// Waits for the run's execution task. If the task panicked or was cancelled the
+/// run would stay `running` forever, so it is marked failed and the observer is
+/// told, letting the UI recover.
+async fn supervise(
+    execution: JoinHandle<RunStatus>,
+    run_id: RunId,
+    runs: Arc<dyn RunRepository>,
+    observer: Arc<dyn RunObserver>,
+    clock: Arc<dyn Clock>,
+) {
+    let Err(error) = execution.await else {
+        return;
+    };
+    tracing::error!(run_id, %error, "check run ended abnormally");
+    match runs.get(run_id) {
+        Ok(Some(run)) if run.status == RunStatus::Running => {}
+        Ok(_) => return,
+        Err(error) => {
+            tracing::error!(run_id, %error, "could not read the interrupted run");
+            return;
+        }
+    }
+    if let Err(error) = runs.finish(
+        run_id,
+        RunStatus::Failed,
+        clock.now(),
+        0,
+        &Counters::default(),
+        Some(INTERRUPTED_SUMMARY),
+    ) {
+        tracing::error!(run_id, %error, "could not mark the interrupted run as failed");
+    }
+    observer.finished(run_id, RunStatus::Failed);
 }
 
 fn dashboard(state: &AppState, sort: ResultSort) -> Result<DashboardDto, CommandError> {
@@ -77,10 +126,11 @@ mod tests {
     use super::*;
     use crate::error::CommandErrorKind;
     use crate::test_support::{
-        harness, harness_with, imap_draft, seed_result, FakeProviderBehavior,
+        harness, harness_with, imap_draft, seed_result, FakeProviderBehavior, Harness,
     };
-    use academic_core::domain::RunStatus;
+    use academic_core::domain::RunProgress;
     use chrono::Utc;
+    use std::sync::Mutex;
 
     #[test]
     fn check_now_without_accounts_is_a_validation_error() {
@@ -111,6 +161,97 @@ mod tests {
             .unwrap();
         let run_id = start_check(&h.state).unwrap();
         assert!(h.state.runs.get(run_id).unwrap().is_some());
+    }
+
+    #[derive(Default)]
+    struct RecordingObserver(Mutex<Vec<(RunId, RunStatus)>>);
+
+    impl RunObserver for RecordingObserver {
+        fn progress(&self, _progress: &RunProgress) {}
+
+        fn finished(&self, run_id: RunId, status: RunStatus) {
+            self.0.lock().unwrap().push((run_id, status));
+        }
+    }
+
+    async fn panicking_run() -> RunStatus {
+        panic!("simulated panic in a run")
+    }
+
+    async fn supervise_panicking_run(
+        h: &Harness,
+        run_id: RunId,
+        observer: &Arc<RecordingObserver>,
+    ) {
+        supervise(
+            tauri::async_runtime::spawn(panicking_run()),
+            run_id,
+            h.state.runs.clone(),
+            observer.clone(),
+            h.state.clock.clone(),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn a_panicking_run_is_marked_failed_and_reported() {
+        let h = harness();
+        let run_id = h.state.runs.create(RunTrigger::Manual, Utc::now()).unwrap();
+        let observer = Arc::new(RecordingObserver::default());
+
+        supervise_panicking_run(&h, run_id, &observer).await;
+
+        let run = h.state.runs.get(run_id).unwrap().unwrap();
+        assert_eq!(run.status, RunStatus::Failed);
+        assert_eq!(run.error_summary.as_deref(), Some("Interrupted"));
+        assert_eq!(
+            *observer.0.lock().unwrap(),
+            vec![(run_id, RunStatus::Failed)]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_panic_after_the_run_finished_keeps_its_recorded_status() {
+        let h = harness();
+        let run_id = h.state.runs.create(RunTrigger::Manual, Utc::now()).unwrap();
+        h.state
+            .runs
+            .finish(
+                run_id,
+                RunStatus::Success,
+                Utc::now(),
+                1,
+                &Counters::default(),
+                None,
+            )
+            .unwrap();
+        let observer = Arc::new(RecordingObserver::default());
+
+        supervise_panicking_run(&h, run_id, &observer).await;
+
+        let run = h.state.runs.get(run_id).unwrap().unwrap();
+        assert_eq!(run.status, RunStatus::Success);
+        assert!(observer.0.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_run_that_completes_normally_is_left_alone() {
+        let h = harness();
+        let run_id = h.state.runs.create(RunTrigger::Manual, Utc::now()).unwrap();
+        let observer = Arc::new(RecordingObserver::default());
+
+        supervise(
+            tauri::async_runtime::spawn(async { RunStatus::Success }),
+            run_id,
+            h.state.runs.clone(),
+            observer.clone(),
+            h.state.clock.clone(),
+        )
+        .await;
+
+        let run = h.state.runs.get(run_id).unwrap().unwrap();
+        assert_eq!(run.status, RunStatus::Running);
+        assert!(observer.0.lock().unwrap().is_empty());
     }
 
     #[test]
