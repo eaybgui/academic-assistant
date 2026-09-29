@@ -30,20 +30,6 @@ pub const SCOPES: &str = "offline_access Mail.Read User.Read";
 /// 60 seconds.
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// The per-request timeout used by every Graph/OAuth HTTP request in this module.
-/// Normally [`DEFAULT_REQUEST_TIMEOUT`]; overridable via the
-/// `ACADEMIC_ASSISTANT_GRAPH_TEST_TIMEOUT_MS` environment variable (milliseconds) so
-/// integration tests can actually trigger a timeout (e.g. with wiremock's
-/// `set_delay`) without waiting a full minute. Not part of the public API —
-/// production code never sets this variable.
-pub(crate) fn request_timeout() -> Duration {
-    std::env::var("ACADEMIC_ASSISTANT_GRAPH_TEST_TIMEOUT_MS")
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
-        .map(Duration::from_millis)
-        .unwrap_or(DEFAULT_REQUEST_TIMEOUT)
-}
-
 /// Per-account OAuth configuration: which app registration and tenant to use, and
 /// which identity platform to talk to (overridable in tests).
 #[derive(Debug, Clone)]
@@ -83,10 +69,20 @@ pub async fn signed_in_email(
     graph_base_url: &str,
     access_token: &str,
 ) -> Result<String, ProviderError> {
+    signed_in_email_with_timeout(http, graph_base_url, access_token, DEFAULT_REQUEST_TIMEOUT).await
+}
+
+/// [`signed_in_email`] with an explicit per-request `timeout`.
+async fn signed_in_email_with_timeout(
+    http: &reqwest::Client,
+    graph_base_url: &str,
+    access_token: &str,
+    timeout: Duration,
+) -> Result<String, ProviderError> {
     let response = http
         .get(format!("{graph_base_url}/me"))
         .bearer_auth(access_token)
-        .timeout(request_timeout())
+        .timeout(timeout)
         .send()
         .await
         .map_err(mapping::map_transport_error)?;

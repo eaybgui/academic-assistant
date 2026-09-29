@@ -42,9 +42,9 @@ pub(crate) async fn connect(
         .map_err(|_| timed_out("TLS handshake", host, port))??;
 
     let mut client = Client::new(tls_stream);
-    client
-        .read_response()
+    timeout(CONNECT_TIMEOUT, client.read_response())
         .await
+        .map_err(|_| ProviderError::Connection(format!("greeting from {host}:{port} timed out")))?
         .map_err(|e| ProviderError::Connection(format!("no greeting from {host}:{port}: {e}")))?;
 
     match timeout(LOGIN_TIMEOUT, client.login(username, password)).await {

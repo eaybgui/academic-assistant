@@ -75,7 +75,7 @@ password field; it is never included in error messages or logs.
    `webpki-roots`, `rustls`'s default crypto provider — already selected process-wide by
    the `aws-lc-rs` feature enabled transitively through the workspace's `rustls`
    dependency graph); the handshake has its own 20 s timeout.
-3. Reads the server greeting, then issues `LOGIN username password`.
+3. Reads the server greeting (20 s timeout; a timeout is `Connection("greeting from host:port timed out")`), then issues `LOGIN username password`.
 
 Error mapping (spec §8.1 / §12 — the password itself is never included in any error):
 

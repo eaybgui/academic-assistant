@@ -629,13 +629,12 @@ async fn fetch_new_times_out_when_microsoft_graph_is_too_slow() {
         .await;
 
     // The production timeout (60s) would make this test far too slow; shrink it via
-    // the test-only override (see `academic_infra::graph::request_timeout`).
-    std::env::set_var("ACADEMIC_ASSISTANT_GRAPH_TEST_TIMEOUT_MS", "50");
-    let provider = provider(&server, secrets);
-    let result = provider.fetch_new(FOLDER, None, since()).await;
-    std::env::remove_var("ACADEMIC_ASSISTANT_GRAPH_TEST_TIMEOUT_MS");
-
-    let err = result.expect_err("a slow Graph response must time out");
+    // the test-only builder.
+    let provider = provider(&server, secrets).with_request_timeout(Duration::from_millis(50));
+    let err = provider
+        .fetch_new(FOLDER, None, since())
+        .await
+        .expect_err("a slow Graph response must time out");
     assert!(matches!(err, ProviderError::Connection(_)));
 }
 

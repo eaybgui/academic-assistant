@@ -111,4 +111,20 @@ describe('AccountsPage', () => {
 
     expect(await screen.findByText('Login rejected')).toBeInTheDocument();
   });
+
+  it('discards unsaved edits when the edit modal is cancelled and reopened', async () => {
+    mockedApi.getAccounts.mockResolvedValue([imapAccount]);
+    mockedApi.getCatalog.mockResolvedValue([]);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Unsaved name' } });
+    expect(screen.getByLabelText('Display name')).toHaveValue('Unsaved name');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByLabelText('Display name')).toHaveValue('UV IMAP');
+  });
 });

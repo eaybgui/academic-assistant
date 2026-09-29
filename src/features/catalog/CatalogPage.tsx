@@ -16,9 +16,12 @@ export default function CatalogPage() {
   const catalogQuery = useQuery({ queryKey: queryKeys.catalog, queryFn: api.getCatalog });
 
   const [universityModalOpen, setUniversityModalOpen] = useState(false);
+  // Open counters are part of each modal's `key`, so every open starts with fresh form state.
+  const [universityOpenCount, setUniversityOpenCount] = useState(0);
   const [editingUniversity, setEditingUniversity] = useState<UniversityDto | null>(null);
 
   const [courseModalOpen, setCourseModalOpen] = useState(false);
+  const [courseOpenCount, setCourseOpenCount] = useState(0);
   const [courseUniversityId, setCourseUniversityId] = useState<number | null>(null);
   const [editingCourse, setEditingCourse] = useState<CourseDto | null>(null);
 
@@ -61,23 +64,27 @@ export default function CatalogPage() {
 
   function openAddUniversity() {
     setEditingUniversity(null);
+    setUniversityOpenCount((count) => count + 1);
     setUniversityModalOpen(true);
   }
 
   function openEditUniversity(university: UniversityDto) {
     setEditingUniversity(university);
+    setUniversityOpenCount((count) => count + 1);
     setUniversityModalOpen(true);
   }
 
   function openAddCourse(universityId: number) {
     setCourseUniversityId(universityId);
     setEditingCourse(null);
+    setCourseOpenCount((count) => count + 1);
     setCourseModalOpen(true);
   }
 
   function openEditCourse(universityId: number, course: CourseDto) {
     setCourseUniversityId(universityId);
     setEditingCourse(course);
+    setCourseOpenCount((count) => count + 1);
     setCourseModalOpen(true);
   }
 
@@ -175,7 +182,7 @@ export default function CatalogPage() {
       </ul>
 
       <UniversityFormModal
-        key={editingUniversity?.id ?? 'new'}
+        key={`${editingUniversity?.id ?? 'new'}-${universityOpenCount}`}
         open={universityModalOpen}
         university={editingUniversity}
         onClose={() => setUniversityModalOpen(false)}
@@ -183,7 +190,7 @@ export default function CatalogPage() {
 
       {courseUniversityId !== null ? (
         <CourseFormModal
-          key={editingCourse?.id ?? 'new'}
+          key={`${editingCourse?.id ?? 'new'}-${courseOpenCount}`}
           open={courseModalOpen}
           universityId={courseUniversityId}
           course={editingCourse}

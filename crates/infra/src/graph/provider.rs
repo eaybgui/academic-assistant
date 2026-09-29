@@ -2,6 +2,7 @@
 //! Outlook.com mailboxes, backed by the Graph delta API and OAuth token refresh.
 
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration as ChronoDuration, SecondsFormat, Utc};
@@ -15,7 +16,7 @@ use academic_core::domain::{
 use academic_core::ports::{EmailProvider, ProviderError, SecretStore};
 
 use super::mapping::{map_graph_error_status, map_message, map_transport_error};
-use super::{oauth, request_timeout, signed_in_email, OAuthConfig};
+use super::{oauth, signed_in_email_with_timeout, OAuthConfig, DEFAULT_REQUEST_TIMEOUT};
 
 /// Fields requested for every message; keeps the payload small and matches exactly
 /// what [`super::mapping::map_message`] reads.
@@ -48,6 +49,7 @@ pub struct MicrosoftGraphEmailProvider {
     graph_base_url: String,
     secrets: Arc<dyn SecretStore>,
     cached_token: Mutex<Option<CachedToken>>,
+    request_timeout: Duration,
 }
 
 impl MicrosoftGraphEmailProvider {
@@ -65,7 +67,18 @@ impl MicrosoftGraphEmailProvider {
             graph_base_url,
             secrets,
             cached_token: Mutex::new(None),
+            request_timeout: DEFAULT_REQUEST_TIMEOUT,
         }
+    }
+
+    /// Overrides the per-request timeout (default 60 s) for every HTTP request this
+    /// provider makes: Graph pages, `/me`, and token refreshes. Test hook, so
+    /// integration tests can trigger a timeout without waiting a full minute.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn with_request_timeout(mut self, timeout: Duration) -> Self {
+        self.request_timeout = timeout;
+        self
     }
 
     /// Returns a valid access token: the cached one when it still has more than
@@ -82,7 +95,13 @@ impl MicrosoftGraphEmailProvider {
             .map_err(|e| ProviderError::Auth(format!("Could not read the stored sign-in: {e}")))?
             .ok_or_else(|| ProviderError::Auth("Sign in to this account".into()))?;
 
-        let tokens = oauth::refresh(&self.http, &self.oauth, &refresh_token).await?;
+        let tokens = oauth::refresh_with_timeout(
+            &self.http,
+            &self.oauth,
+            &refresh_token,
+            self.request_timeout,
+        )
+        .await?;
 
         // Microsoft does not always rotate the refresh token on a refresh; only
         // overwrite the stored one when it actually changed, avoiding an
@@ -128,7 +147,7 @@ impl MicrosoftGraphEmailProvider {
             .get(url)
             .bearer_auth(access_token)
             .header("Prefer", GRAPH_PREFER_HEADER)
-            .timeout(request_timeout())
+            .timeout(self.request_timeout)
             .send()
             .await
             .map_err(map_transport_error)
@@ -139,7 +158,13 @@ impl MicrosoftGraphEmailProvider {
 impl EmailProvider for MicrosoftGraphEmailProvider {
     async fn test_connection(&self) -> Result<(), ProviderError> {
         let access_token = self.access_token().await?;
-        signed_in_email(&self.http, &self.graph_base_url, &access_token).await?;
+        signed_in_email_with_timeout(
+            &self.http,
+            &self.graph_base_url,
+            &access_token,
+            self.request_timeout,
+        )
+        .await?;
         Ok(())
     }
 

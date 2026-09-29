@@ -46,7 +46,9 @@ These are the only building blocks this task owns outside `src/features/**`; eve
   instead of creating a duplicate. The password input uses `autoComplete="new-password"`; the
   Microsoft form carries the note "Your sign-in is saved in Windows Credential Manager, never in the
   database." The form state is initialized once per mount: `AccountsPage` passes
-  `key={modalAccount?.id ?? 'new'}` so opening a different account (or "Add") re-initializes it.
+  `key={`${modalAccount?.id ?? 'new'}-${modalOpenCount}`}`, where `modalOpenCount` is incremented on
+  every open, so each open (a different account, "Add", or the same item after a cancel) starts
+  with fresh state and unsaved edits are discarded.
 - `AccountsPage.tsx` — the list screen. Each row shows the provider, email, default university
   name (resolved from `getCatalog`), folders and a last-sync line ("last sync `<time>` OK", the
   sync error in red, or "Sign-in required" in red for a Microsoft account with no stored refresh
@@ -67,7 +69,8 @@ These are the only building blocks this task owns outside `src/features/**`; eve
 - `UniversityFormModal.tsx` / `CourseFormModal.tsx` — add/edit modals for a university (name only)
   and a course (name + aliases, scoped to a `universityId`). Both invalidate `queryKeys.catalog` on
   success. Like the account form, their state is initialized once per mount; `CatalogPage` passes
-  `key={item?.id ?? 'new'}` so each edited item (or "add") gets fresh state.
+  `key={`${item?.id ?? 'new'}-${openCount}`}` with a separate open counter per modal (incremented on
+  every open), so each open starts with fresh state and cancelling discards unsaved edits.
 - `CatalogPage.tsx` — one card per university (name, "Edit" / "Add course" actions, a delete
   icon) with its courses listed underneath ("Name · aliases: A, B", edit/delete icons per course).
   Deleting either shows a `ConfirmDialog` first; a failed delete shows its error inside the dialog,
@@ -112,6 +115,8 @@ Covered cases (see the `*.test.ts(x)` files next to each module):
 - Replacing the jev key: `setJevApiKey` is called with the typed value, and that value is never
   found anywhere in the rendered output afterwards, and unsaved edits to other fields survive the
   settings refetch that follows.
+- Cancelling an edit modal and reopening the same item shows the original values again (account,
+  university and course modals; `AccountsPage.test.tsx`, `CatalogPage.test.tsx`).
 - Edit mode of the account, university and course modals: fields are prefilled and Save sends the
   edited payload (`updateAccount(id, …)` / `updateUniversity` / `updateCourse`).
 - A second Save after creating a Microsoft account calls `updateAccount`, not `addAccount`.
