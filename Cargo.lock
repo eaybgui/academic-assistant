@@ -8,7 +8,9 @@ version = "0.1.0"
 dependencies = [
  "academic-core",
  "academic-infra",
+ "async-trait",
  "chrono",
+ "reqwest",
  "serde",
  "serde_json",
  "tauri",
