@@ -14,16 +14,18 @@ Module layout (`crates/core/src/`):
 lib.rs          re-exports: analyzer, dates, domain, filters, normalize, pipeline, ports
 domain/         domain model (this document, "Domain" section)
 ports/          traits + port-level error types (this document, "Ports" section)
-normalize.rs    HTML→text, quote/signature stripping, content hash        (Task T3)
-filters.rs      deterministic pre-filters                                  (Task T3)
-dates.rs        date candidate extraction                                  (Task T4)
-analyzer/       question building + answer assembly (EmailAnalyzer)        (Task T5)
-pipeline.rs     CheckRunner orchestration                                  (Task T12)
+normalize.rs    HTML→text, quote/signature stripping, content hash    (normalization-and-filters.md)
+filters.rs      deterministic pre-filters                             (normalization-and-filters.md)
+dates/          date candidate extraction                             (date-extraction.md)
+analyzer/       question building + answer assembly (EmailAnalyzer)   (email-analyzer.md)
+pipeline/       CheckRunner orchestration                             (pipeline.md)
 ```
 
-`analyzer/mod.rs`, `dates.rs`, `filters.rs`, `normalize.rs` and `pipeline.rs` currently
-contain only a module doc comment; their behavior is implemented by later tasks (T3–T5,
-T12) against the domain/port contracts fixed here.
+The behavior of the non-contract modules is documented in their own files:
+[normalization-and-filters.md](normalization-and-filters.md),
+[date-extraction.md](date-extraction.md), [email-analyzer.md](email-analyzer.md) and
+[pipeline.md](pipeline.md). This document covers the domain types and ports they are built
+on.
 
 ## Conventions
 
@@ -333,10 +335,6 @@ both variants; `Settings::default()`; the secret key helpers; `Counters::add` an
 
 ## Known limitations
 
-- `academic-core` compiles and its contract types/traits are exercised by unit tests,
-  but `analyzer`, `dates`, `filters`, `normalize` and `pipeline` have no behavior yet —
-  that's Tasks T3–T5 and T12.
-- `academic-infra` (Task T1, this task) only declares its module skeleton and
-  dependencies; no adapter implements any port yet (Tasks T6–T9, T13).
-- `src-tauri` (Task T1) only opens a window via the `tauri-plugin-opener` plugin; no
-  commands, DTOs or composition of the ports above exist yet (Task T14).
+- `academic-core` only defines the contracts and the pure logic built on them; every port
+  is implemented outside it (`academic-infra`, plus the in-memory fakes used by tests).
+  See [../architecture.md](../architecture.md) for how the crates fit together.
