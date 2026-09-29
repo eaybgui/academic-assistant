@@ -552,7 +552,6 @@ pub mod oauth {
                          timeout: std::time::Duration) -> Result<TokenSet, ProviderError>;
     pub async fn refresh(http: &reqwest::Client, config: &OAuthConfig, refresh_token: &str) -> Result<TokenSet, ProviderError>;
 }
-/// GET /me → returns mail or userPrincipalName.
 pub struct SignedInIdentity { pub mail: Option<String>, pub user_principal_name: Option<String> }
 /// GET /me → both identifiers; the account email must match either (case-insensitive).
 pub async fn signed_in_identity(http: &reqwest::Client, graph_base_url: &str, access_token: &str) -> Result<SignedInIdentity, ProviderError>;
