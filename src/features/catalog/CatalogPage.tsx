@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
-import ErrorMessage from '../../components/ErrorMessage';
 import ConfirmDialog from '../../components/forms/ConfirmDialog';
 import { PencilIcon, TrashIcon } from '../../components/forms/icons';
 import type { CommandError, CourseDto, UniversityDto } from '../../lib/api/types';
@@ -34,6 +33,7 @@ export default function CatalogPage() {
     mutationFn: (id: number) => api.removeUniversity(id),
     onSuccess: () => {
       setDeleteTarget(null);
+      setRowError(null);
       invalidateCatalog();
     },
     onError: (e) => setRowError(toCommandError(e)),
@@ -43,10 +43,21 @@ export default function CatalogPage() {
     mutationFn: (id: number) => api.removeCourse(id),
     onSuccess: () => {
       setDeleteTarget(null);
+      setRowError(null);
       invalidateCatalog();
     },
     onError: (e) => setRowError(toCommandError(e)),
   });
+
+  function openDeleteConfirm(target: DeleteTarget) {
+    setRowError(null);
+    setDeleteTarget(target);
+  }
+
+  function closeDeleteConfirm() {
+    setDeleteTarget(null);
+    setRowError(null);
+  }
 
   function openAddUniversity() {
     setEditingUniversity(null);
@@ -94,8 +105,6 @@ export default function CatalogPage() {
         </button>
       </div>
 
-      <ErrorMessage error={rowError} />
-
       {catalogQuery.isLoading ? <p className="text-sm text-neutral-500">Loading…</p> : null}
       {universities.length === 0 && !catalogQuery.isLoading ? (
         <p className="text-sm text-neutral-500">No universities yet. Add one to organize your courses.</p>
@@ -121,7 +130,7 @@ export default function CatalogPage() {
                 <button
                   type="button"
                   aria-label={`Delete ${university.name}`}
-                  onClick={() => setDeleteTarget({ kind: 'university', university })}
+                  onClick={() => openDeleteConfirm({ kind: 'university', university })}
                   className="text-neutral-400 hover:text-red-600"
                 >
                   <TrashIcon />
@@ -151,7 +160,7 @@ export default function CatalogPage() {
                       <button
                         type="button"
                         aria-label={`Delete ${course.name}`}
-                        onClick={() => setDeleteTarget({ kind: 'course', course })}
+                        onClick={() => openDeleteConfirm({ kind: 'course', course })}
                         className="text-neutral-400 hover:text-red-600"
                       >
                         <TrashIcon />
@@ -166,6 +175,7 @@ export default function CatalogPage() {
       </ul>
 
       <UniversityFormModal
+        key={editingUniversity?.id ?? 'new'}
         open={universityModalOpen}
         university={editingUniversity}
         onClose={() => setUniversityModalOpen(false)}
@@ -173,6 +183,7 @@ export default function CatalogPage() {
 
       {courseUniversityId !== null ? (
         <CourseFormModal
+          key={editingCourse?.id ?? 'new'}
           open={courseModalOpen}
           universityId={courseUniversityId}
           course={editingCourse}
@@ -188,7 +199,9 @@ export default function CatalogPage() {
             ? 'Deletes this university and all its courses.'
             : 'Deletes this course.'
         }
-        onCancel={() => setDeleteTarget(null)}
+        error={rowError}
+        pending={deleteUniversityMutation.isPending || deleteCourseMutation.isPending}
+        onCancel={closeDeleteConfirm}
         onConfirm={handleConfirmDelete}
       />
     </div>

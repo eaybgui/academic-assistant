@@ -15,38 +15,53 @@ data and callbacks.
 - **`format.ts`** — date/time formatting, all via `Intl.DateTimeFormat('en-GB')`:
   `formatDate`, `formatDateTime`, `formatTime`, `formatResultDate(date, time)` (e.g.
   `"27 Oct 10:00"`, used for date chips), `formatRelativeDay` (`"today"` / `"yesterday"` / a
-  short date), `formatDuration(startedAt, finishedAt)` (`null` while a run is still running).
+  short date), `formatDuration(startedAt, finishedAt)` (`null` while a run is still running),
+  `todayLocalIso()` (today's local calendar date as `YYYY-MM-DD`, never the UTC date).
+- **`useSetResultSeen()`** — the `setResultSeen` mutation shared by the Dashboard and Results
+  screens. Invalidates the `['dashboard']`/`['results']` prefixes and exposes `setSeen(id, seen)`,
+  `isPending(id)`, and `error`/`erroredId` so a failure renders next to the row that triggered it.
+- **`ResultFlags`** — the "Action required" / "Possible change" chips, shared by `ResultCard` and
+  `ResultRow`.
 - **`PriorityBadge`** — colored pill for `Priority` (urgent red, high amber, medium blue, low
   gray).
 - **`CategoryLabel`** — neutral pill for `Category`.
 - **`ResultDates`** — one chip per `ResultDateDto`, e.g. `"Exam: 27 Oct 10:00"`.
-- **`ResultActions`** — "Open email" (via `@tauri-apps/plugin-opener`'s `openUrl`, when the
-  result has a `sourceUrl`) or "Copy Message-ID" (via `navigator.clipboard.writeText`, when it
-  has a `messageIdHeader`); renders nothing when neither is set. Shared by `ResultCard` and the
-  Results row detail so the two screens never diverge on this behavior.
+- **`ResultActions`** — "Open email" (via `@tauri-apps/plugin-opener`'s `openUrl`, only when the
+  result's `sourceUrl` parses and its protocol is `https:`) or "Copy Message-ID" (via
+  `navigator.clipboard.writeText`, when it has a `messageIdHeader`); renders nothing when neither
+  applies. Rejections are caught and shown as brief inline feedback ("Copied", "Couldn't open the
+  email", "Couldn't copy"). Shared by `ResultCard` and the Results row detail.
 - **`ResultCard`** — the dashboard's result card: subject, priority badge, meta line
   (`sender · course (university) · account · received <date>`), category/date/flag chips, and
-  the actions + "Seen" button. Takes `onSetSeen(id, seen)`; the caller owns the mutation.
+  the actions + "Seen" button. Takes `onSetSeen(id, seen)` plus optional `pending` (disables
+  "Seen") and `error` (rendered next to it); the caller owns the mutation.
 - **`SortSelect`** — the `ResultSort` dropdown ("Nearest upcoming date", "Priority", "Received
   date"), reused by the dashboard header and the Results filters modal.
 
 ## Dashboard (`src/features/dashboard/`)
 
-- **`DashboardPage.tsx`** — `getDashboard(sort)` (sort state defaults to `'upcoming'`); header
+- **`DashboardPage.tsx`** — `getDashboard(sort)` (sort state defaults to `'upcoming'`, previous
+  data kept while a new sort loads via `placeholderData: keepPreviousData`); header
   with the last-check line (`"Last check today 09:14 · partial: 1 of 2 accounts failed"`, built
-  from `lastRun.status`/`errorSummary`) and the "Check now" button; attention banners from
+  from `lastRun.status`/`errorSummary`) and the "Check now" button (disabled while `checkNow` is
+  pending; replaced by the progress label while a run is running); attention banners from
   `dashboard.attention`; five metric tiles (New, Tasks, Exams, Events, Changes and notices) from
   `dashboard.counts`; the "New results" list with the sort selector and "Mark all as seen"
-  (`markAllSeen`, invalidates the dashboard/results queries); one `ResultCard` per
-  `dashboard.newResults` entry, wired to `setResultSeen(id, true)`.
-- **`useCheckRun.ts`** — the "Check now" state machine. Takes the dashboard's
-  `runningRunId` (a check already running when the page loaded) so the running state survives a
-  refresh; `triggerCheck()` calls `checkNow()` and starts tracking the returned run id either
-  way. While a run id is tracked, it subscribes to `onRunProgress`/`onRunFinished` (unlistening
-  on cleanup) and ignores events for other run ids. `onRunFinished` clears the running state and
-  invalidates the dashboard/results/runs queries. `progressLabel` renders as e.g.
-  `"UV IMAP: analyzing 12/40"` (counts are only shown for the `analyzing` stage); while running,
-  the "Check now" button is replaced by this label per the design spec.
+  (`markAllSeen`, disabled while pending, error shown next to it, invalidates the
+  dashboard/results queries); one `ResultCard` per `dashboard.newResults` entry, wired to
+  `useSetResultSeen()` (per-card pending/error).
+
+## Check-run state (`src/features/check-run/`)
+
+The "Check now" state machine is app-level, not dashboard-level: `CheckRunProvider` is mounted in
+`src/main.tsx` and `useCheckRun()` returns `{ running, progress, error, triggerCheck }`. It
+subscribes to `onRunProgress`/`onRunFinished` once on mount, so a fast `run:finished` (even one
+arriving before `checkNow()` resolves) is never missed, and `run:finished` invalidates the
+dashboard/results/runs prefixes on any route. `progress` renders as e.g.
+`"UV IMAP: Analyzing 12/40"` (stage labels are human-readable; counts only for the `analyzing`
+stage) and is only shown while it belongs to the running run. A run reported by the dashboard query
+as `runningRunId` is adopted, and the running state is cleared when the dashboard shows
+`runningRunId === null` and `lastRun.id >=` the tracked id. See `docs/frontend/overview.md`.
 
 ## Results (`src/features/results/`)
 
@@ -54,18 +69,22 @@ data and callbacks.
   "Filters and sort" button showing a badge with the number of active (non-sort) filters. Results
   are fetched with `getResults(query)`, paged 25 per page with Previous/Next (`offset`
   advances/retreats by the page size; `total` from the response drives the page count and button
-  disabled state). Clicking a row toggles its expansion (only one row expanded at a time).
+  disabled state). The current page is clamped to the last page when `total` shrinks, and the
+  results query keeps its previous data while a new page/filter loads. The subject cell is a
+  `<button aria-expanded>` that toggles the row's expansion (only one row expanded at a time).
 - **`FiltersModal.tsx`** — wraps the shared `Modal` with state (seen/new), category, account
   (from `getAccounts`), course (from `getCatalog`, flattened with the university name in the
   label) and sort. Edits are local (`draftFilters`/`draftSort`) until "Apply" commits them to the
   page and closes the modal; "Reset" clears the draft (state/category/account/course, sort back
   to `'upcoming'`) without closing, so the person can still cancel out. Also exports
   `countActiveFilters` for the badge.
-- **`ResultRow.tsx`** — the table row (unseen dot, subject + sender/course/received date,
-  category, next date, priority) and its expanded detail (sender with address, account, received
-  and detected dates, all date chips, flags, `ResultActions`, and "Mark as seen"/"Mark as new"
-  via `setResultSeen(id, !seen)`). "Next date" is the nearest date at or after today, or the
-  earliest date when all are in the past, or `"—"` when the result has none.
+- **`ResultRow.tsx`** — the table row (unseen dot with an `sr-only` "Unseen" label, subject +
+  sender/course/received date, category, next date, priority) and its expanded detail (sender with
+  address, account, received and detected dates, all date chips, `ResultFlags`, `ResultActions`,
+  and "Mark as seen"/"Mark as new" via `setResultSeen(id, !seen)`, disabled while pending with its
+  error shown beside it). "Next date" is the nearest date at or after the local today
+  (`todayLocalIso()`), or the earliest date when all are in the past, or `"—"` when the result has
+  none.
 
 ## Runs (`src/features/runs/`)
 
@@ -74,7 +93,8 @@ data and callbacks.
 - **`RunRow.tsx`** — status pill (Running/Success/Partial/Failed), start time
   (`formatDateTime`), duration (`formatDuration`, omitted while the run has no `finishedAt`),
   trigger ("Manual" — the only value `RunTrigger` currently has), and the counters line
-  (`found · filtered · analyzed · failed · results`). Expanding shows the run's `errorSummary`
+  (`found · filtered · analyzed · failed · results`); the header is a `<button>` containing only
+  inline elements (spans). Expanding shows the run's `errorSummary`
   (when partial/failed) and one block per account with its status, and for a failed account its
   error kind (human label, e.g. "Connection error") and message.
 
@@ -94,7 +114,8 @@ Every page/component is tested with Vitest + Testing Library. The API client mod
 per-file with `vi.mock('../../lib/api/client', ...)` (functions built with `vi.hoisted` so they
 can be reset in `beforeEach`); `src/lib/api/events.ts` and `@tauri-apps/plugin-opener` are mocked
 the same way wherever a test needs to simulate `run:progress`/`run:finished` or "Open email"/
-"Copy Message-ID".
+"Copy Message-ID". Pages that use `useCheckRun()` (the dashboard) must be rendered inside a
+`CheckRunProvider` in tests.
 
 Run with `npm run test`. Other gates: `npm run typecheck`, `npm run lint`, `npm run build`.
 
@@ -105,3 +126,5 @@ Run with `npm run test`. Other gates: `npm run typecheck`, `npm run lint`, `npm 
   dedicated "filters options" endpoint.
 - The "Check now" progress label shows only the most recent `run:progress` event, not a running
   log — matching the single-line progress example in the design spec.
+- The check-run state is adopted from the dashboard query cache, so a check already running when
+  the app starts is only noticed once some `['dashboard']` query has loaded (the sidebar's does).

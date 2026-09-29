@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
+import { formatConnectionTestMessage } from '../../lib/format';
 import ErrorMessage from '../../components/ErrorMessage';
 import Field from '../../components/forms/Field';
 import TextInput from '../../components/forms/TextInput';
@@ -31,14 +32,17 @@ export default function SettingsPage() {
   const [form, setForm] = useState<SettingsFormState | null>(null);
   const [keyModalOpen, setKeyModalOpen] = useState(false);
   const [saveError, setSaveError] = useState<CommandError | null>(null);
+  const [removeKeyError, setRemoveKeyError] = useState<CommandError | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
 
-  // Initialize (or resync) the editable form whenever a fresh `SettingsDto` arrives, without
-  // clobbering in-progress edits on every render. Setting state during render (guarded by
-  // comparing against the last seen data) is React's documented alternative to an effect here.
-  const [loadedSettings, setLoadedSettings] = useState(settingsQuery.data);
-  if (settingsQuery.data && settingsQuery.data !== loadedSettings) {
-    setLoadedSettings(settingsQuery.data);
+  // Initializes the editable form once, the first time `getSettings` resolves. It is
+  // deliberately *not* re-synced on every later refetch (e.g. after replacing/removing the jev
+  // key, which invalidates this query): that would silently overwrite whatever the user is
+  // currently typing. It is instead re-synced explicitly after a successful Save, from the
+  // input actually sent (see `saveMutation.onSuccess`). Key status (`jevApiKeyConfigured`) is
+  // read straight from `settingsQuery.data`, never from `form`, so it always reflects the latest
+  // fetch regardless of unsaved edits.
+  if (settingsQuery.data && form === null) {
     setForm(settingsToFormState(settingsQuery.data));
   }
 
@@ -48,8 +52,9 @@ export default function SettingsPage() {
 
   const saveMutation = useMutation({
     mutationFn: (state: SettingsFormState) => api.updateSettings(buildSettingsInput(state)),
-    onSuccess: () => {
+    onSuccess: (saved) => {
       setSaveError(null);
+      setForm(settingsToFormState(saved));
       invalidateSettings();
     },
     onError: (e) => setSaveError(toCommandError(e)),
@@ -57,14 +62,16 @@ export default function SettingsPage() {
 
   const removeKeyMutation = useMutation({
     mutationFn: () => api.clearJevApiKey(),
-    onSuccess: invalidateSettings,
-    onError: (e) => setSaveError(toCommandError(e)),
+    onSuccess: () => {
+      setRemoveKeyError(null);
+      invalidateSettings();
+    },
+    onError: (e) => setRemoveKeyError(toCommandError(e)),
   });
 
   const testProviderMutation = useMutation({
     mutationFn: () => api.testAiProvider(),
-    onSuccess: (result) =>
-      setTestResult(result.ok ? 'Connection successful.' : (result.message ?? 'Connection failed.')),
+    onSuccess: (result) => setTestResult(formatConnectionTestMessage(result)),
     onError: (e) => setTestResult(toCommandError(e).message),
   });
 
@@ -87,11 +94,13 @@ export default function SettingsPage() {
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold text-neutral-900">AI provider</h2>
-        <div className="grid grid-cols-2 gap-3">
+        <div role="radiogroup" aria-label="AI provider" className="grid grid-cols-2 gap-3">
           {PROVIDERS.map((provider) => (
             <button
               key={provider.value}
               type="button"
+              role="radio"
+              aria-checked={form.aiProvider === provider.value}
               onClick={() => update('aiProvider', provider.value)}
               className={`rounded border px-4 py-3 text-left ${
                 form.aiProvider === provider.value
@@ -114,7 +123,7 @@ export default function SettingsPage() {
                 value={settingsQuery.data?.jevApiKeyConfigured ? 'Configured' : 'Not configured'}
               />
             </div>
-            <div className="mt-1 flex gap-3 text-sm">
+            <div className="mt-1 flex items-center gap-3 text-sm">
               <button type="button" onClick={() => setKeyModalOpen(true)} className="text-neutral-700 hover:underline">
                 Replace key
               </button>
@@ -126,6 +135,7 @@ export default function SettingsPage() {
               >
                 Remove key
               </button>
+              <ErrorMessage error={removeKeyError} />
             </div>
           </Field>
           <Field label="jev model" htmlFor="jev-model">

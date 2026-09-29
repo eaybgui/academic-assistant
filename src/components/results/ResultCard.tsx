@@ -1,13 +1,17 @@
-import type { ResultDto } from '../../lib/api/types';
+import type { CommandError, ResultDto } from '../../lib/api/types';
 import PriorityBadge from './PriorityBadge';
 import CategoryLabel from './CategoryLabel';
 import ResultDates from './ResultDates';
 import ResultActions from './ResultActions';
+import ResultFlags from './ResultFlags';
+import ErrorMessage from '../ErrorMessage';
 import { formatDate } from './format';
 
 export interface ResultCardProps {
   result: ResultDto;
   onSetSeen: (id: number, seen: boolean) => void;
+  pending?: boolean;
+  error?: CommandError | null;
 }
 
 /**
@@ -15,7 +19,7 @@ export interface ResultCardProps {
  * meta line ("sender · course (university) · account · received <date>"),
  * category/date/flag chips, and the "Open email"/"Copy Message-ID" + "Seen" actions.
  */
-export default function ResultCard({ result, onSetSeen }: ResultCardProps) {
+export default function ResultCard({ result, onSetSeen, pending = false, error = null }: ResultCardProps) {
   const senderLabel = result.senderName ?? result.senderEmail;
   const courseLabel = result.courseName
     ? result.universityName
@@ -42,24 +46,17 @@ export default function ResultCard({ result, onSetSeen }: ResultCardProps) {
       <div className="mt-2 flex flex-wrap gap-1.5">
         <CategoryLabel category={result.category} />
         <ResultDates dates={result.dates} />
-        {result.actionRequired ? (
-          <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
-            Action required
-          </span>
-        ) : null}
-        {result.possibleChange ? (
-          <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-            Possible change
-          </span>
-        ) : null}
+        <ResultFlags actionRequired={result.actionRequired} possibleChange={result.possibleChange} />
       </div>
 
-      <div className="mt-3 flex justify-end gap-4 text-sm">
+      <div className="mt-3 flex items-center justify-end gap-4 text-sm">
+        <ErrorMessage error={error} />
         <ResultActions result={result} />
         <button
           type="button"
+          disabled={pending}
           onClick={() => onSetSeen(result.id, true)}
-          className="font-medium text-neutral-900 hover:underline"
+          className="font-medium text-neutral-900 hover:underline disabled:opacity-50"
         >
           Seen
         </button>

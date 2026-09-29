@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatDateTime, formatDuration, formatRelativeDay, formatResultDate, formatTime } from './format';
+import {
+  formatDate,
+  formatDateTime,
+  formatDuration,
+  formatRelativeDay,
+  formatResultDate,
+  formatTime,
+  todayLocalIso,
+} from './format';
 
 describe('formatDate', () => {
   it('formats an ISO timestamp as en-GB day month year', () => {
@@ -59,5 +67,16 @@ describe('formatDuration', () => {
 
   it('formats seconds only under a minute', () => {
     expect(formatDuration('2026-09-28T09:00:00Z', '2026-09-28T09:00:45Z')).toBe('45s');
+  });
+});
+
+describe('todayLocalIso', () => {
+  it('returns the local calendar date as YYYY-MM-DD, not the UTC one', () => {
+    const now = new Date();
+    const expected = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+      now.getDate(),
+    ).padStart(2, '0')}`;
+    expect(todayLocalIso()).toBe(expected);
+    expect(todayLocalIso()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

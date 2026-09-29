@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
 import type { ResultQuery, ResultSort } from '../../lib/api/types';
 import ErrorMessage from '../../components/ErrorMessage';
+import { useSetResultSeen } from '../../components/results/useSetResultSeen';
 import FiltersModal from './FiltersModal';
 import { countActiveFilters, type ResultFilters } from './filterUtils';
 import ResultRow from './ResultRow';
@@ -19,7 +20,7 @@ export default function ResultsPage() {
   const [page, setPage] = useState(0);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const queryClient = useQueryClient();
+  const seen = useSetResultSeen();
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -46,18 +47,11 @@ export default function ResultsPage() {
   const resultsQuery = useQuery({
     queryKey: queryKeys.results(query),
     queryFn: () => api.getResults(query),
+    placeholderData: keepPreviousData,
   });
 
   const accountsQuery = useQuery({ queryKey: queryKeys.accounts, queryFn: api.getAccounts });
   const catalogQuery = useQuery({ queryKey: queryKeys.catalog, queryFn: api.getCatalog });
-
-  const seenMutation = useMutation({
-    mutationFn: ({ id, seen }: { id: number; seen: boolean }) => api.setResultSeen(id, seen),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      void queryClient.invalidateQueries({ queryKey: ['results'] });
-    },
-  });
 
   function handleApplyFilters(nextFilters: ResultFilters, nextSort: ResultSort) {
     setFilters(nextFilters);
@@ -69,6 +63,14 @@ export default function ResultsPage() {
   const total = resultsQuery.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const activeFilterCount = countActiveFilters(filters);
+
+  // Clamps the current page once `total` shrinks below it (e.g. after a filter change or results
+  // being marked seen out from under a "new only" filter), instead of leaving the page on an
+  // empty page past the last one. Adjusting state during render is React's documented
+  // alternative to an effect for this.
+  if (page > totalPages - 1) {
+    setPage(totalPages - 1);
+  }
 
   return (
     <div className="space-y-4">
@@ -116,7 +118,9 @@ export default function ResultsPage() {
               result={result}
               expanded={expandedId === result.id}
               onToggle={() => setExpandedId((id) => (id === result.id ? null : result.id))}
-              onSetSeen={(id, seen) => seenMutation.mutate({ id, seen })}
+              onSetSeen={(id, s) => seen.setSeen(id, s)}
+              pending={seen.isPending(result.id)}
+              error={seen.erroredId === result.id ? seen.error : null}
             />
           ))}
         </tbody>

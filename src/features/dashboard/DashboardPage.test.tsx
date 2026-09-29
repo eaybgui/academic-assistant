@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import DashboardPage from './DashboardPage';
+import { CheckRunProvider } from '../check-run/CheckRunProvider';
 import type { DashboardDto, RunProgressEvent } from '../../lib/api/types';
 
 const { getDashboard, checkNow, setResultSeen, markAllSeen } = vi.hoisted(() => ({
@@ -61,7 +62,9 @@ function renderPage() {
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
-      <DashboardPage />
+      <CheckRunProvider>
+        <DashboardPage />
+      </CheckRunProvider>
     </QueryClientProvider>,
   );
 }
@@ -118,7 +121,7 @@ describe('DashboardPage', () => {
 
     progressCb?.({ runId: 7, accountId: 1, accountName: 'UV IMAP', stage: 'analyzing', processed: 12, total: 40 });
 
-    expect(await screen.findByText('UV IMAP: analyzing 12/40')).toBeInTheDocument();
+    expect(await screen.findByText('UV IMAP: Analyzing 12/40')).toBeInTheDocument();
   });
 
   it('calls setResultSeen(id, true) when Seen is clicked', async () => {

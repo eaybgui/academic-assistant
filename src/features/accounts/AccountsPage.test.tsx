@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AccountsPage from './AccountsPage';
 import { api } from '../../lib/api/client';
@@ -83,6 +83,20 @@ describe('AccountsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(mockedApi.removeAccount).toHaveBeenCalledWith(1));
+  });
+
+  it('shows a delete failure inside the confirmation dialog', async () => {
+    mockedApi.getAccounts.mockResolvedValue([imapAccount]);
+    mockedApi.getCatalog.mockResolvedValue([]);
+    mockedApi.removeAccount.mockRejectedValue({ kind: 'internal', message: 'Could not delete the account' });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete UV IMAP' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(await within(dialog).findByText('Could not delete the account')).toBeInTheDocument();
   });
 
   it('shows the test connection result inline', async () => {

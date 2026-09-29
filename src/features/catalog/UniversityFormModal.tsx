@@ -27,17 +27,10 @@ export default function UniversityFormModal({ open, university, onClose }: Unive
       university ? api.updateUniversity(university.id, name.trim()) : api.addUniversity(name.trim()),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.catalog });
-      handleClose();
+      onClose();
     },
     onError: (e) => setSaveError(toCommandError(e)),
   });
-
-  function handleClose() {
-    setName(university?.name ?? '');
-    setValidationError(null);
-    setSaveError(null);
-    onClose();
-  }
 
   function handleSubmit() {
     if (!name.trim()) {
@@ -52,12 +45,12 @@ export default function UniversityFormModal({ open, university, onClose }: Unive
     <Modal
       open={open}
       title={isCreate ? 'Add university' : 'Edit university'}
-      onClose={handleClose}
+      onClose={onClose}
       footer={
         <>
           <button
             type="button"
-            onClick={handleClose}
+            onClick={onClose}
             className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
           >
             Cancel
