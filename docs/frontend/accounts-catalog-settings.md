@@ -1,4 +1,4 @@
-# Accounts, Catalog and Settings screens
+# Accounts, University catalog and Settings screens
 
 Covers `src/features/accounts/**`, `src/features/catalog/**`, `src/features/settings/**` and the
 shared form primitives in `src/components/forms/**`. These screens configure the app (email
@@ -65,7 +65,7 @@ The screens also use the shared shell and API layer as they are (`Layout`, `Moda
   dashboard query (`['dashboard']`, a prefix match covering every `sort` variant) so the sidebar's
   unseen badge and dashboard attention banner stay in sync.
 
-## Catalog (`src/features/catalog/`)
+## University catalog (`src/features/catalog/`)
 
 - `catalogForm.ts` — `parseAliases(raw)`: splits a comma-separated alias input into a trimmed,
   non-empty array (used for both add and edit).
@@ -74,7 +74,7 @@ The screens also use the shared shell and API layer as they are (`Layout`, `Moda
   success. Like the account form, their state is initialized once per mount; `CatalogPage` passes
   `key={`${item?.id ?? 'new'}-${openCount}`}` with a separate open counter per modal (incremented on
   every open), so each open starts with fresh state and cancelling discards unsaved edits.
-- `CatalogPage.tsx` — one card per university (name, "Edit" / "Add course" actions, a delete
+- `CatalogPage.tsx` — the "University catalog" screen: one card per university (name, "Edit" / "Add course" actions, a delete
   icon) with its courses listed underneath ("Name · aliases: A, B", edit/delete icons per course).
   Deleting either shows a `ConfirmDialog` first; a failed delete shows its error inside the dialog,
   cleared when the dialog is opened again or cancelled.

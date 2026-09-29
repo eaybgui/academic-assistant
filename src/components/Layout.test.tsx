@@ -1,14 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import Layout from './Layout';
+import type { DashboardDto } from '../lib/api/types';
+
+const { getDashboard } = vi.hoisted(() => ({ getDashboard: vi.fn() }));
 
 vi.mock('../lib/api/client', () => ({
-  api: {
-    getDashboard: vi.fn().mockRejectedValue(new Error('not available outside Tauri')),
-  },
+  api: { getDashboard },
 }));
+
+const STORAGE_KEY = 'academic-assistant.sidebar-collapsed';
+const NAV_LABELS = ['Dashboard', 'Results', 'Runs', 'Accounts', 'University catalog', 'Settings'];
 
 function renderLayout() {
   const queryClient = new QueryClient();
@@ -23,11 +27,16 @@ function renderLayout() {
   );
 }
 
+beforeEach(() => {
+  localStorage.clear();
+  getDashboard.mockReset().mockRejectedValue(new Error('not available outside Tauri'));
+});
+
 describe('Layout', () => {
   it('renders the six navigation links', () => {
     renderLayout();
 
-    for (const label of ['Dashboard', 'Results', 'Runs', 'Accounts', 'Catalog', 'Settings']) {
+    for (const label of NAV_LABELS) {
       expect(screen.getByRole('link', { name: label })).toBeInTheDocument();
     }
   });
@@ -44,5 +53,81 @@ describe('Layout', () => {
     const resultsLink = await screen.findByRole('link', { name: 'Results' });
     expect(resultsLink).toHaveTextContent('Results');
     expect(screen.queryByText(/^\d+$/)).not.toBeInTheDocument();
+  });
+
+  describe('collapsible sidebar', () => {
+    it('shows an icon and a visible label for every link, plus the title, when expanded', () => {
+      renderLayout();
+
+      expect(screen.getByText('Academic Assistant')).toBeInTheDocument();
+      for (const label of NAV_LABELS) {
+        const link = screen.getByRole('link', { name: label });
+        expect(link.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+        expect(within(link).getByText(label)).not.toHaveClass('sr-only');
+        expect(link).not.toHaveAttribute('title');
+      }
+      const toggle = screen.getByRole('button', { name: 'Collapse sidebar' });
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('collapses to icons only while keeping accessible names and tooltips', () => {
+      renderLayout();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+
+      const toggle = screen.getByRole('button', { name: 'Expand sidebar' });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByText('Academic Assistant')).not.toBeInTheDocument();
+      for (const label of NAV_LABELS) {
+        const link = screen.getByRole('link', { name: label });
+        expect(link.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+        expect(within(link).getByText(label)).toHaveClass('sr-only');
+        expect(link).toHaveAttribute('title', label);
+      }
+    });
+
+    it('expands again when the toggle is pressed a second time', () => {
+      renderLayout();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
+
+      expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('Academic Assistant')).toBeInTheDocument();
+    });
+
+    it('persists the preference to localStorage', () => {
+      renderLayout();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+      expect(localStorage.getItem(STORAGE_KEY)).toBe('true');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }));
+      expect(localStorage.getItem(STORAGE_KEY)).toBe('false');
+    });
+
+    it('restores a collapsed preference from localStorage', () => {
+      localStorage.setItem(STORAGE_KEY, 'true');
+
+      renderLayout();
+
+      expect(screen.getByRole('button', { name: 'Expand sidebar' })).toHaveAttribute('aria-expanded', 'false');
+      expect(within(screen.getByRole('link', { name: 'Dashboard' })).getByText('Dashboard')).toHaveClass('sr-only');
+    });
+
+    it('shows the count pill when expanded and still reports the count when collapsed', async () => {
+      getDashboard.mockResolvedValue({ counts: { newTotal: 3 } } as DashboardDto);
+
+      renderLayout();
+
+      expect(await screen.findByRole('link', { name: /^Results\s*3$/ })).toBeInTheDocument();
+      expect(screen.getByText('3')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+
+      const resultsLink = screen.getByRole('link', { name: /^Results\s*3 unseen$/ });
+      expect(within(resultsLink).getByText('3 unseen')).toHaveClass('sr-only');
+      expect(screen.queryByText('3')).not.toBeInTheDocument();
+    });
   });
 });

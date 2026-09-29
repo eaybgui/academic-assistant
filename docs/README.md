@@ -42,7 +42,7 @@ and the overall technical direction.
 |---|---|
 | [frontend/overview.md](frontend/overview.md) | App structure, API client, events, query keys, conventions, testing |
 | [frontend/dashboard-results-runs.md](frontend/dashboard-results-runs.md) | Dashboard, Results and Runs screens and the shared result components |
-| [frontend/accounts-catalog-settings.md](frontend/accounts-catalog-settings.md) | Accounts, Catalog and Settings screens and the shared form primitives |
+| [frontend/accounts-catalog-settings.md](frontend/accounts-catalog-settings.md) | Accounts, University catalog and Settings screens and the shared form primitives |
 
 ## Application shell (`src-tauri`)
 
