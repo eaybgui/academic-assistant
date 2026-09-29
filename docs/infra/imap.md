@@ -10,7 +10,7 @@ Module layout (`crates/infra/src/imap/`):
 ```
 mod.rs          ImapEmailProvider (EmailProvider impl), fetch orchestration
 connection.rs   TCP + TLS + LOGIN, async-imap error -> ProviderError mapping
-parse.rs        parse_message: raw RFC 822 bytes -> academic_core::domain::Email
+parse.rs        parse_message / parse_fetched_messages: raw RFC 822 bytes -> Email
 cursor.rs       select_uids: pure UID batch planning
 ```
 
@@ -48,6 +48,17 @@ pub fn parse_message(
     internal_date: Option<DateTime<Utc>>,
 ) -> Result<Email, ProviderError>;
 
+/// Pure per-batch parsing: skips unparseable messages (logging only the UID), returns
+/// the emails oldest first plus the highest fetched UID (the cursor high-water mark).
+pub fn parse_fetched_messages(
+    account_id: AccountId,
+    folder: &str,
+    fetched: &[FetchedMessage],
+) -> (Vec<Email>, Option<u32>);
+
+/// `(uid, raw RFC 822 bytes, INTERNALDATE)`.
+pub type FetchedMessage = (u32, Vec<u8>, Option<DateTime<Utc>>);
+
 /// Pure cursor planning, tested without a server.
 pub fn select_uids(found: &[u32], cursor_last_uid: Option<u32>, limit: usize) -> Vec<u32>;
 ```
@@ -78,6 +89,18 @@ The same mapping (minus the `NO -> Auth` case, since only `LOGIN` carries that m
 applies to every other IMAP command (`SELECT`, `UID SEARCH`, `UID FETCH`, `LOGOUT`) via
 `map_command_error`.
 
+### I/O timeouts
+
+Every command after the connection is established is bounded by a timeout, and a
+timeout maps to `ProviderError::Connection("<command> timed out")`:
+
+| Command | Timeout |
+|---|---|
+| `LOGIN` | 60 s |
+| `SELECT`, `UID SEARCH` | 60 s each |
+| `UID FETCH` (issuing it and consuming the whole response stream, not per message) | 60 s total |
+| `LOGOUT` (best effort, result ignored) | 5 s |
+
 ## Fetch algorithm (`mod.rs`, spec §8.1)
 
 `fetch_new(folder, cursor, since)`:
@@ -99,10 +122,15 @@ applies to every other IMAP command (`SELECT`, `UID SEARCH`, `UID FETCH`, `LOGOU
    was in effect, or `{uidvalidity, last_uid: UIDNEXT - 1}` when starting fresh (so the
    next run searches strictly from the current end of the mailbox).
 6. Otherwise: `UID FETCH {uids} (UID INTERNALDATE BODY.PEEK[])` — `BODY.PEEK[]` never
-   sets `\Seen`. Each response is parsed with `parse_message`; the next cursor is
-   `{uidvalidity, last_uid: max(uid fetched)}`.
-7. `LOGOUT` is always attempted (best effort — its result is ignored) before returning,
-   on every path, success or failure.
+   sets `\Seen`. The raw responses are collected and handed to `parse_fetched_messages`.
+   A message that fails to parse is **skipped** (a `tracing::warn!` with only its UID,
+   never its content) instead of failing the batch, so one malformed message cannot
+   block the folder forever. Every fetched UID, parsed or skipped, counts toward the
+   cursor: the next cursor is `{uidvalidity, last_uid: max(uid fetched)}`. Returned
+   emails are sorted oldest first (`received_at`, ties by provider message id), per the
+   `EmailProvider` contract.
+7. `LOGOUT` is always attempted (best effort, 5 s timeout — its result is ignored) before
+   returning, on every path, success or failure.
 
 `source_url` is always `None` for IMAP (there is no equivalent of Graph's `webLink`).
 
@@ -136,6 +164,12 @@ strictly greater than `cursor_last_uid` (when present), sorts ascending, and tru
 `limit`. It has no I/O and is exhaustively unit-tested (`tests/imap_cursor.rs`) without a
 server.
 
+## Batch parsing (`parse.rs`, `parse_fetched_messages`)
+
+Pure aside from the warning log. Input: one `(uid, raw bytes, internal date)` triple per
+fetched message. Output: `(emails, max_uid)`, where `max_uid` covers every input UID
+(including skipped ones) and `emails` are sorted by `(received_at, provider_message_id)`.
+
 ## Testing
 
 - `tests/fixtures/eml/*.eml` — fictional Spanish messages (`uv.es`/`example.com`
@@ -144,6 +178,10 @@ server.
   missing `Message-ID`, and `Cc` recipients.
 - `tests/imap_parse.rs` — `parse_message` against every fixture above, plus the error
   paths (unparsable bytes, missing `From`, missing date everywhere).
+- `tests/imap_parse.rs` also covers `parse_fetched_messages`: a bad message in the middle
+  is skipped while the others are returned and `max_uid` still advances past it; all
+  messages failing still yields the high-water mark; oldest-first ordering with the
+  provider-id tie-break.
 - `tests/imap_cursor.rs` — `select_uids`: no cursor, cursor filtering (including the `*`
   quirk), the `MAX_BATCH` limit, and an empty `found` list.
 - `tests/imap_live.rs` — `#[ignore]`d live smoke test (`test_connection` + `fetch_new`

@@ -6,10 +6,12 @@ mod cursor;
 mod parse;
 
 use std::fmt;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures_util::TryStreamExt;
+use tokio::time::timeout;
 
 use academic_core::domain::{AccountId, FetchBatch, SyncCursor, MAX_BATCH};
 use academic_core::ports::{EmailProvider, ProviderError};
@@ -17,7 +19,15 @@ use academic_core::ports::{EmailProvider, ProviderError};
 use connection::{connect, map_command_error, ImapSession};
 
 pub use cursor::select_uids;
-pub use parse::parse_message;
+pub use parse::{parse_fetched_messages, parse_message, FetchedMessage};
+
+/// Timeout applied to every IMAP command issued after login: `SELECT`, `UID SEARCH`,
+/// and the whole `UID FETCH` stream consumption (not per message — the entire
+/// batch). A stalled server must not hang a sync forever.
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
+/// `LOGOUT` is best-effort (its result is always ignored) and kept short so a slow
+/// server does not delay returning the already-fetched result.
+const LOGOUT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Read-only [`EmailProvider`] for a single IMAP mailbox, connecting over implicit
 /// TLS and fetching with `BODY.PEEK[]` so messages are never marked `\Seen`.
@@ -50,6 +60,38 @@ impl ImapEmailProvider {
         connect(&self.host, self.port, &self.username, &self.password).await
     }
 
+    /// `LOGOUT` is always attempted, best effort, on every path (success or
+    /// failure); its result — including a timeout — is ignored.
+    async fn logout(session: &mut ImapSession) {
+        let _ = timeout(LOGOUT_TIMEOUT, session.logout()).await;
+    }
+
+    /// Runs the `UID FETCH` and consumes its response stream, collecting each
+    /// message's raw bytes (never parsing here — see [`parse_fetched_messages`]).
+    async fn fetch_messages(
+        session: &mut ImapSession,
+        uid_set: &str,
+        capacity: usize,
+    ) -> Result<Vec<FetchedMessage>, ProviderError> {
+        let mut fetch_stream = session
+            .uid_fetch(uid_set, "(UID INTERNALDATE BODY.PEEK[])")
+            .await
+            .map_err(map_command_error)?;
+
+        let mut fetched = Vec::with_capacity(capacity);
+        while let Some(fetch) = fetch_stream.try_next().await.map_err(map_command_error)? {
+            let uid = fetch
+                .uid
+                .ok_or_else(|| ProviderError::Protocol("FETCH response missing UID".into()))?;
+            let body = fetch
+                .body()
+                .ok_or_else(|| ProviderError::Protocol("FETCH response missing body".into()))?;
+            let internal_date = fetch.internal_date().map(|dt| dt.with_timezone(&Utc));
+            fetched.push((uid, body.to_vec(), internal_date));
+        }
+        Ok(fetched)
+    }
+
     async fn fetch_new_on(
         &self,
         session: &mut ImapSession,
@@ -57,7 +99,10 @@ impl ImapEmailProvider {
         cursor: Option<&SyncCursor>,
         since: DateTime<Utc>,
     ) -> Result<FetchBatch, ProviderError> {
-        let mailbox = session.select(folder).await.map_err(map_command_error)?;
+        let mailbox = timeout(COMMAND_TIMEOUT, session.select(folder))
+            .await
+            .map_err(|_| command_timed_out("SELECT"))?
+            .map_err(map_command_error)?;
         let uidvalidity = mailbox.uid_validity.ok_or_else(|| {
             ProviderError::Protocol("server did not return UIDVALIDITY on SELECT".into())
         })?;
@@ -76,9 +121,9 @@ impl ImapEmailProvider {
             Some(last_uid) => format!("UID {}:*", last_uid.saturating_add(1)),
             None => format!("SINCE {}", since.format("%d-%b-%Y")),
         };
-        let found: Vec<u32> = session
-            .uid_search(&search_query)
+        let found: Vec<u32> = timeout(COMMAND_TIMEOUT, session.uid_search(&search_query))
             .await
+            .map_err(|_| command_timed_out("UID SEARCH"))?
             .map_err(map_command_error)?
             .into_iter()
             .collect();
@@ -111,33 +156,15 @@ impl ImapEmailProvider {
             .map(u32::to_string)
             .collect::<Vec<_>>()
             .join(",");
-        let mut fetch_stream = session
-            .uid_fetch(&uid_set, "(UID INTERNALDATE BODY.PEEK[])")
-            .await
-            .map_err(map_command_error)?;
 
-        let mut emails = Vec::with_capacity(selected.len());
-        let mut max_uid: Option<u32> = None;
-        while let Some(fetch) = fetch_stream.try_next().await.map_err(map_command_error)? {
-            let uid = fetch
-                .uid
-                .ok_or_else(|| ProviderError::Protocol("FETCH response missing UID".into()))?;
-            let body = fetch
-                .body()
-                .ok_or_else(|| ProviderError::Protocol("FETCH response missing body".into()))?;
-            let internal_date = fetch.internal_date().map(|dt| dt.with_timezone(&Utc));
+        let fetched = timeout(
+            COMMAND_TIMEOUT,
+            Self::fetch_messages(session, &uid_set, selected.len()),
+        )
+        .await
+        .map_err(|_| command_timed_out("FETCH"))??;
 
-            emails.push(parse_message(
-                self.account_id,
-                folder,
-                uid,
-                body,
-                internal_date,
-            )?);
-            max_uid = Some(max_uid.map_or(uid, |current| current.max(uid)));
-        }
-        drop(fetch_stream);
-
+        let (emails, max_uid) = parse_fetched_messages(self.account_id, folder, &fetched);
         let max_uid = max_uid.ok_or_else(|| {
             ProviderError::Protocol("server did not return the requested messages".into())
         })?;
@@ -163,11 +190,15 @@ impl fmt::Debug for ImapEmailProvider {
     }
 }
 
+fn command_timed_out(command: &str) -> ProviderError {
+    ProviderError::Connection(format!("{command} timed out"))
+}
+
 #[async_trait]
 impl EmailProvider for ImapEmailProvider {
     async fn test_connection(&self) -> Result<(), ProviderError> {
         let mut session = self.open_session().await?;
-        let _ = session.logout().await;
+        Self::logout(&mut session).await;
         Ok(())
     }
 
@@ -179,7 +210,7 @@ impl EmailProvider for ImapEmailProvider {
     ) -> Result<FetchBatch, ProviderError> {
         let mut session = self.open_session().await?;
         let result = self.fetch_new_on(&mut session, folder, cursor, since).await;
-        let _ = session.logout().await;
+        Self::logout(&mut session).await;
         result
     }
 }

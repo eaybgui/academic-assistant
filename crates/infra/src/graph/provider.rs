@@ -1,7 +1,7 @@
 //! [`MicrosoftGraphEmailProvider`]: the `EmailProvider` adapter for Microsoft 365 /
 //! Outlook.com mailboxes, backed by the Graph delta API and OAuth token refresh.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration as ChronoDuration, SecondsFormat, Utc};
@@ -15,13 +15,18 @@ use academic_core::domain::{
 use academic_core::ports::{EmailProvider, ProviderError, SecretStore};
 
 use super::mapping::{map_graph_error_status, map_message, map_transport_error};
-use super::{oauth, signed_in_email, OAuthConfig};
+use super::{oauth, request_timeout, signed_in_email, OAuthConfig};
 
 /// Fields requested for every message; keeps the payload small and matches exactly
 /// what [`super::mapping::map_message`] reads.
 const GRAPH_SELECT_FIELDS: &str =
     "id,internetMessageId,subject,from,toRecipients,ccRecipients,receivedDateTime,body,webLink";
-/// Requests a plain-text body and caps each page at 50 messages, per spec §8.2.
+/// The page size requested via `odata.maxpagesize` in [`GRAPH_PREFER_HEADER`]. Used
+/// to decide when to stop following `@odata.nextLink`, so a saved cursor is always
+/// page-aligned instead of resuming mid-page (see [`EmailProvider::fetch_new`]).
+const GRAPH_PAGE_SIZE: usize = 50;
+/// Requests a plain-text body and caps each page at [`GRAPH_PAGE_SIZE`] messages,
+/// per spec §8.2.
 const GRAPH_PREFER_HEADER: &str = "outlook.body-content-type=\"text\", odata.maxpagesize=50";
 /// An access token is refreshed this long before it actually expires.
 const TOKEN_EXPIRY_SKEW: ChronoDuration = ChronoDuration::seconds(60);
@@ -79,16 +84,24 @@ impl MicrosoftGraphEmailProvider {
 
         let tokens = oauth::refresh(&self.http, &self.oauth, &refresh_token).await?;
 
-        self.secrets
-            .set(
-                &account_refresh_token_key(self.account_id),
-                &tokens.refresh_token,
-            )
-            .map_err(|e| {
-                ProviderError::Auth(format!("Could not store the refreshed sign-in: {e}"))
-            })?;
+        // Microsoft does not always rotate the refresh token on a refresh; only
+        // overwrite the stored one when it actually changed, avoiding an
+        // unnecessary write to the OS credential store on every run.
+        if tokens.refresh_token != refresh_token {
+            self.secrets
+                .set(
+                    &account_refresh_token_key(self.account_id),
+                    &tokens.refresh_token,
+                )
+                .map_err(|e| {
+                    ProviderError::Auth(format!("Could not store the refreshed sign-in: {e}"))
+                })?;
+        }
 
-        *self.cached_token.lock().unwrap() = Some(CachedToken {
+        *self
+            .cached_token
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(CachedToken {
             access_token: tokens.access_token.clone(),
             expires_at: tokens.expires_at,
         });
@@ -97,7 +110,10 @@ impl MicrosoftGraphEmailProvider {
     }
 
     fn cached_valid_token(&self) -> Option<String> {
-        let guard = self.cached_token.lock().unwrap();
+        let guard = self
+            .cached_token
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         guard.as_ref().and_then(|cached| {
             if cached.expires_at > Utc::now() + TOKEN_EXPIRY_SKEW {
                 Some(cached.access_token.clone())
@@ -112,6 +128,7 @@ impl MicrosoftGraphEmailProvider {
             .get(url)
             .bearer_auth(access_token)
             .header("Prefer", GRAPH_PREFER_HEADER)
+            .timeout(request_timeout())
             .send()
             .await
             .map_err(map_transport_error)
@@ -141,7 +158,6 @@ impl EmailProvider for MicrosoftGraphEmailProvider {
         };
 
         let mut emails = Vec::new();
-        let mut discard_before: Option<DateTime<Utc>> = None;
         let mut may_retry_without_filter = !has_cursor;
 
         let last_link = loop {
@@ -151,7 +167,6 @@ impl EmailProvider for MicrosoftGraphEmailProvider {
             if status == StatusCode::BAD_REQUEST && may_retry_without_filter {
                 may_retry_without_filter = false;
                 next_url = build_delta_url(&self.graph_base_url, folder, since, false);
-                discard_before = Some(since);
                 continue;
             }
             may_retry_without_filter = false;
@@ -166,16 +181,36 @@ impl EmailProvider for MicrosoftGraphEmailProvider {
             })?;
 
             for item in body["value"].as_array().into_iter().flatten() {
-                if let Some(email) = map_message(self.account_id, folder, item)? {
-                    if discard_before.is_some_and(|cutoff| email.received_at < cutoff) {
-                        continue;
+                match map_message(self.account_id, folder, item) {
+                    Ok(Some(email)) => {
+                        // Client-side safety net, applied on every page of every
+                        // call (not just after a 400 fallback this run): a cursor
+                        // saved from an earlier unfiltered fallback page carries no
+                        // server-side date limit on its own continuation pages, so
+                        // `since` must always be re-applied here too.
+                        if email.received_at < since {
+                            continue;
+                        }
+                        emails.push(email);
                     }
-                    emails.push(email);
+                    Ok(None) => {} // `@removed` entry: ignored.
+                    Err(_) => {
+                        // One message that fails to map must not block the rest of
+                        // the folder: skip it, logging only its id (never content).
+                        let id = item
+                            .get("id")
+                            .and_then(Value::as_str)
+                            .unwrap_or("<unknown>");
+                        tracing::warn!(id, "skipping Microsoft Graph message that failed to map");
+                    }
                 }
             }
 
             if let Some(next) = body["@odata.nextLink"].as_str() {
-                if emails.len() >= MAX_BATCH {
+                // Stop once fewer than one full page of room remains, so the batch
+                // never exceeds MAX_BATCH and the saved cursor stays page-aligned
+                // (the next run resumes at a page boundary, not mid-page).
+                if emails.len() + GRAPH_PAGE_SIZE > MAX_BATCH {
                     break next.to_string();
                 }
                 next_url = next.to_string();
@@ -190,6 +225,13 @@ impl EmailProvider for MicrosoftGraphEmailProvider {
                 "Microsoft Graph response had neither a next nor a delta link".into(),
             ));
         };
+
+        // The `EmailProvider` contract requires emails oldest first.
+        emails.sort_by(|a, b| {
+            a.received_at
+                .cmp(&b.received_at)
+                .then_with(|| a.provider_message_id.cmp(&b.provider_message_id))
+        });
 
         Ok(FetchBatch {
             emails,
