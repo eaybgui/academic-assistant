@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
+import { formatDateTime } from '../../components/results/format';
+import { formatConnectionTestMessage } from '../../lib/format';
 import ErrorMessage from '../../components/ErrorMessage';
 import ConfirmDialog from '../../components/forms/ConfirmDialog';
 import Toggle from '../../components/forms/Toggle';
 import { TrashIcon } from '../../components/forms/icons';
 import type { AccountDto, CommandError } from '../../lib/api/types';
 import AccountFormModal from './AccountFormModal';
-import { accountToFormState, buildAccountInput } from './accountForm';
+import { accountToFormState, buildAccountInput, existingTenant } from './accountForm';
 
 function formatLastSync(account: AccountDto): { text: string; isError: boolean } {
   if (account.provider.type === 'microsoft_graph' && !account.credentialsConfigured) {
@@ -18,7 +20,7 @@ function formatLastSync(account: AccountDto): { text: string; isError: boolean }
     return { text: account.lastSync.error ?? 'Sync failed', isError: true };
   }
   if (account.lastSync.status === 'ok' && account.lastSync.at) {
-    return { text: `last sync ${new Date(account.lastSync.at).toLocaleString()} OK`, isError: false };
+    return { text: `last sync ${formatDateTime(account.lastSync.at)} OK`, isError: false };
   }
   return { text: 'never synced', isError: false };
 }
@@ -34,6 +36,7 @@ export default function AccountsPage() {
   const [deleteTarget, setDeleteTarget] = useState<AccountDto | null>(null);
   const [testResults, setTestResults] = useState<Record<number, string>>({});
   const [rowError, setRowError] = useState<CommandError | null>(null);
+  const [deleteError, setDeleteError] = useState<CommandError | null>(null);
 
   const universities = catalogQuery.data ?? [];
   const universityName = (id: number | null) => universities.find((u) => u.id === id)?.name ?? null;
@@ -47,8 +50,7 @@ export default function AccountsPage() {
     mutationFn: (account: AccountDto) => {
       const state = accountToFormState(account);
       state.enabled = !account.enabled;
-      const tenant = account.provider.type === 'microsoft_graph' ? account.provider.tenant : undefined;
-      return api.updateAccount(account.id, buildAccountInput(state, tenant));
+      return api.updateAccount(account.id, buildAccountInput(state, existingTenant(account)));
     },
     onSuccess: invalidateAll,
     onError: (e) => setRowError(toCommandError(e)),
@@ -57,10 +59,7 @@ export default function AccountsPage() {
   const testMutation = useMutation({
     mutationFn: (id: number) => api.testAccount(id),
     onSuccess: (result, id) =>
-      setTestResults((prev) => ({
-        ...prev,
-        [id]: result.ok ? 'Connection successful.' : (result.message ?? 'Connection failed.'),
-      })),
+      setTestResults((prev) => ({ ...prev, [id]: formatConnectionTestMessage(result) })),
     onError: (e, id) => setTestResults((prev) => ({ ...prev, [id]: toCommandError(e).message })),
   });
 
@@ -74,10 +73,21 @@ export default function AccountsPage() {
     mutationFn: (id: number) => api.removeAccount(id),
     onSuccess: () => {
       setDeleteTarget(null);
+      setDeleteError(null);
       invalidateAll();
     },
-    onError: (e) => setRowError(toCommandError(e)),
+    onError: (e) => setDeleteError(toCommandError(e)),
   });
+
+  function openDeleteConfirm(account: AccountDto) {
+    setDeleteError(null);
+    setDeleteTarget(account);
+  }
+
+  function closeDeleteConfirm() {
+    setDeleteTarget(null);
+    setDeleteError(null);
+  }
 
   function openAddModal() {
     setModalAccount(null);
@@ -121,6 +131,7 @@ export default function AccountsPage() {
           const uniName = universityName(account.defaultUniversityId) ?? 'No university';
           const isMicrosoft = account.provider.type === 'microsoft_graph';
           const isSigningIn = signInMutation.isPending && signInMutation.variables === account.id;
+          const isToggling = toggleMutation.isPending && toggleMutation.variables?.id === account.id;
 
           return (
             <li key={account.id} className="rounded border border-neutral-200 bg-white px-4 py-3">
@@ -174,11 +185,12 @@ export default function AccountsPage() {
                     checked={account.enabled}
                     onChange={() => toggleMutation.mutate(account)}
                     label="Enabled"
+                    disabled={isToggling}
                   />
                   <button
                     type="button"
                     aria-label={`Delete ${account.name}`}
-                    onClick={() => setDeleteTarget(account)}
+                    onClick={() => openDeleteConfirm(account)}
                     className="text-neutral-400 hover:text-red-600"
                   >
                     <TrashIcon />
@@ -191,6 +203,7 @@ export default function AccountsPage() {
       </ul>
 
       <AccountFormModal
+        key={modalAccount?.id ?? 'new'}
         open={modalOpen}
         account={modalAccount}
         universities={universities}
@@ -201,7 +214,9 @@ export default function AccountsPage() {
         open={deleteTarget !== null}
         title="Delete account"
         message="Deletes this account and all its results. Disable it instead to keep its history."
-        onCancel={() => setDeleteTarget(null)}
+        error={deleteError}
+        pending={deleteMutation.isPending}
+        onCancel={closeDeleteConfirm}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
       />
     </div>

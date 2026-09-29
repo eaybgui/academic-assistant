@@ -7,6 +7,7 @@ import TextInput from '../../components/forms/TextInput';
 import Select from '../../components/forms/Select';
 import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
+import { formatConnectionTestMessage } from '../../lib/format';
 import type { AccountDto, CommandError, UniversityDto } from '../../lib/api/types';
 import {
   accountToFormState,
@@ -40,6 +41,7 @@ export default function AccountFormModal({ open, account, universities, onClose 
   const [saveError, setSaveError] = useState<CommandError | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [savedAccount, setSavedAccount] = useState<AccountDto | null>(account);
+  const [signedIn, setSignedIn] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -50,16 +52,21 @@ export default function AccountFormModal({ open, account, universities, onClose 
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const tenant = existingTenant(account ?? undefined);
+      // Once a Microsoft account has been created it is saved (but not closed, so the "Sign in
+      // with Microsoft" action can follow); a second Save must update that account instead of
+      // creating a duplicate one, even though `account` (the modal's original "editing" prop)
+      // is still null.
+      const target = account ?? savedAccount;
+      const tenant = existingTenant(target ?? undefined);
       const input = buildAccountInput(state, tenant);
-      return account ? api.updateAccount(account.id, input) : api.addAccount(input);
+      return target ? api.updateAccount(target.id, input) : api.addAccount(input);
     },
     onSuccess: (saved) => {
       setSaveError(null);
       setSavedAccount(saved);
       invalidateAfterSave();
       if (saved.provider.type === 'imap') {
-        handleClose();
+        onClose();
       }
     },
     onError: (e) => setSaveError(toCommandError(e)),
@@ -67,7 +74,7 @@ export default function AccountFormModal({ open, account, universities, onClose 
 
   const testMutation = useMutation({
     mutationFn: (id: number) => api.testAccount(id),
-    onSuccess: (result) => setTestResult(result.ok ? 'Connection successful.' : (result.message ?? 'Connection failed.')),
+    onSuccess: (result) => setTestResult(formatConnectionTestMessage(result)),
     onError: (e) => setTestResult(toCommandError(e).message),
   });
 
@@ -76,22 +83,20 @@ export default function AccountFormModal({ open, account, universities, onClose 
     onSuccess: (saved) => {
       setSavedAccount(saved);
       setSaveError(null);
+      setSignedIn(true);
       invalidateAfterSave();
     },
     onError: (e) => setSaveError(toCommandError(e)),
   });
 
-  function handleClose() {
-    setState(emptyAccountFormState());
-    setErrors({});
-    setSaveError(null);
-    setTestResult(null);
-    setSavedAccount(null);
-    onClose();
-  }
-
   function handleProviderChange(providerType: ProviderType) {
-    setState(emptyAccountFormState(providerType));
+    setState((prev) => ({
+      ...emptyAccountFormState(providerType),
+      name: prev.name,
+      emailAddress: prev.emailAddress,
+      defaultUniversityId: prev.defaultUniversityId,
+      initialSyncDays: prev.initialSyncDays,
+    }));
     setErrors({});
   }
 
@@ -111,12 +116,12 @@ export default function AccountFormModal({ open, account, universities, onClose 
     <Modal
       open={open}
       title={isCreate ? 'Add account' : 'Edit account'}
-      onClose={handleClose}
+      onClose={onClose}
       footer={
         <>
           <button
             type="button"
-            onClick={handleClose}
+            onClick={onClose}
             className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
           >
             Cancel
@@ -217,12 +222,17 @@ export default function AccountFormModal({ open, account, universities, onClose 
                 <TextInput
                   id="account-password"
                   type="password"
+                  autoComplete="new-password"
                   value={state.password}
                   onChange={(e) => setState({ ...state, password: e.target.value })}
                 />
               </Field>
             </>
-          ) : null}
+          ) : (
+            <p className="col-span-2 text-xs text-neutral-500">
+              Your sign-in is saved in Windows Credential Manager, never in the database.
+            </p>
+          )}
 
           <Field label="Folders" htmlFor="account-folders" error={errors.folders}>
             <TextInput
@@ -259,13 +269,18 @@ export default function AccountFormModal({ open, account, universities, onClose 
             <button
               type="button"
               disabled={signInMutation.isPending}
-              onClick={() => signInMutation.mutate(savedAccount.id)}
+              onClick={() => {
+                setSignedIn(false);
+                signInMutation.mutate(savedAccount.id);
+              }}
               className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
             >
               Sign in with Microsoft
             </button>
             {signInMutation.isPending ? (
               <span className="text-sm text-neutral-600">Waiting for sign-in in your browser…</span>
+            ) : signedIn ? (
+              <span className="text-sm text-neutral-600">Signed in.</span>
             ) : null}
           </div>
         ) : null}

@@ -34,18 +34,10 @@ export default function CourseFormModal({ open, universityId, course, onClose }:
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.catalog });
-      handleClose();
+      onClose();
     },
     onError: (e) => setSaveError(toCommandError(e)),
   });
-
-  function handleClose() {
-    setName(course?.name ?? '');
-    setAliases(course?.aliases.join(', ') ?? '');
-    setValidationError(null);
-    setSaveError(null);
-    onClose();
-  }
 
   function handleSubmit() {
     if (!name.trim()) {
@@ -60,12 +52,12 @@ export default function CourseFormModal({ open, universityId, course, onClose }:
     <Modal
       open={open}
       title={isCreate ? 'Add course' : 'Edit course'}
-      onClose={handleClose}
+      onClose={onClose}
       footer={
         <>
           <button
             type="button"
-            onClick={handleClose}
+            onClick={onClose}
             className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
           >
             Cancel

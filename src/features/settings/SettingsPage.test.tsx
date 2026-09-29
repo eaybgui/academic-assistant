@@ -86,4 +86,43 @@ describe('SettingsPage', () => {
 
     expect(await screen.findByText('Ollama is not running')).toBeInTheDocument();
   });
+
+  it('keeps unsaved edits after replacing the key triggers a settings refetch', async () => {
+    mockedApi.getSettings.mockResolvedValue(settings);
+    mockedApi.setJevApiKey.mockResolvedValue(undefined);
+
+    renderPage();
+
+    const modelInput = await screen.findByLabelText('jev model');
+    fireEvent.change(modelInput, { target: { value: 'jev-unsaved-edit' } });
+    expect(modelInput).toHaveValue('jev-unsaved-edit');
+
+    // Replacing the key invalidates and refetches `getSettings` (now reporting the key as
+    // configured) - the in-progress edit to another field must survive that refetch.
+    mockedApi.getSettings.mockResolvedValue({ ...settings, jevApiKeyConfigured: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Replace key' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('API key'), { target: { value: 'super-secret-key' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mockedApi.setJevApiKey).toHaveBeenCalledWith('super-secret-key'));
+    await waitFor(() => expect(screen.getByLabelText('jev API key')).toHaveValue('Configured'));
+
+    expect(screen.getByLabelText('jev model')).toHaveValue('jev-unsaved-edit');
+  });
+
+  it('exposes the AI provider cards as a radio group', async () => {
+    mockedApi.getSettings.mockResolvedValue(settings);
+
+    renderPage();
+
+    const ollamaOption = await screen.findByRole('radio', { name: /Ollama \(local\)/ });
+    expect(ollamaOption).toHaveAttribute('aria-checked', 'true');
+
+    fireEvent.click(screen.getByRole('radio', { name: /jev \(external\)/ }));
+
+    expect(screen.getByRole('radio', { name: /jev \(external\)/ })).toHaveAttribute('aria-checked', 'true');
+    expect(ollamaOption).toHaveAttribute('aria-checked', 'false');
+  });
 });

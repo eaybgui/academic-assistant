@@ -49,7 +49,7 @@ export default function RunRow({ run, expanded, onToggle }: RunRowProps) {
         aria-expanded={expanded}
         className="flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3 text-left text-sm"
       >
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span
             className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[run.status]}`}
           >
@@ -58,7 +58,7 @@ export default function RunRow({ run, expanded, onToggle }: RunRowProps) {
           <span className="text-neutral-700">{formatDateTime(run.startedAt)}</span>
           {duration ? <span className="text-neutral-500">· {duration}</span> : null}
           <span className="text-neutral-500">· {TRIGGER_LABELS[run.trigger]}</span>
-        </div>
+        </span>
         <span className="text-neutral-500">{formatCounters(run.counters)}</span>
       </button>
       {expanded ? (

@@ -108,4 +108,30 @@ describe('ResultsPage', () => {
 
     await waitFor(() => expect(getResults).toHaveBeenCalledWith(expect.objectContaining({ offset: 25 })));
   });
+
+  it('clamps back to the last page once total shrinks below the current page', async () => {
+    getResults.mockResolvedValue(resultsPage([resultFixture()], 60));
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('Exam date change');
+
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(getResults).toHaveBeenCalledWith(expect.objectContaining({ offset: 25 })));
+    expect(screen.getByText('Page 2 of 3 (60 results)')).toBeInTheDocument();
+
+    // The result set shrank (e.g. a filter applied elsewhere) to fewer than one page.
+    getResults.mockResolvedValue(resultsPage([resultFixture()], 3));
+    await user.click(screen.getByRole('button', { name: /Filters and sort/ }));
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+
+    await waitFor(() => expect(screen.getByText('Page 1 of 1 (3 results)')).toBeInTheDocument());
+    await waitFor(() => expect(getResults).toHaveBeenCalledWith(expect.objectContaining({ offset: 0 })));
+  });
+
+  it('renders the subject as a keyboard-accessible expand toggle', async () => {
+    renderPage();
+
+    const toggle = await screen.findByRole('button', { name: /Exam date change/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
 });

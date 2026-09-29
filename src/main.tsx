@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HashRouter } from 'react-router';
 import App from './App';
+import { CheckRunProvider } from './features/check-run/CheckRunProvider';
 import './index.css';
 
 const queryClient = new QueryClient();
@@ -15,9 +16,11 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <HashRouter>
-        <App />
-      </HashRouter>
+      <CheckRunProvider>
+        <HashRouter>
+          <App />
+        </HashRouter>
+      </CheckRunProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

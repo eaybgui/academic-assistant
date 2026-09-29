@@ -30,10 +30,45 @@ describe('ResultActions', () => {
     await user.click(screen.getByRole('button', { name: 'Copy Message-ID' }));
 
     expect(writeText).toHaveBeenCalledWith('<abc@uv.es>');
+    expect(await screen.findByText('Copied')).toBeInTheDocument();
   });
 
   it('renders nothing when neither is available', () => {
     const { container } = render(<ResultActions result={{ sourceUrl: null, messageIdHeader: null }} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('falls back to Copy Message-ID for a non-https source URL', () => {
+    render(
+      <ResultActions result={{ sourceUrl: 'file:///C:/mail/1.eml', messageIdHeader: '<abc@uv.es>' }} />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Open email' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy Message-ID' })).toBeInTheDocument();
+  });
+
+  it('renders nothing for an unparseable source URL and no Message-ID', () => {
+    const { container } = render(<ResultActions result={{ sourceUrl: 'not a url', messageIdHeader: null }} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('shows inline feedback when opening the email fails', async () => {
+    openUrl.mockRejectedValueOnce(new Error('denied'));
+    const user = userEvent.setup();
+    render(<ResultActions result={{ sourceUrl: 'https://mail.example/msg/1', messageIdHeader: null }} />);
+
+    await user.click(screen.getByRole('button', { name: 'Open email' }));
+
+    expect(await screen.findByText("Couldn't open the email")).toBeInTheDocument();
+  });
+
+  it('shows inline feedback when copying fails', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'));
+    render(<ResultActions result={{ sourceUrl: null, messageIdHeader: '<abc@uv.es>' }} />);
+
+    await user.click(screen.getByRole('button', { name: 'Copy Message-ID' }));
+
+    expect(await screen.findByText("Couldn't copy")).toBeInTheDocument();
   });
 });

@@ -12,7 +12,7 @@ vite.config.ts               Vite + Vitest config (dev server on port 1420, Tail
 eslint.config.js             Flat ESLint config (typescript-eslint, react-hooks, react-refresh)
 vitest.setup.ts              Test environment setup (jest-dom matchers, <dialog> polyfill)
 src/
-  main.tsx                   App entry: QueryClientProvider + HashRouter
+  main.tsx                   App entry: QueryClientProvider + CheckRunProvider + HashRouter
   App.tsx                    Route table
   index.css                  Tailwind entry point (`@import "tailwindcss";`)
   components/
@@ -20,6 +20,7 @@ src/
     Modal.tsx                 Native <dialog>-based modal
     ErrorMessage.tsx           Inline CommandError renderer
   features/
+    check-run/                App-level "Check now" state (CheckRunProvider, useCheckRun)
     dashboard/DashboardPage.tsx
     results/ResultsPage.tsx
     runs/RunsPage.tsx
@@ -31,11 +32,34 @@ src/
     client.ts                 `api` object: one method per Tauri command
     events.ts                 `onRunProgress` / `onRunFinished` subscriptions
     queryKeys.ts               React Query key factories
+  lib/format.ts               `formatConnectionTestMessage` (shared by every "test connection" UI)
 ```
 
-The pages under `src/features/**` are placeholders for this task (T2) — each renders only its
-heading. Later tasks fill in their content; they should not need to touch `Layout`, `Modal`,
-`ErrorMessage` or anything under `src/lib/api/`.
+The shared shell (`Layout`, `Modal`, `ErrorMessage`) and `src/lib/api/` are stable; screens should
+not need to change them.
+
+## Modal (`src/components/Modal.tsx`)
+
+The `<dialog>` element itself is always mounted, but its body (title bar, children, footer) is
+rendered only while `open` is true. Callers that keep form state in the component that renders the
+`Modal` therefore also need a fresh mount per edited item: the pages pass `key={item?.id ?? 'new'}`
+to the form modals (`AccountFormModal`, `UniversityFormModal`, `CourseFormModal`) so their state is
+re-initialized whenever a different item (or "add") is opened. On open, focus moves to the first
+focusable element of the body (falling back to the dialog itself). The dialog closes on Escape, the
+close button, or a backdrop click - the latter only when both `mousedown` and `mouseup` land on the
+backdrop, so dragging out of a text field does not dismiss it.
+
+## Check-run state (`src/features/check-run/`)
+
+`CheckRunProvider` is mounted once in `main.tsx` (inside `QueryClientProvider`) and `useCheckRun()`
+(in `useCheckRun.ts`) returns `{ running, progress, error, triggerCheck }`. It subscribes to
+`run:progress` and `run:finished` once on mount (cleaned up on unmount), so a run that finishes
+before `checkNow()` resolves is never missed, and every route reacts to a finished run. Finished run
+ids are kept in a ref and a `checkNow()` result for an already-finished id is ignored. It also
+watches the query cache for `['dashboard']` queries: it adopts a `runningRunId` reported by the
+backend and clears the running state once the dashboard shows `runningRunId === null` and
+`lastRun.id >= ` the tracked id. On `run:finished` it invalidates the `['dashboard']`, `['results']`
+and `['runs']` query prefixes.
 
 ## API client (`src/lib/api/client.ts`)
 
@@ -125,6 +149,4 @@ produces `dist/`, which Tauri packages as `frontendDist`).
 
 ## Known limitations
 
-- Pages under `src/features/**` are placeholders (heading only); no data fetching or forms yet.
-- `@tauri-apps/plugin-opener` is installed (per the workspace dependency list) but unused until a
-  later task needs to open URLs in the system browser.
+- `@tauri-apps/plugin-opener` is used only by `ResultActions` ("Open email", `https:` URLs only).

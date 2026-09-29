@@ -48,7 +48,7 @@ describe('Modal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClose on backdrop click', () => {
+  it('calls onClose when mousedown and mouseup both land on the backdrop', () => {
     const onClose = vi.fn();
     render(
       <Modal open title="Add account" onClose={onClose}>
@@ -56,9 +56,26 @@ describe('Modal', () => {
       </Modal>,
     );
 
-    fireEvent.click(screen.getByRole('dialog'));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.mouseDown(dialog);
+    fireEvent.mouseUp(dialog);
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onClose when the mousedown starts inside the content and the mouseup lands on the backdrop', () => {
+    const onClose = vi.fn();
+    render(
+      <Modal open title="Add account" onClose={onClose}>
+        <p>Modal body</p>
+      </Modal>,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.mouseDown(screen.getByText('Modal body'));
+    fireEvent.mouseUp(dialog);
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('does not call onClose when clicking inside the content', () => {
@@ -69,7 +86,8 @@ describe('Modal', () => {
       </Modal>,
     );
 
-    fireEvent.click(screen.getByText('Modal body'));
+    fireEvent.mouseDown(screen.getByText('Modal body'));
+    fireEvent.mouseUp(screen.getByText('Modal body'));
 
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -85,5 +103,35 @@ describe('Modal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not render the body while closed', () => {
+    render(
+      <Modal open={false} title="Add account" onClose={() => {}}>
+        <p>Modal body</p>
+      </Modal>,
+    );
+
+    expect(screen.queryByText('Modal body')).not.toBeInTheDocument();
+  });
+
+  it('focuses the first focusable element in the body when opened', () => {
+    render(
+      <Modal open title="Add account" onClose={() => {}} footer={<button type="button">Save</button>}>
+        <input aria-label="Name" />
+      </Modal>,
+    );
+
+    expect(screen.getByLabelText('Name')).toHaveFocus();
+  });
+
+  it('falls back to focusing the dialog when the body has no focusable element', () => {
+    render(
+      <Modal open title="Add account" onClose={() => {}}>
+        <p>Modal body</p>
+      </Modal>,
+    );
+
+    expect(screen.getByRole('dialog')).toHaveFocus();
   });
 });

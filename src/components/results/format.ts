@@ -25,6 +25,21 @@ const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat('en-GB', {
   month: 'short',
 });
 
+/** Pads a local date component (month or day) to two digits. */
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+/**
+ * Today's date in the viewer's local timezone, as `YYYY-MM-DD`. Used to compare against a
+ * result's `date` (also `YYYY-MM-DD`, no timezone) so "today" reflects the local calendar day
+ * rather than UTC's.
+ */
+export function todayLocalIso(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+}
+
 /** Formats an ISO timestamp as a date, e.g. "27 Oct 2026". */
 export function formatDate(iso: string): string {
   return DATE_FORMATTER.format(new Date(iso));

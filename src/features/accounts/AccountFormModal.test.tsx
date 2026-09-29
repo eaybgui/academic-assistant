@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AccountFormModal from './AccountFormModal';
 import { api } from '../../lib/api/client';
-import type { AccountInput } from '../../lib/api/types';
+import type { AccountDto, AccountInput } from '../../lib/api/types';
 
 vi.mock('../../lib/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/api/client')>();
@@ -20,11 +20,26 @@ vi.mock('../../lib/api/client', async (importOriginal) => {
 
 const mockedApi = vi.mocked(api, true);
 
-function renderModal() {
+const imapAccount: AccountDto = {
+  id: 3,
+  name: 'UV IMAP',
+  emailAddress: 'me@uv.es',
+  provider: { type: 'imap', host: 'imap.uv.es', port: 993, username: 'me@uv.es' },
+  folders: ['INBOX'],
+  defaultUniversityId: null,
+  initialSyncDays: 14,
+  enabled: true,
+  credentialsConfigured: true,
+  lastSync: { at: null, status: 'never', error: null },
+  createdAt: '2026-09-28T00:00:00Z',
+  updatedAt: '2026-09-28T00:00:00Z',
+};
+
+function renderModal(account: AccountDto | null = null) {
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
-      <AccountFormModal open account={null} universities={[]} onClose={() => {}} />
+      <AccountFormModal open account={account} universities={[]} onClose={() => {}} />
     </QueryClientProvider>,
   );
 }
@@ -115,5 +130,61 @@ describe('AccountFormModal', () => {
         }),
       ),
     );
+  });
+
+  it('prefills the form with the account being edited and sends the edited payload via updateAccount', async () => {
+    mockedApi.updateAccount.mockResolvedValue(imapAccount);
+
+    renderModal(imapAccount);
+
+    expect(screen.getByLabelText('Display name')).toHaveValue('UV IMAP');
+    expect(screen.getByLabelText('Email address')).toHaveValue('me@uv.es');
+    expect(screen.getByLabelText('IMAP host')).toHaveValue('imap.uv.es');
+    expect(screen.getByLabelText('Port (TLS)')).toHaveValue('993');
+    expect(screen.getByLabelText('Username')).toHaveValue('me@uv.es');
+    expect(screen.getByLabelText('Password')).toHaveValue('');
+
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'UV IMAP renamed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(mockedApi.updateAccount).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ name: 'UV IMAP renamed', emailAddress: 'me@uv.es' }),
+      ),
+    );
+  });
+
+  it('does not create a duplicate Microsoft account on a second Save', async () => {
+    const created = {
+      id: 9,
+      name: 'UAH',
+      emailAddress: 'me@uah.es',
+      provider: { type: 'microsoft_graph' as const, tenant: 'organizations' },
+      folders: ['inbox'],
+      defaultUniversityId: null,
+      initialSyncDays: 14,
+      enabled: true,
+      credentialsConfigured: false,
+      lastSync: { at: null, status: 'never' as const, error: null },
+      createdAt: '2026-09-28T00:00:00Z',
+      updatedAt: '2026-09-28T00:00:00Z',
+    };
+    mockedApi.addAccount.mockResolvedValue(created);
+    mockedApi.updateAccount.mockResolvedValue(created);
+
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Microsoft 365' }));
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'UAH' } });
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'me@uah.es' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(mockedApi.addAccount).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(mockedApi.updateAccount).toHaveBeenCalledWith(9, expect.anything()));
+
+    expect(mockedApi.addAccount).toHaveBeenCalledTimes(1);
   });
 });

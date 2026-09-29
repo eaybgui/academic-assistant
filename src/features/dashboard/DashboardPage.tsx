@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
-import type { ResultSort, RunDto } from '../../lib/api/types';
+import type { CommandError, ResultSort, RunDto } from '../../lib/api/types';
 import ErrorMessage from '../../components/ErrorMessage';
 import ResultCard from '../../components/results/ResultCard';
 import SortSelect from '../../components/results/SortSelect';
+import { useSetResultSeen } from '../../components/results/useSetResultSeen';
 import { formatRelativeDay, formatTime } from '../../components/results/format';
-import { useCheckRun } from './useCheckRun';
+import { useCheckRun } from '../check-run/useCheckRun';
 
 function formatLastCheck(run: RunDto | null): string {
   if (!run) return 'No checks yet.';
@@ -18,31 +19,37 @@ function formatLastCheck(run: RunDto | null): string {
 
 export default function DashboardPage() {
   const [sort, setSort] = useState<ResultSort>('upcoming');
+  const [isTriggering, setIsTriggering] = useState(false);
+  const [markAllError, setMarkAllError] = useState<CommandError | null>(null);
   const queryClient = useQueryClient();
 
   const dashboardQuery = useQuery({
     queryKey: queryKeys.dashboard(sort),
     queryFn: () => api.getDashboard(sort),
+    placeholderData: keepPreviousData,
   });
 
-  const { isRunning, progressLabel, triggerCheck, checkError } = useCheckRun(
-    dashboardQuery.data?.runningRunId ?? null,
-  );
+  const { running, progress, triggerCheck, error: checkError } = useCheckRun();
 
-  const seenMutation = useMutation({
-    mutationFn: ({ id, seen }: { id: number; seen: boolean }) => api.setResultSeen(id, seen),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      void queryClient.invalidateQueries({ queryKey: ['results'] });
-    },
-  });
+  async function handleCheckNow() {
+    setIsTriggering(true);
+    try {
+      await triggerCheck();
+    } finally {
+      setIsTriggering(false);
+    }
+  }
+
+  const seen = useSetResultSeen();
 
   const markAllSeenMutation = useMutation({
     mutationFn: () => api.markAllSeen(),
     onSuccess: () => {
+      setMarkAllError(null);
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['results'] });
     },
+    onError: (e) => setMarkAllError(toCommandError(e)),
   });
 
   const dashboard = dashboardQuery.data;
@@ -55,15 +62,16 @@ export default function DashboardPage() {
           <p className="mt-1 text-sm text-neutral-500">{formatLastCheck(dashboard?.lastRun ?? null)}</p>
         </div>
         <div className="text-right">
-          {isRunning ? (
+          {running ? (
             <p role="status" className="text-sm text-neutral-600">
-              {progressLabel ?? 'Checking…'}
+              {progress ?? 'Checking…'}
             </p>
           ) : (
             <button
               type="button"
-              onClick={() => void triggerCheck()}
-              className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800"
+              disabled={isTriggering}
+              onClick={() => void handleCheckNow()}
+              className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
             >
               Check now
             </button>
@@ -103,11 +111,13 @@ export default function DashboardPage() {
             <SortSelect value={sort} onChange={setSort} id="dashboard-sort" />
             <button
               type="button"
+              disabled={markAllSeenMutation.isPending}
               onClick={() => markAllSeenMutation.mutate()}
-              className="text-sm font-medium text-neutral-600 hover:text-neutral-900"
+              className="text-sm font-medium text-neutral-600 hover:text-neutral-900 disabled:opacity-50"
             >
               Mark all as seen
             </button>
+            <ErrorMessage error={markAllError} />
           </div>
         </div>
 
@@ -121,7 +131,9 @@ export default function DashboardPage() {
               <ResultCard
                 key={result.id}
                 result={result}
-                onSetSeen={(id, seen) => seenMutation.mutate({ id, seen })}
+                onSetSeen={(id, s) => seen.setSeen(id, s)}
+                pending={seen.isPending(result.id)}
+                error={seen.erroredId === result.id ? seen.error : null}
               />
             ))}
           </div>
