@@ -9,6 +9,7 @@ and the overall technical direction.
 
 | File | Description |
 |---|---|
+| [developer-guide.html](developer-guide.html) | Functional guide for new developers (open in a browser): what each part does, how a check runs, how the AI analysis works, the database and a hands-on tutorial |
 | [setup.md](setup.md) | Prerequisites, Microsoft Entra app registration, running in dev, building, where data lives |
 | [user-guide.md](user-guide.md) | Every screen and action, how a check works, privacy notes, troubleshooting |
 | [architecture.md](architecture.md) | Crates and dependency rule, data flow of a check, data model, security model, extension points |
