@@ -1,8 +1,8 @@
 # Secure storage (`academic-infra::secrets`)
 
 Implements the `academic_core::ports::SecretStore` trait (`get`/`set`/`delete`, keyed by
-an opaque string). Secrets never reach SQLite, logs, DTOs or the repository — see
-`docs/superpowers/specs/2026-09-28-phase-1-email-analysis-design.md` §12.
+an opaque string). Secrets never reach SQLite, logs, DTOs or the repository; see the security model in
+[../architecture.md](../architecture.md#security-and-privacy-model).
 
 ## `KeyringSecretStore`
 
@@ -35,8 +35,7 @@ Behavior:
   `keyring::Error`'s own `Display`) — it never includes the secret value, since the
   value is never part of a `keyring::Error`. `SecretError`'s own `Display` impl already
   prefixes the message with "Secure storage error: ", so `KeyringSecretStore` does not
-  add a prefix of its own (an earlier version did, producing a doubled "Secure storage
-  error: secure storage error: ..." message).
+  add a prefix of its own.
 
 `KeyringSecretStore` has no fields and no constructor function: construct it as a bare
 unit value, `KeyringSecretStore`.
@@ -58,11 +57,27 @@ by the real application. A second `#[ignore]`d test,
 verify `set_secret`/`get_secret` isn't limited to the 1280-char cap `set_password` would
 impose.
 
+## When secrets are written and removed
+
+The store itself is passive; the Tauri commands ([../app/tauri-commands.md](../app/tauri-commands.md))
+decide when keys change:
+
+- IMAP password (`academic-assistant/account/{id}/password`): written when an IMAP account is
+  added or edited with a password, removed when the account is deleted.
+- Microsoft refresh token (`academic-assistant/account/{id}/refresh-token`): written after a
+  successful sign-in whose mailbox matches the account, removed when the account is deleted.
+  Changing a Microsoft account's email or tenant discards it, so the account has to be signed
+  in again.
+- jev API key (`academic-assistant/jev-api-key`): written and removed from Settings.
+
+Account ids are never reused (`accounts.id` is `AUTOINCREMENT`), so a key left behind by a
+deleted account can never be picked up by a later one.
+
 ## `InMemorySecretStore`
 
 A `Mutex<HashMap<String, String>>`-backed fake, `pub` with `#[derive(Default)]`. Used by
-this crate's own tests and by other tasks' tests (analyzer, pipeline, Microsoft Graph,
-`src-tauri` command tests, etc.) that need a `SecretStore` without touching the OS.
+this crate's own tests (factories, Microsoft Graph) and by the `src-tauri` command
+tests, which need a `SecretStore` without touching the OS.
 Values live only for the lifetime of the store (typically one test).
 
 ## Known limitations

@@ -94,11 +94,13 @@ npx tauri build --debug --no-bundle
 
 ## 5. Where data lives
 
-The app stores its data in the Tauri application data directory, which on Windows is under
-`%APPDATA%` in a folder named after the bundle identifier (`dev.eaybar.academic-assistant`):
+The app stores its data in the Tauri application data directory, which on Windows is
+`%APPDATA%\dev.eaybar.academic-assistant` (a folder named after the bundle identifier in
+`src-tauri/tauri.conf.json`):
 
-- `academic-assistant.db`: the SQLite database (accounts, catalog, settings, runs, results).
-- `logs/`: the daily rolling application log.
+- `academic-assistant.db` (plus `-wal` and `-shm` files while the app runs): the SQLite
+  database (accounts, catalog, settings, runs, results).
+- `logs/academic-assistant.log.<YYYY-MM-DD>`: the daily rolling application log.
 
 Passwords, refresh tokens and the jev API key are **not** in that folder; they are in Windows
 Credential Manager under generic credentials whose names start with `academic-assistant/`.

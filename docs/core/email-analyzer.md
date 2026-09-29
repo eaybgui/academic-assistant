@@ -8,8 +8,8 @@ Module layout (`crates/core/src/analyzer/`):
 
 ```
 mod.rs          public API: constants, AnalysisInput, AnalysisRequest, build_request, analyze
-questions.rs    state + QuestionSet building (spec §6.1, §6.2)
-assemble.rs     answer validation + AnalysisOutcome assembly (spec §6.4)
+questions.rs    state + QuestionSet building
+assemble.rs     answer validation + AnalysisOutcome assembly
 test_support.rs shared test fixtures (#[cfg(test)] only)
 ```
 
@@ -44,7 +44,7 @@ assembles the returned `AnswerSet` — it does not retry or ask follow-up questi
 request before sending it, or assemble an `AnswerSet` obtained through another channel,
 as long as it passes the same `AnalysisInput` the questions were built from.
 
-## State (spec §6.1)
+## State
 
 ```json
 {
@@ -65,7 +65,7 @@ as long as it passes the same `AnalysisInput` the questions were built from.
   account has a `default_university_id` **and** that id resolves to a university in the
   catalog. Otherwise `context` is present as an empty object.
 
-## Question set (spec §6.2)
+## Question set
 
 Built in this fixed order (a `QuestionSet` is an `IndexMap`, so order is preserved for
 prompt building):
@@ -83,11 +83,10 @@ prompt building):
 
 Instruction and option texts for `relevant`, `action_required`, `possible_change`,
 `category`'s options, `priority`'s levels and `date_{i}`'s options are fixed strings
-from the spec/task contract (see `questions.rs`'s constants). `category`, `priority`,
-`university` and `course` also carry an `instructions` string (required by
-`Question::Choice`/`Question::Score`); the spec does not fix that text verbatim for
-these four questions, so `questions.rs` uses a short, direct prompt for each — this is
-an implementation detail, not part of the tested contract.
+(see `questions.rs`'s constants). `category`, `priority`, `university` and `course`
+also carry a short, direct `instructions` string (required by
+`Question::Choice`/`Question::Score`); that wording is an implementation detail, not
+part of the tested contract.
 
 **Candidate courses** (the courses offered by the `course` question, decided *before*
 any answer exists): the default university's courses when the account has one, else
@@ -104,7 +103,7 @@ per date candidate in `AnalysisInput::date_candidates` (itself already capped at
 same constant by `core::dates::extract`, so the `.take(...)` here is a defensive upper
 bound rather than a normally-reachable cap).
 
-## Validation and assembly (spec §6.4)
+## Validation and assembly
 
 `assemble` rebuilds the same `QuestionSet` `build_request` would have produced for
 `input`, then validates `answers` against it:
@@ -157,8 +156,8 @@ Run with `cargo test -p academic-core analyzer::`.
 
 ## Known limitations
 
-- No bound on the number of `university` options: unlike `course`, the spec does not
-  fix a cap, so a catalog with a very large number of universities would produce a
+- No bound on the number of `university` options: unlike `course`, there is no
+  cap, so a catalog with a very large number of universities would produce a
   correspondingly large `Question::Choice` (still subject to that type's documented
   2..=255-option range, which is not enforced by this module — a catalog with more
   than 254 universities would violate it).

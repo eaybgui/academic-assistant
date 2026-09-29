@@ -20,10 +20,20 @@ crates/infra/               academic-infra: adapters
   src/db/                   Database and one repository impl per module
   src/secrets.rs            KeyringSecretStore, InMemorySecretStore
   src/imap/, src/graph/     email providers (Graph includes OAuth and the loopback listener)
-  src/jev.rs, src/ollama.rs structured model adapters
+  src/jev.rs, src/ollama.rs structured model adapters (shared helper: src/http_util.rs)
   src/factory.rs            http_client, DefaultEmailProviderFactory, DefaultModelProvider
   tests/                    integration tests, fixtures/ (.eml and JSON), support/
 src-tauri/                  academic-assistant: composition root, commands, DTOs, events, logging
+  src/lib.rs                Tauri builder and the command registration list
+  src/setup.rs              startup: data directory, logging, database, AppState
+  src/state.rs              AppState (repositories, adapters, CheckRunner)
+  src/commands/             one module per area: runs, results, accounts, catalog, settings
+  src/dto/                  DTOs per area (accounts, catalog, results, runs, settings)
+  src/validation.rs         input validation and normalization
+  src/error.rs              CommandError and error mapping
+  src/account_status.rs     credentials/last-sync status and dashboard attention list
+  src/observer.rs           TauriRunObserver (run:progress / run:finished events)
+  src/test_support.rs       test harness (in-memory database and secrets, fake adapters)
   capabilities/default.json Tauri capability for the main window
   tauri.conf.json           window, CSP, bundle configuration
 src/                        React app
@@ -132,15 +142,17 @@ Contract first: define the input/output DTO shape and the error kinds before cod
    (`runs`, `results`, `accounts`, `catalog`, `settings`), returning `Result<T, CommandError>`.
    Validate inputs, use the shared `AppState`, never return or log secrets, bodies or subjects.
    Register it in the `tauri::generate_handler!` list in `src-tauri/src/lib.rs`.
-2. **DTOs**: add or extend the serde types in `src-tauri/src/dto.rs` with
-   `#[serde(rename_all = "camelCase")]`, plus conversions from/to the domain types. Map new error
+2. **DTOs and validation**: add or extend the serde types in the matching module of
+   `src-tauri/src/dto/` with `#[serde(rename_all = "camelCase")]`, plus conversions from/to the
+   domain types, and validate new inputs in `src-tauri/src/validation.rs`. Map new error
    sources in `src-tauri/src/error.rs`.
 3. **TypeScript**: mirror the DTOs exactly in `src/lib/api/types.ts`, and add one wrapper to the
    `api` object in `src/lib/api/client.ts` using the exact command name and argument object
    (`invoke('my_command', { camelCaseArg })`; Tauri maps camelCase keys to snake_case
    parameters). Add a key factory in `src/lib/api/queryKeys.ts` if the command reads data.
-4. **Tests**: DTO/JSON-shape and validation unit tests in Rust; an assertion of the command name
-   and arguments in `src/lib/api/client.test.ts`.
+4. **Tests**: DTO/JSON-shape and validation unit tests in Rust, and command tests against the
+   harness in `src-tauri/src/test_support.rs`; an assertion of the command name and arguments in
+   `src/lib/api/client.test.ts`.
 5. **Docs**: update [app/tauri-commands.md](app/tauri-commands.md) and
    [frontend/overview.md](frontend/overview.md) if the API surface changes.
 
@@ -165,7 +177,7 @@ Contract first: define the input/output DTO shape and the error kinds before cod
    `ProviderError`). Take secrets from `SecretStore`; never log message content.
 3. Handle the variant in `DefaultEmailProviderFactory::create` (`crates/infra/src/factory.rs`).
 4. Add a migration if the `accounts.provider_type` `CHECK` constraint must allow the new value,
-   and extend `ProviderDto`, `AccountInput` and the account form.
+   and extend `ProviderDto`, `ProviderInput` (in `AccountInput`) and the account form.
 5. Test with fixtures and `wiremock` (or a fake server); add an `#[ignore]` live test if
    appropriate. Add a doc under `docs/infra/`.
 

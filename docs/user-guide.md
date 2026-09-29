@@ -7,7 +7,7 @@ you have not installed or configured anything yet, start with [setup.md](setup.m
 
 1. **Settings**: pick the AI provider. With **Ollama**, make sure Ollama is running and the
    model is pulled (`ollama pull qwen3:8b`). With **jev**, use Replace key to enter your API
-   key. For Microsoft 365, enter the Entra client ID.
+   key. For Microsoft 365, enter the Entra application (client) ID.
 2. **Catalog** (optional but recommended): add your universities and courses, with aliases
    such as course codes. The AI uses them to name the course of each email.
 3. **Accounts**: add each mailbox and press **Test**.
@@ -28,8 +28,8 @@ results), Runs, Accounts, Catalog and Settings.
 - **Attention banners**: one per enabled account that needs action, for example an account
   whose last sync failed, or one that has no stored password or Microsoft sign-in.
 - **Counters** of unseen results: New, Tasks, Exams, Events, and Changes and notices.
-- **New results**: every unseen result, sorted by nearest upcoming date (default), priority or
-  received date. **Mark all as seen** clears the list.
+- **New results**: the unseen results (up to 100), sorted by nearest upcoming date (default),
+  priority or received date. **Mark all as seen** clears the list.
 - **Result card**: subject and priority badge; sender, course (university), account and
   received date; category; the dates found, each with its kind (exam, deadline, event, class,
   other); the tags **Action required** and **Possible change**; **Open email** (Microsoft 365
@@ -48,7 +48,7 @@ dates, flags, **Open email** / **Copy Message-ID**, and **Mark as seen** / **Mar
 
 ### Runs
 
-History of checks, newest first: status (Running, Success, Partial, Failed), start time,
+History of the latest 50 checks, newest first: status (Running, Success, Partial, Failed), start time,
 duration, trigger (Manual) and counters (found, filtered, analyzed, failed, results). Expand a
 run to see its error summary and each account's status; a failed account shows an error kind
 (authentication, connection, protocol, AI, internal) and a message.
@@ -63,7 +63,10 @@ One row per account: provider, email, default university, folders and last sync 
   - Microsoft 365 fields: display name, email, folders (default `inbox`), default university,
     first-sync days. After saving, press **Sign in with Microsoft**; your browser opens, you
     sign in, and the app receives the result on a local loopback address (5 minute limit). The
-    account you sign in with must match the email address entered, otherwise nothing is stored.
+    email address entered must match the mailbox you sign in with (its `mail` address or its
+    user principal name), otherwise nothing is stored.
+  - If you change the email address of a Microsoft 365 account, its sign-in is discarded and
+    you have to sign in again (the tenant cannot be changed after creation).
   - The provider type cannot be changed after creation. When editing an IMAP account, leave
     the password empty to keep the stored one.
   - Secrets are saved in Windows Credential Manager, never in the database.
@@ -88,7 +91,7 @@ used it as default keep working without a default university.
   key and Remove key), and the model name (default `jev-latest`).
 - **Ollama**: base URL (default `http://localhost:11434`) and model (default `qwen3:8b`).
 - **Test provider**: asks the selected provider one fixed question and reports the result.
-- **Microsoft Entra client ID**: needed for Microsoft 365 accounts ([setup.md](setup.md)).
+- **Entra application (client) ID**: needed for Microsoft 365 accounts ([setup.md](setup.md)).
 - **Blocked senders and domains**: one per line. An entry starting with `@` (for example
   `@newsletter.example.com`) blocks that exact domain (not its subdomains); any other entry
   blocks that exact address. Matching is case-insensitive. Blocked messages are discarded
@@ -155,15 +158,15 @@ answers with something unusable is marked failed and skipped; the rest continue.
 |---|---|
 | Microsoft sign-in fails with "Your organization requires admin approval for this app" | The university tenant blocks user consent. Ask IT to grant admin consent, or use one of the fallbacks in [setup.md](setup.md#university-tenants-and-admin-consent). |
 | "Set the Microsoft client ID in Settings" | Enter the Entra Application (client) ID in Settings and save. |
-| "Signed in as X, expected Y" | You signed in with a different Microsoft account than the account's email. Use **Reconnect** and pick the right one. |
-| "Your sign-in expired. Reconnect the account" or a Sign in banner | Press **Reconnect** on the account. |
+| "Signed in as X, expected Y" | You signed in with a different Microsoft account than the account's email. Use **Reconnect** (or **Sign in**) and pick the right one. |
+| "Your sign-in expired. Reconnect the account", "Sign in to this account" or a Sign in banner | Press **Reconnect** (or **Sign in**) on the account. This also happens after you change the email address of a Microsoft 365 account. |
 | IMAP test fails with an authentication error | Check host, username and password. Many providers (universities, Gmail, Outlook.com) require an **app password** or have IMAP disabled; create one in the provider's security settings. Only implicit TLS is supported (usually port 993). |
 | IMAP connection error or timeout | Verify the host and port, your network and any VPN requirement of the university. |
 | "The password is missing. Edit the account to set it" | Edit the IMAP account and enter the password. |
 | AI errors: provider unavailable (Ollama) | Start Ollama and check the base URL in Settings. If the model is missing, run `ollama pull <model>` (default `qwen3:8b`) and make sure the model name in Settings matches. Use **Test provider** to confirm. |
-| "Add your jev API key in Settings" | Choose Replace key in Settings and enter the key. |
+| "Add your jev API key in Settings" (a check shows it as "The AI provider is not configured: Add your jev API key in Settings") | Choose Replace key in Settings and enter the key. |
 | jev rejects the key (authentication error) | Replace the key. Rate limiting is retried automatically; if it persists, try again later. |
-| A check will not start | "Already running": wait for the current run to finish. "No enabled accounts": enable or add one. AI not configured: fix the provider in Settings. |
+| A check will not start | "A check is already running": wait for the current run to finish. "There are no enabled accounts": enable or add one. "The AI provider is not configured: ...": fix the provider in Settings. |
 | A run shows Failed with "Interrupted" | The app was closed or crashed during that run. On the next launch the run is marked interrupted; start a new check. Unprocessed messages are picked up again, because positions advance only after a batch is saved. |
 | A run seems stuck on Running | Wait for the AI provider (jev requests time out after 60 s, Ollama after 120 s); local models on slow hardware can be slow. If nothing changes, restart the app; the run will be marked Interrupted. |
 | Old messages are missing | The first sync covers only the account's first-sync days. Increase the value in the account form before its first check. |

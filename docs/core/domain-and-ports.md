@@ -11,13 +11,13 @@ adapters into `academic-core`'s ports and exposes Tauri commands.
 Module layout (`crates/core/src/`):
 
 ```
-lib.rs          re-exports: analyzer, dates, domain, filters, normalize, pipeline, ports
+lib.rs          public modules: analyzer, dates, domain, filters, normalize, pipeline, ports
 domain/         domain model (this document, "Domain" section)
 ports/          traits + port-level error types (this document, "Ports" section)
 normalize.rs    HTML→text, quote/signature stripping, content hash    (normalization-and-filters.md)
 filters.rs      deterministic pre-filters                             (normalization-and-filters.md)
 dates/          date candidate extraction                             (date-extraction.md)
-analyzer/       question building + answer assembly (EmailAnalyzer)   (email-analyzer.md)
+analyzer/       question building + answer assembly                    (email-analyzer.md)
 pipeline/       CheckRunner orchestration                             (pipeline.md)
 ```
 
@@ -42,10 +42,12 @@ on.
 - Structs derive `Debug, Clone, PartialEq` plus `Eq`/`Serialize`/`Deserialize`/`Copy`
   whenever every field supports them. Types holding an `f32` (`AIAnalysis`,
   `AnalysisOutcome`, the AI-provider `Answer` enum) cannot derive `Eq`.
-- Two data-carrying enums use external tagging instead of `as_str`/`FromStr`:
+- Two data-carrying enums use serde's internal tagging instead of `as_str`/`FromStr`:
   `SyncCursor` and `ProviderConfig`, both `#[serde(tag = "type", rename_all = "snake_case")]`.
-  Their JSON shape is what gets stored in the corresponding SQLite JSON columns
-  (`sync_state.cursor`, `accounts.provider_config`, owned by Task T6).
+  They are stored in SQLite JSON columns: `SyncCursor` in `sync_states.cursor` with its
+  `type` tag; `ProviderConfig` in `accounts.config` **without** the tag, because the
+  variant is stored separately in the `provider_type` column (see
+  [../infra/database.md](../infra/database.md)).
 
 ## Domain (`crate::domain`)
 
@@ -63,19 +65,20 @@ invalid input, for error messages.
 
 - **`AccountId = i64`**.
 - **`ProviderConfig`** — `Imap { host, port, username }` | `MicrosoftGraph { tenant }`.
-  JSON-tagged (`type`: `"imap"` | `"microsoft_graph"`). `.kind()` returns the matching
-  `ProviderKind`. Note: the IMAP variant intentionally has no password field — the
+  When serialized on its own it is JSON-tagged (`type`: `"imap"` | `"microsoft_graph"`),
+  but the database stores only the fields (`accounts.config`) and keeps the variant in
+  `accounts.provider_type`. `.kind()` returns the matching `ProviderKind`. Note: the IMAP variant intentionally has no password field — the
   password lives in the OS credential store under `account_password_key(id)`, never in
   the domain struct or the database.
 - **`ProviderKind`** — `Imap` (`"imap"`) | `MicrosoftGraph` (`"microsoft_graph"`).
-  Denormalized alongside `ProviderConfig` in storage so accounts can be filtered by
-  provider kind without deserializing the JSON config.
+  Stored in its own column (`accounts.provider_type`) next to the JSON config, which
+  omits the type tag; the kind selects how the config is parsed.
 - **`Account`** — a configured, persisted mailbox: id, display name, email address,
   provider config, folders to sync, optional default university (used by the analyzer
   to skip asking "which university" for single-university accounts), initial sync
-  window in days, enabled flag, timestamps. Owned/produced by
-  `AccountRepository` (Task T6); consumed by the pipeline (Task T12) and
-  `EmailProviderFactory` (Task T13).
+  window in days, enabled flag, timestamps. Produced by `AccountRepository`; consumed by
+  the pipeline ([pipeline.md](pipeline.md)) and `EmailProviderFactory`
+  ([../infra/factories.md](../infra/factories.md)).
 - **`AccountDraft`** — the same fields minus `id`/timestamps; the repository assigns
   those on `insert`/`update`.
 - Constants: `DEFAULT_GRAPH_TENANT = "organizations"`, `DEFAULT_IMAP_FOLDER = "INBOX"`,
@@ -91,10 +94,11 @@ invalid input, for error messages.
   message id (`provider_message_id`, used for dedup together with `content_hash`),
   optional RFC 5322 `Message-ID` header (angle brackets stripped), sender, recipients,
   subject, `received_at` (UTC), body, and an optional `source_url` (Graph deep link;
-  `None` for IMAP). Produced by `EmailProvider::fetch_new` implementations (Task T8/T9).
+  `None` for IMAP). Produced by `EmailProvider::fetch_new` implementations
+  ([IMAP](../infra/imap.md), [Microsoft Graph](../infra/microsoft-graph.md)).
 - **`SyncCursor`** — `Imap { uidvalidity, last_uid } | Graph { link }`, JSON-tagged
   (`type`: `"imap"` | `"graph"`). Opaque outside the matching provider; stored as JSON in
-  `sync_state.cursor` (Task T6) and round-tripped by value.
+  `sync_states.cursor` and round-tripped by value.
 - **`FetchBatch`** — `{ emails, next_cursor }`, the return value of
   `EmailProvider::fetch_new`.
 - **`MAX_BATCH: usize = 200`** — the largest batch a single `fetch_new` call may return;
@@ -103,7 +107,7 @@ invalid input, for error messages.
   `Error` (`"error"`).
 - **`SyncState`** — per-account, per-folder sync bookkeeping: cursor, last run/success
   timestamps, status, last error message (sanitized — never includes credentials).
-  Owned by `SyncStateRepository` (Task T6).
+  Owned by `SyncStateRepository`.
 
 ### Analysis (`analysis.rs`)
 
@@ -117,8 +121,8 @@ invalid input, for error messages.
 - **`ResultDate`** — `{ date: NaiveDate, time: Option<NaiveTime>, kind: DateKind }`, a
   date the AI model confirmed and classified, attached to a `StoredResult`.
 - **`DateCandidate`** — `{ span: String, date: NaiveDate, time: Option<NaiveTime> }`, a
-  date mention found in the raw text by `dates::extract` (Task T4) and offered to the
-  analyzer (Task T5) as something to confirm/classify. Not `Serialize`/`Deserialize`
+  date mention found in the raw text by `dates::extract` ([date-extraction.md](date-extraction.md))
+  and offered to the analyzer ([email-analyzer.md](email-analyzer.md)) as something to confirm/classify. Not `Serialize`/`Deserialize`
   (ephemeral, never persisted directly — only the model's confirmed subset becomes
   `ResultDate`s).
 - **`ModelDescriptor`** — `{ provider: String, model: String }`, identifies which AI
@@ -129,7 +133,7 @@ invalid input, for error messages.
   for any answer that fed the analysis), and the `ModelDescriptor`. Not `Eq`/`Serialize`
   (contains `f32`).
 - **`AnalysisOutcome`** — `Irrelevant { p_relevant: f32 } | Relevant(AIAnalysis)`, the
-  return value of `analyzer::assemble`/`analyzer::analyze` (Task T5).
+  return value of `analyzer::assemble`/`analyzer::analyze`.
 
 ### Catalog (`catalog.rs`)
 
@@ -147,13 +151,14 @@ invalid input, for error messages.
 - **`RunAccountStatus`** — `Success | Failed`, one account's outcome within a run.
 - **`ErrorKind`** — `Auth | Connection | Protocol | Ai | Internal`. Shared coarse
   classification used by `ProviderError::kind()`, and stored on `RunAccountResult` /
-  surfaced to the UI as `CommandError.kind` (via `src-tauri`'s DTO mapping, Task T14).
+  surfaced to the UI as the error kind of a failed account (via `src-tauri`'s DTO mapping,
+  see [../app/tauri-commands.md](../app/tauri-commands.md)).
 - **`Counters`** — `{ found, filtered, analyzed, failed, results_created }` (all `u32`),
   `Default` (all zero), `Copy`. `.add(&mut self, other: &Counters)` sums each field
   in place; used to fold per-account counters into the run total.
 - **`RunAccountResult`** — one account's outcome for a run: id, status, counters,
   optional `error_kind`/`error_message` (present only when `status == Failed`).
-- **`RunAccountView`** — `RunAccountResult` plus the account's display name, for
+- **`RunAccountView`** — `{ account_name, result: RunAccountResult }`, the result plus the account's display name, for
   read-side reporting (`RunRepository::get`/`history`/`latest` join account names in,
   ordered by account id).
 - **`RunRecord`** — a full run: id, trigger, start/finish timestamps, overall status,
@@ -164,21 +169,20 @@ invalid input, for error messages.
   persisted.
 - **`RunProgress`** — a live progress event: run/account id, account name, stage,
   `processed`/`total` message counts. Pushed to the UI as the `run:progress` Tauri event
-  (Task T14) via `RunObserver::progress`.
+  via `RunObserver::progress`.
 - **`RunError`** — errors that can prevent a run from starting/completing:
   `AlreadyRunning`, `NoEnabledAccounts`, `AiNotConfigured(String)`, `Storage(String)`.
-  Derives `Debug, Clone, PartialEq, Eq, thiserror::Error` (the plan's contract listing
-  showed only `#[derive(thiserror::Error)]`; `Debug` is added because
-  `std::error::Error` — which the `thiserror` derive implements — requires it, and
-  `Clone`/`PartialEq`/`Eq` follow the same "derive what's valid" rule used everywhere
-  else in `domain`, matching the sibling port error types below).
+  Derives `Debug, Clone, PartialEq, Eq, thiserror::Error`; its `Display` texts are the
+  user-facing messages ("A check is already running", "There are no enabled accounts",
+  "The AI provider is not configured: {0}", "Storage error: {0}").
 
 ### Results (`results.rs`)
 
 - **`MessageOutcome`** — `Filtered | Irrelevant | Analyzed | Failed`, what happened to
   one fetched email during pipeline processing.
 - **`FilterReason`** — `Duplicate | BlockedSender | BlockedDomain | OwnMessage | Empty`,
-  why a deterministic filter (Task T3) discarded an email before analysis.
+  why a deterministic filter ([normalization-and-filters.md](normalization-and-filters.md))
+  discarded an email before analysis.
 - **`ProcessedMessage`** — the dedup/audit row written for *every* email the pipeline
   looks at regardless of outcome: account/folder/provider id, optional `Message-ID`
   header, `content_hash` (from `normalize::content_hash`), `received_at`, `outcome`,
@@ -191,11 +195,11 @@ invalid input, for error messages.
   `Eq`/`Serialize` (via `AIAnalysis`'s `f32`).
 - **`StoredResult`** — a persisted, analyzed result as read back for display: adds `id`,
   denormalized `account_name`/`university_name`/`course_name` (joined at read time by
-  `ResultRepository`, Task T6), resolved `category`/`priority`/flags/`dates`
+  `ResultRepository`), the `Message-ID` header (`message_id_header`), resolved `category`/`priority`/flags/`dates`
   (post-analysis, no longer wrapped in `AIAnalysis`/`ModelDescriptor`), and `seen`/
   `seen_at`.
 - **`ResultSort`** — `Upcoming | Priority | Received`, ordering for `ResultQuery`; exact
-  tie-break semantics are `ResultRepository::query`'s responsibility (Task T6).
+  tie-break semantics are `ResultRepository::query`'s responsibility.
 - **`ResultQuery`** — filter + pagination for `ResultRepository::query`: free-text
   `search` (case-insensitive substring over subject/sender), `seen`, `category`,
   `account_id`, `course_id`, `sort`, `limit`, `offset`. All filters combine with AND.
@@ -214,7 +218,7 @@ invalid input, for error messages.
   `ollama_base_url: "http://localhost:11434"`, `ollama_model: "qwen3:8b"`,
   `microsoft_client_id: None`, `blocked_senders: []`. Note: no API key field —
   the jev API key is a secret (see below), never stored in `Settings`/SQLite.
-  Owned by `SettingsRepository` (Task T6): `load()` falls back to these defaults for
+  Owned by `SettingsRepository`: `load()` falls back to these defaults for
   any missing key.
 
 ### Secrets (`secrets.rs`)
@@ -234,9 +238,9 @@ Key-naming helpers for the OS credential store (never storage itself — see
 ## Ports (`crate::ports`)
 
 Traits and port-level error types only — no implementations. `academic-infra` provides
-the real adapters; `crates/core/src/ports/secrets.rs`'s sibling `InMemorySecretStore`
-(a test fake, owned by Task T7) and any other fakes used by `core`'s own unit tests are
-the only implementations that live outside `academic-infra`.
+the real adapters. `InMemorySecretStore` (a test fake) lives in `academic_infra::secrets`,
+not in `core`; `core`'s own tests use the fakes in `crates/core/tests/support/` and
+test-only modules.
 
 Split into `email.rs`, `model.rs`, `secrets.rs`, `repositories.rs`, `runtime.rs`, all
 re-exported flat from `crate::ports`.
@@ -248,11 +252,12 @@ re-exported flat from `crate::ports`.
   `Protocol → ErrorKind::Protocol`.
 - **`EmailProvider`** (`Send + Sync`, `#[async_trait]`) — a read-only connection to one
   account's mailbox: `test_connection()`, `fetch_new(folder, cursor, since)`. Implemented
-  by `ImapEmailProvider` (Task T8) and `MicrosoftGraphEmailProvider` (Task T9).
+  by `ImapEmailProvider` ([imap.md](../infra/imap.md)) and `MicrosoftGraphEmailProvider`
+  ([microsoft-graph.md](../infra/microsoft-graph.md)).
 - **`EmailProviderFactory`** (`Send + Sync`) — `create(&self, account: &Account) ->
   Result<Box<dyn EmailProvider>, ProviderError>`; builds the right provider for an
-  account's `ProviderConfig`. Implemented in `academic-infra::factory` (Task T13) and
-  consumed by the pipeline (Task T12) / `src-tauri` (Task T14).
+  account's `ProviderConfig`. Implemented in `academic-infra::factory`
+  ([factories.md](../infra/factories.md)) and consumed by the pipeline and `src-tauri`.
 
 ### AI models (`model.rs`)
 
@@ -263,28 +268,29 @@ re-exported flat from `crate::ports`.
   IndexMap<String,String> } | Score { instructions, levels: Vec<String> }`. "Noul" is a
   yes/no probability question.
 - **`Answer`** — `Noul { p_yes, confidence } | Choice { choice, confidence } | Score {
-  level, confidence }`, all with `Option<f32> confidence`.
+  level, confidence }`, all with `Option<f32> confidence`. `Score.level` is a `u8` index
+  into the question's `levels`.
 - **`ModelError`** — `Auth | RateLimited | Unavailable(String) | InvalidResponse(String)`.
   `.is_transient()` is `true` for `Auth`, `RateLimited`, `Unavailable`; `false` for
   `InvalidResponse` (a malformed reply, not a transient provider issue — retrying
   won't help).
 - **`StructuredModel`** (`Send + Sync`, `#[async_trait]`) — `descriptor()`,
   `ask(state, questions) -> Result<AnswerSet, ModelError>`. Implemented by `JevModel`
-  and `OllamaModel` (Task T7).
+  and `OllamaModel` ([ai-providers.md](../infra/ai-providers.md)).
 - **`ModelProvider`** (`Send + Sync`) — `current(&self, settings: &Settings) ->
   Result<Arc<dyn StructuredModel>, String>`; builds the model selected in `settings`,
   `Err(message)` when unusable (e.g. jev selected without an API key set) — the pipeline
-  (Task T12) maps that `Err` to `RunError::AiNotConfigured`. Implemented in
-  `academic-infra::factory` (Task T13).
+  maps that `Err` to `RunError::AiNotConfigured`. Implemented in
+  `academic-infra::factory`.
 
 ### Secrets (`secrets.rs`)
 
 - **`SecretError(pub String)`** — `"Secure storage error: {0}"`.
 - **`SecretStore`** (`Send + Sync`) — `get(key)`, `set(key, value)`, `delete(key)`
   (`Ok(())` even when the key doesn't exist). Implemented by
-  `academic-infra::secrets::KeyringSecretStore` (Windows Credential Manager) and
-  `InMemorySecretStore` (in-memory fake, also usable by other tasks' tests), both
-  Task T7.
+  `academic_infra::secrets::KeyringSecretStore` (Windows Credential Manager) and
+  `academic_infra::secrets::InMemorySecretStore` (an in-memory fake for tests; see
+  [../infra/secure-storage.md](../infra/secure-storage.md)).
 
 ### Repositories (`repositories.rs`)
 
@@ -310,7 +316,7 @@ re-exported flat from `crate::ports`.
 - **`SettingsRepository`** — `load` (missing keys fall back to `Settings::default()`
   values) / `save`.
 
-All seven traits are implemented by a single `academic_infra::db::Database` (Task T6),
+All seven traits are implemented by a single `academic_infra::db::Database`,
 backed by one SQLite connection guarded by a mutex.
 
 ### Runtime (`runtime.rs`)
@@ -320,7 +326,7 @@ backed by one SQLite connection guarded by a mutex.
   and timestamps are testable without depending on the real system clock.
 - **`SystemClock`** — the real `Clock`, backed by `chrono::Utc`/`chrono::Local`.
 - **`RunObserver`** (`Send + Sync`) — `progress(&RunProgress)`, `finished(run_id,
-  status)`; how the pipeline (Task T12) reports live progress to `src-tauri` (Task T14),
+  status)`; how the pipeline reports live progress to `src-tauri`,
   which forwards it as `run:progress`/`run:finished` Tauri events.
 
 ## Testing

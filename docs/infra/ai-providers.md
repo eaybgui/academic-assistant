@@ -12,10 +12,10 @@ answer names a real option, etc. — beyond the checks described below, they ret
 whatever the provider sent. A question id absent from the reply is simply absent from
 the returned `AnswerSet`; a fully-populated `AnswerSet` is not guaranteed. Full answer
 validation against the `QuestionSet` (missing answers, wrong option, wrong level) is
-`core::analyzer`'s job (Task T5), not the adapter's.
+`core::analyzer`'s job ([../core/email-analyzer.md](../core/email-analyzer.md)), not the adapter's.
 
 Neither adapter ever includes the API key, the `state` sent, or any answer content in an
-error message or a log line — see spec §12. Error messages are short, generic
+error message or a log line. Error messages are short, generic
 descriptions of what went wrong (a status code, "request timed out", "malformed
 response body", the id of a question whose answer didn't match its schema), never a
 dump of the request or response body.

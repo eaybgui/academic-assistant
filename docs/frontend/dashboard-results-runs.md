@@ -1,8 +1,8 @@
 # Dashboard, Results and Runs
 
-Three screens built on the API client from `src/lib/api/` (see `docs/frontend/overview.md`):
+Three screens built on the API client from `src/lib/api/` (see [overview.md](overview.md)):
 the Dashboard (`/`), Results (`/results`) and Runs (`/runs`) pages, plus the shared result
-components they (and later, other screens) reuse.
+components they reuse.
 
 ## Shared components (`src/components/results/`)
 
@@ -11,7 +11,7 @@ data and callbacks.
 
 - **`labels.ts`** — human labels for the DTO enums: `CATEGORY_LABELS`, `DATE_KIND_LABELS`,
   `PRIORITY_LABELS`, `RESULT_SORT_LABELS`. The model/provider and confidence are never shown
-  anywhere in the UI, per the design spec.
+  anywhere in the UI.
 - **`format.ts`** — date/time formatting, all via `Intl.DateTimeFormat('en-GB')`:
   `formatDate`, `formatDateTime`, `formatTime`, `formatResultDate(date, time)` (e.g.
   `"27 Oct 10:00"`, used for date chips), `formatRelativeDay` (`"today"` / `"yesterday"` / a
@@ -43,7 +43,7 @@ data and callbacks.
 - **`DashboardPage.tsx`** — `getDashboard(sort)` (sort state defaults to `'upcoming'`, previous
   data kept while a new sort loads via `placeholderData: keepPreviousData`); header
   with the last-check line (`"Last check today 09:14 · partial: 1 of 2 accounts failed"`, built
-  from `lastRun.status`/`errorSummary`) and the "Check now" button (disabled while `checkNow` is
+  from `lastRun.status`/`errorSummary`) and the "Check now" button (disabled while `triggerCheck` is
   pending; replaced by the progress label while a run is running); attention banners from
   `dashboard.attention`; five metric tiles (New, Tasks, Exams, Events, Changes and notices) from
   `dashboard.counts`; the "New results" list with the sort selector and "Mark all as seen"
@@ -61,7 +61,7 @@ dashboard/results/runs prefixes on any route. `progress` renders as e.g.
 `"UV IMAP: Analyzing 12/40"` (stage labels are human-readable; counts only for the `analyzing`
 stage) and is only shown while it belongs to the running run. A run reported by the dashboard query
 as `runningRunId` is adopted, and the running state is cleared when the dashboard shows
-`runningRunId === null` and `lastRun.id >=` the tracked id. See `docs/frontend/overview.md`.
+`runningRunId === null` and `lastRun.id >=` the tracked id. See [overview.md](overview.md).
 
 ## Results (`src/features/results/`)
 
@@ -125,6 +125,6 @@ Run with `npm run test`. Other gates: `npm run typecheck`, `npm run lint`, `npm 
   dropdowns (via React Query's cache, so this is cheap after the first load); there is no
   dedicated "filters options" endpoint.
 - The "Check now" progress label shows only the most recent `run:progress` event, not a running
-  log — matching the single-line progress example in the design spec.
+  log.
 - The check-run state is adopted from the dashboard query cache, so a check already running when
   the app starts is only noticed once some `['dashboard']` query has loaded (the sidebar's does).

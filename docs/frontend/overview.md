@@ -19,6 +19,8 @@ src/
     Layout.tsx                Sidebar navigation + content outlet
     Modal.tsx                 Native <dialog>-based modal
     ErrorMessage.tsx           Inline CommandError renderer
+    forms/                    Field, TextInput, Textarea, Select, Toggle, ConfirmDialog, icons
+    results/                  Result card, chips, labels, formatting helpers (shared by three screens)
   features/
     check-run/                App-level "Check now" state (CheckRunProvider, useCheckRun)
     dashboard/DashboardPage.tsx
@@ -28,7 +30,7 @@ src/
     catalog/CatalogPage.tsx
     settings/SettingsPage.tsx
   lib/api/
-    types.ts                  DTOs mirrored from the design spec (§10.1), verbatim
+    types.ts                  TypeScript mirror of the DTOs in src-tauri/src/dto/
     client.ts                 `api` object: one method per Tauri command
     events.ts                 `onRunProgress` / `onRunFinished` subscriptions
     queryKeys.ts               React Query key factories
@@ -36,7 +38,9 @@ src/
 ```
 
 The shared shell (`Layout`, `Modal`, `ErrorMessage`) and `src/lib/api/` are stable; screens should
-not need to change them.
+not need to change them. The screens are documented in
+[dashboard-results-runs.md](dashboard-results-runs.md) and
+[accounts-catalog-settings.md](accounts-catalog-settings.md).
 
 ## Modal (`src/components/Modal.tsx`)
 
@@ -63,8 +67,8 @@ and `['runs']` query prefixes.
 
 ## API client (`src/lib/api/client.ts`)
 
-`api` is a plain object with one method per backend command (see the design spec §10.2 for the
-full command table). Every method wraps `@tauri-apps/api/core`'s `invoke` with the exact command
+`api` is a plain object with one method per backend command (see
+[../app/tauri-commands.md](../app/tauri-commands.md) for the full command table). Every method wraps `@tauri-apps/api/core`'s `invoke` with the exact command
 name and argument object the backend expects — e.g. `api.getDashboard(sort)` calls
 `invoke('get_dashboard', { sort })`.
 
@@ -107,8 +111,8 @@ because of a typo.
 - UI copy is English, sentence case (e.g. "Check now", not "Check Now" or "CHECK NOW").
 - No component library; styling is Tailwind CSS v4 utility classes with a neutral light theme.
 - Modals use the native `<dialog>` element (`components/Modal.tsx`), not a custom overlay.
-- Routing is a hash router (`react-router`'s `HashRouter`), required for the Tauri `asset://`
-  packaging model.
+- Routing is a hash router (`react-router`'s `HashRouter`), so routes work when the built app is
+  served from bundled files without server-side routing.
 - Errors from commands are shown inline, next to the control that triggered them, via
   `ErrorMessage`.
 - Data fetching goes through React Query with the `api` client and `queryKeys`; no direct

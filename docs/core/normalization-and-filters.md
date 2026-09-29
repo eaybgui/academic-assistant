@@ -2,13 +2,13 @@
 
 Two pure modules used by the pipeline before an email reaches AI analysis:
 
-- `crate::normalize` — turns a raw [`Email`](./domain-and-ports.md#emails-emailrs)'s body
+- `crate::normalize` — turns a raw [`Email`](./domain-and-ports.md#email-emailrs)'s body
   into plain text suitable for hashing and for the analyzer's prompt.
 - `crate::filters` — deterministic, non-AI rules that decide whether a normalized
   email is worth sending to the analyzer at all.
 
 Both modules are pure: no I/O, no logging, no dependency on `academic-infra`. They are
-called from `core::pipeline::CheckRunner` (Task T12) in this order, per message:
+called from `core::pipeline::CheckRunner` ([pipeline.md](pipeline.md)) in this order, per message:
 `normalize_body` → `content_hash` (for dedup, see below) → `filters::apply`.
 
 ## `normalize` (`crates/core/src/normalize.rs`)
@@ -60,11 +60,10 @@ steps, always in this order:
 
 `content_hash(sender_email, subject, normalized_body)` returns the lowercase hex SHA-256
 digest of `lowercase(sender_email) + "\n" + trim(subject) + "\n" + normalized_body`. It
-is deterministic and used by the pipeline (Task T12) to detect duplicate messages across
-syncs (`processed_messages.content_hash`, see §5.1 of the design spec). Only the sender
-is lowercased (not trimmed) and only the subject is trimmed, matching the contract in
-the implementation plan exactly; callers that need a trimmed sender should trim before
-calling.
+is deterministic and used by the pipeline to detect duplicate messages across
+syncs (`processed_messages.content_hash`, see [../infra/database.md](../infra/database.md)).
+Only the sender is lowercased (not trimmed) and only the subject is trimmed; callers that
+need a trimmed sender should trim before calling.
 
 ### Edge cases
 
