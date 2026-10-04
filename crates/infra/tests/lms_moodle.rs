@@ -86,6 +86,20 @@ async fn invalid_token_is_an_auth_error() {
 }
 
 #[tokio::test]
+async fn expired_token_access_exception_on_verify_is_an_auth_error() {
+    let server = MockServer::start().await;
+    mock_site_info(
+        &server,
+        json!({ "exception": "moodle_exception", "errorcode": "accessexception", "message": "Access control exception" }),
+    )
+    .await;
+    assert!(matches!(
+        client(&server).verify().await,
+        Err(LmsError::Auth(_))
+    ));
+}
+
+#[tokio::test]
 async fn unavailable_function_is_a_protocol_error_naming_it() {
     let server = MockServer::start().await;
     mock_site_info(
