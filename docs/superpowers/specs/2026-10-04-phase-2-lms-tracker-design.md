@@ -75,7 +75,7 @@ pub enum LmsPlatform { Moodle, Blackboard }                       // "moodle" | 
 pub enum LoginState { Never, Ok, Expired, Error }                 // "never" | "ok" | "expired" | "error"
 pub enum SyncOutcome { Success, Failed, LoginRequired }           // "success" | "failed" | "login_required"
 
-pub struct University {
+pub struct LmsUniversity {
     pub id: i64, pub name: String,
     pub platform: LmsPlatform,
     pub base_url: String,                 // normalized https origin, no trailing slash
@@ -87,7 +87,7 @@ pub struct University {
     pub created_at: DateTime<Utc>,
 }
 
-pub struct Course {
+pub struct LmsCourse {
     pub id: i64, pub university_id: i64,
     pub external_id: String,              // Moodle "1234" · Blackboard "_10_1"
     pub name: String, pub short_name: Option<String>, pub url: Option<String>,
@@ -152,13 +152,13 @@ pub trait LmsClient: Send + Sync {
 }
 pub trait LmsClientFactory: Send + Sync {
     /// Reads the credential from SecretStore; missing credential → LmsError::Auth.
-    fn create(&self, university: &University) -> Result<Box<dyn LmsClient>, LmsError>;
+    fn create(&self, university: &LmsUniversity) -> Result<Box<dyn LmsClient>, LmsError>;
 }
 #[async_trait]
 pub trait LmsAuthenticator: Send + Sync {
     /// Hidden login attempt (≤ 20 s). On success the new credential is already stored
     /// and verified. Err(LmsError::Auth) when user interaction is required.
-    async fn renew_silently(&self, university: &University) -> Result<(), LmsError>;
+    async fn renew_silently(&self, university: &LmsUniversity) -> Result<(), LmsError>;
 }
 ```
 
@@ -309,12 +309,12 @@ type SyncOutcome = 'success'|'failed'|'login_required';
 type ItemKind = 'assignment'|'quiz'|'test'|'event'|'other';
 type EffectiveStatus = 'pending'|'overdue'|'submitted'|'graded'|'past_event';
 
-interface UniversityDto { id: number; name: string; platform: LmsPlatform; baseUrl: string;
+interface LmsUniversityDto { id: number; name: string; platform: LmsPlatform; baseUrl: string;
   loginState: LoginState; accountLabel: string|null;
   lastSync: { at: string|null; outcome: SyncOutcome|null; error: string|null };
   courses: { tracked: number; total: number; unreviewed: number } }
 interface UniversityInput { name: string; platform: LmsPlatform; baseUrl: string }
-interface CourseDto { id: number; universityId: number; name: string; shortName: string|null;
+interface LmsCourseDto { id: number; universityId: number; name: string; shortName: string|null;
   url: string|null; tracked: boolean; available: boolean; isNew: boolean /* !reviewed */ }
 
 interface GradeDto { display: string; score: number|null; max: number|null }
@@ -325,7 +325,7 @@ interface LmsItemDto { id: number; universityId: number; universityName: string;
   change: { kind: 'new' } | { kind: 'due_changed'; previousDueAt: string|null } | null;
   removedAt: string|null; done: boolean; hidden: boolean; note: string|null }
 interface TrackerQuery { universityId: number|null; includeHidden: boolean; includeRemoved: boolean }
-interface TrackerDto { items: LmsItemDto[]; universities: UniversityDto[]; syncRunning: boolean }
+interface TrackerDto { items: LmsItemDto[]; universities: LmsUniversityDto[]; syncRunning: boolean }
 
 interface LmsSyncResultDto { universityId: number; universityName: string; outcome: SyncOutcome;
   newItems: number; dueChanged: number; removed: number; error: string|null }
@@ -424,3 +424,15 @@ All command calls go through `src/lib/api/` (client, types, query keys, events),
 - Background sync and Windows notifications.
 - Platform announcements (Blackboard `announcements`, Moodle news forum) feeding the Announcements section.
 - Other graded Moodle activity types (workshop, lesson, graded forums).
+
+## 18. Amendments made while planning (2026-10-04)
+
+These override the sections above where they differ.
+
+1. **Naming.** The LMS domain types are `LmsUniversity` and `LmsCourse`, and their DTOs `LmsUniversityDto` and `LmsCourseDto` (§4.1, §9.1), wherever the text above says `University`, `Course`, `UniversityDto` or `CourseDto` in an LMS context. The existing `University`, `Course` and `Catalog` types (and the `UniversityDto`/`CourseDto` catalog DTOs) stay as the analyzer's read-only catalog projection built by `CatalogRepository::catalog()`.
+2. **`get_catalog` stays**, read-only, returning that projection (used by the email account form and the results course filter). Only the catalog CRUD commands are removed.
+3. **Migrations.** `0002_lms.sql` contains only `universities` and `courses` (§8 items 1–2). `lms_items` and its index move to `0003_lms_items.sql`, delivered in M3, so a database migrated during the M1 validation never needs an edited migration.
+4. **Session check.** New core function `ensure_session` (verify; on `Auth`, silent renewal, then verify again; updates `login_state`) and command `lms_check_session { id } → LmsUniversityDto`, shown as "Check connection" on the Universities page. `LmsSyncRunner` (M3) calls the same function before fetching.
+5. **Incremental port.** In M1 `LmsClient` has `verify` and `list_courses`; M2 adds `fetch_items` and the item types.
+6. **Fixtures.** Capturing anonymized API fixtures is the first task of M2 instead of an M1 exit criterion.
+7. **Stored credential readability.** A stored Blackboard session that cannot be parsed, or a missing secret, is reported by the factory as `LmsError::Auth`, so it follows the renewal path.
