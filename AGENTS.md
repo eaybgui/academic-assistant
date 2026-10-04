@@ -348,6 +348,24 @@ Utilizar mecanismos apropiados de configuración y gestión de secretos.
 
 Si se encuentra accidentalmente un secreto existente, **no debe copiarse, exponerse ni incluirse en la salida del agente**.
 
+### 11.2 Repositorio público: datos personales
+
+**El repositorio de GitHub es público.** Todo lo que se commitea puede ser leído por cualquiera y queda en el historial.
+
+Nunca debe commitearse información personal del usuario ni datos obtenidos de sus cuentas reales:
+
+- respuestas reales de Moodle, Blackboard, correo u otras fuentes (aunque estén "redactadas");
+- identificadores reales (ids de usuario, de curso, de entrega, de calendario, tenant ids, client ids);
+- nombres de asignaturas, títulos de tareas, notas, calificaciones, nombres de profesores o compañeros;
+- direcciones de correo, nombres de usuario o cualquier dato que identifique al usuario.
+
+Reglas:
+
+- Los tests y la documentación usan **solo datos inventados** (ids como `_1234_1`, nombres como "Ana Pérez", asignaturas genéricas).
+- Las capturas de APIs reales (fixtures) se guardan únicamente en carpetas ignoradas por git (`crates/infra/tests/fixtures/lms-local/`) y los tests que las usan deben saltarse cuando no existan.
+- Antes de cada commit con datos de ejemplo, comprobar que no proceden de las cuentas reales.
+- Si se detecta un dato real ya commiteado, avisar al planificador/usuario: puede requerir reescribir el historial antes de hacer push.
+
 ---
 
 ## 12. Cambios mínimos
