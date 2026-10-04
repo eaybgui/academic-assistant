@@ -13,10 +13,20 @@ const MAX_PAGES: usize = 50;
 const API_PREFIX: &str = "/learn/api/";
 
 /// One captured session cookie. The stored credential is a JSON array of these.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionCookie {
     pub name: String,
     pub value: String,
+}
+
+/// Hand-written so that logging a cookie never prints its secret value.
+impl std::fmt::Debug for SessionCookie {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionCookie")
+            .field("name", &self.name)
+            .field("value", &"<redacted>")
+            .finish()
+    }
 }
 
 pub fn encode_session(cookies: &[SessionCookie]) -> String {
@@ -137,10 +147,16 @@ impl BlackboardClient {
             }
             let page: Page<T> = self.get(&path).await?;
             items.extend(page.results);
-            next = page
-                .paging
-                .and_then(|p| p.next_page)
-                .filter(|p| p.starts_with(API_PREFIX));
+            next = match page.paging.and_then(|p| p.next_page) {
+                None => None,
+                Some(link) if link.is_empty() => None,
+                Some(link) if link.starts_with(API_PREFIX) => Some(link),
+                Some(_) => {
+                    return Err(LmsError::Protocol(
+                        "Blackboard returned an unexpected page link".into(),
+                    ))
+                }
+            };
         }
         Ok(items)
     }
@@ -187,5 +203,21 @@ impl LmsClient for BlackboardClient {
                 })
             })
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_output_redacts_the_cookie_value() {
+        let cookie = SessionCookie {
+            name: "BbRouter".into(),
+            value: "super-secret".into(),
+        };
+        let printed = format!("{cookie:?}");
+        assert!(printed.contains("BbRouter"), "{printed}");
+        assert!(!printed.contains("super-secret"), "{printed}");
     }
 }

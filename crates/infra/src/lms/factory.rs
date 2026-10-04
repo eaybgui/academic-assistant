@@ -24,7 +24,12 @@ impl LmsClientFactory for DefaultLmsClientFactory {
         let credential = self
             .secrets
             .get(&lms_credential_key(university.platform, university.id))
-            .map_err(|e| LmsError::Protocol(e.to_string()))?
+            .map_err(|_| {
+                LmsError::Auth(format!(
+                    "The saved sign-in for {} could not be read; sign in again",
+                    university.name
+                ))
+            })?
             .ok_or_else(|| LmsError::Auth(format!("Sign in to {} to continue", university.name)))?;
         self.create_with_credential(university, &credential)
     }

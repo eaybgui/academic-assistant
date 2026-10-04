@@ -129,3 +129,20 @@ fn sessions_round_trip_and_garbage_is_an_auth_error() {
     assert!(matches!(decode_session("not json"), Err(LmsError::Auth(_))));
     assert!(matches!(decode_session("[]"), Err(LmsError::Auth(_))));
 }
+
+#[tokio::test]
+async fn a_next_page_link_outside_the_api_is_a_protocol_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/learn/api/public/v1/users/me/courses"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [ { "courseId": "_1_1", "course": { "id": "_1_1", "courseId": "A", "name": "A" } } ],
+            "paging": { "nextPage": "https://evil.example/learn/api/x" }
+        })))
+        .mount(&server)
+        .await;
+    assert!(matches!(
+        client(&server).list_courses().await,
+        Err(LmsError::Protocol(_))
+    ));
+}

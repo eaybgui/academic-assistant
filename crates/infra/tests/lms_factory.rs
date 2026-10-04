@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use academic_core::domain::{lms_credential_key, LmsPlatform, LmsUniversity, LoginState};
-use academic_core::ports::{LmsClientFactory, LmsError, SecretStore};
+use academic_core::ports::{LmsClientFactory, LmsError, SecretError, SecretStore};
 use academic_infra::lms::factory::DefaultLmsClientFactory;
 use academic_infra::secrets::InMemorySecretStore;
 use chrono::Utc;
@@ -68,4 +68,29 @@ fn stored_credentials_build_clients() {
     assert!(f
         .create_with_credential(&uni(LmsPlatform::Moodle), "fresh")
         .is_ok());
+}
+
+struct FailingSecretStore;
+
+impl SecretStore for FailingSecretStore {
+    fn get(&self, _key: &str) -> Result<Option<String>, SecretError> {
+        Err(SecretError("backend exploded".into()))
+    }
+
+    fn set(&self, _key: &str, _value: &str) -> Result<(), SecretError> {
+        Err(SecretError("backend exploded".into()))
+    }
+
+    fn delete(&self, _key: &str) -> Result<(), SecretError> {
+        Err(SecretError("backend exploded".into()))
+    }
+}
+
+#[test]
+fn an_unreadable_secret_store_is_an_auth_error_without_the_detail() {
+    let f = DefaultLmsClientFactory::new(Arc::new(FailingSecretStore), reqwest::Client::new());
+    match f.create(&uni(LmsPlatform::Moodle)) {
+        Err(LmsError::Auth(m)) => assert!(!m.contains("exploded"), "{m}"),
+        other => panic!("{:?}", other.map(|_| ())),
+    }
 }
