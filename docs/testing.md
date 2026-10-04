@@ -144,3 +144,35 @@ Run with a real Ollama and, separately, with jev (see [setup.md](setup.md) for p
     and compare quality, including Spanish emails.
 12. Confirm no secrets or message bodies appear in the database or in the log files under the
     app data directory ([app/logging-and-data.md](app/logging-and-data.md)).
+
+## Phase 2 · M1 sign-in gate (manual, real accounts)
+
+Run `npm run tauri dev`. Record date, result and observations for each line in the PR/merge notes.
+
+1. Universities → Add university → "UV", Moodle, `aulavirtual.uv.es` → Continue shows `https://aulavirtual.uv.es`.
+2. Sign in → the UV login opens in a separate window → after login the window closes by itself and the dialog shows "Connected as …".
+3. Repeat with "UAH", Blackboard, `uah.blackboard.com` (Microsoft login). Same result.
+4. Wrong platform: add `aulavirtual.uv.es` as Blackboard → "This URL is not a Blackboard Learn site". Add `aulavirtual.uv.es` again as Moodle → "This platform is already added".
+5. Close the sign-in window before finishing → "Sign-in cancelled"; signing in again works.
+6. Restart the app → both universities still "Connected"; "Check connection" on each succeeds.
+7. Live test for each university (see `crates/infra/tests/lms_live.rs`) prints the display name and a course count > 0.
+8. Silent renewal: delete the stored credential (`cmdkey /list | findstr university` then `cmdkey /delete:<target>`), press "Check connection": the session is renewed without a visible window (no login prompt) and the card shows "Connected". If the IdP requires interaction, the card shows "Session expired" and "Sign in" works — record which happened for UV and UAH.
+9. Leave the app for several hours (or overnight), then "Check connection" on UAH: record whether the Blackboard session had expired and whether renewal was silent. Record how long the Moodle token kept working.
+10. Sign out → card shows "Not signed in"; the credential is gone from `cmdkey /list`. Delete → the university disappears.
+11. Logs (`%APPDATA%/dev.eaybar.academic-assistant/logs`): no tokens, cookie values or login-window URLs; only university ids, stages and error kinds.
+12. Credential size: step 3 succeeded without "too large to store securely" (if it failed, note the cookie names logged).
+
+### Login window behaviour (runtime only)
+
+These cannot be covered by automated tests; check them while doing the steps above.
+
+1. **Moodle redirect.** After the UV login there is no Windows "open app"/"choose an app" prompt and no error page for `moodlemobile://`. The window closes by itself.
+2. **Moodle site address.** Moodle sign-in succeeds, which also confirms the configured URL equals Moodle's own site address. If it fails with "The Moodle sign-in could not be verified", note it.
+3. **Hidden windows.** A silent renewal (item 8) shows no window flash or taskbar entry.
+4. **Blackboard landing.** Blackboard sign-in only completes after the real login. The window never closes on an intermediate page.
+5. **Closing the login window.** It never closes the main app.
+6. **Second sign-in.** Starting a second sign-in for the same university while its window is open focuses the existing window and shows "A sign-in window for this university is already open".
+7. **Two universities.** Two different universities can have sign-in windows open at the same time.
+8. **Saved session.** After restarting the app, signing in again to an already-signed-in IdP may complete without typing the password. Record whether it did. The `lms-auth` profile folder in the app data directory exists.
+9. **No app access from the login window.** In the login window, the developer console (if available in dev builds) shows `window.__TAURI_INTERNALS__` is undefined or invoking a command fails.
+10. **Interactive timeout.** Leave an interactive sign-in window idle for 10 minutes. It closes and the dialog shows "Sign-in timed out" (optional, record if done).
