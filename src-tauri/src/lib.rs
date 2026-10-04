@@ -14,6 +14,8 @@ mod state;
 mod test_support;
 mod validation;
 
+use tauri::Manager;
+
 use commands::{accounts, catalog, results, runs, settings, universities};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -21,6 +23,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| setup::initialize(app))
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                lms_auth::close_all_login_windows(window.app_handle());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             runs::check_now,
             runs::get_dashboard,

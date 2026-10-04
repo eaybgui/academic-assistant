@@ -11,7 +11,7 @@ use tauri::{AppHandle, State};
 use super::logged;
 use crate::dto::{LmsUniversityDto, LmsUniversityInput, ProbeDto};
 use crate::error::CommandError;
-use crate::lms_auth::{capture_credential, LoginMode};
+use crate::lms_auth::{capture_credential, close_login_window, LoginMode};
 use crate::state::AppState;
 use crate::validation;
 
@@ -60,10 +60,15 @@ pub async fn rename_university(
 
 #[tauri::command]
 pub async fn remove_university(
+    app: AppHandle,
     state: State<'_, AppState>,
     id: UniversityId,
 ) -> Result<(), CommandError> {
-    logged("remove_university", remove(&state, id))
+    let removed = logged("remove_university", remove(&state, id));
+    if removed.is_ok() {
+        close_login_window(&app, id);
+    }
+    removed
 }
 
 #[tauri::command]
@@ -77,7 +82,7 @@ pub async fn lms_sign_in(
         async {
             let university = find(&state, id)?;
             let captured = capture_credential(&app, &university, LoginMode::Interactive).await;
-            complete_sign_in(&state, id, captured).await
+            complete_sign_in(&state, &university, captured).await
         }
         .await,
     )
@@ -182,12 +187,19 @@ fn remove(state: &AppState, id: UniversityId) -> Result<(), CommandError> {
     Ok(state.universities.delete_university(id)?)
 }
 
+/// Verifies the credential against the university the capture started with; if it was
+/// removed or replaced meanwhile (ids can be reused) nothing is stored.
 async fn complete_sign_in(
     state: &AppState,
-    id: UniversityId,
+    captured_for: &LmsUniversity,
     captured: Result<String, LmsError>,
 ) -> Result<LmsUniversityDto, CommandError> {
+    let id = captured_for.id;
     let university = find(state, id)?;
+    if university.platform != captured_for.platform || university.base_url != captured_for.base_url
+    {
+        return Err(CommandError::not_found(NOT_FOUND));
+    }
     let credential = captured?;
     match adopt_credential(
         &university,
@@ -257,6 +269,10 @@ mod tests {
         insert_validated(&h.state, name, LmsPlatform::Moodle, url).unwrap()
     }
 
+    fn stored(h: &crate::test_support::Harness, id: UniversityId) -> LmsUniversity {
+        find(&h.state, id).unwrap()
+    }
+
     #[test]
     fn names_are_required_and_urls_normalized() {
         let h = harness();
@@ -302,7 +318,7 @@ mod tests {
     async fn successful_sign_in_stores_the_credential_and_marks_ok() {
         let h = harness();
         let u = add(&h, "UV", "https://aulavirtual.uv.es");
-        let dto = complete_sign_in(&h.state, u.id, Ok("tok".into()))
+        let dto = complete_sign_in(&h.state, &stored(&h, u.id), Ok("tok".into()))
             .await
             .unwrap();
         assert_eq!(dto.login_state, LoginState::Ok);
@@ -317,12 +333,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sign_in_for_a_replaced_or_removed_university_stores_nothing() {
+        let h = harness();
+        let u = add(&h, "UV", "https://aulavirtual.uv.es");
+        let key = lms_credential_key(LmsPlatform::Moodle, u.id);
+        let mut captured_for = stored(&h, u.id);
+        captured_for.base_url = "https://other.example.org".into();
+        let error = complete_sign_in(&h.state, &captured_for, Ok("tok".into()))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            (error.kind, error.message.as_str()),
+            (CommandErrorKind::NotFound, "University not found")
+        );
+        assert_eq!(h.secrets.get(&key).unwrap(), None);
+
+        let captured_for = stored(&h, u.id);
+        remove(&h.state, u.id).unwrap();
+        let error = complete_sign_in(&h.state, &captured_for, Ok("tok".into()))
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind, CommandErrorKind::NotFound);
+        assert_eq!(h.secrets.get(&key).unwrap(), None);
+    }
+
+    #[tokio::test]
     async fn cancelled_sign_in_changes_nothing() {
         let h = harness();
         let u = add(&h, "UV", "https://aulavirtual.uv.es");
         let error = complete_sign_in(
             &h.state,
-            u.id,
+            &stored(&h, u.id),
             Err(LmsError::Auth("Sign-in cancelled".into())),
         )
         .await
@@ -344,9 +385,11 @@ mod tests {
             ..FakeLmsBehavior::default()
         });
         let u = add(&h, "UV", "https://aulavirtual.uv.es");
-        assert!(complete_sign_in(&h.state, u.id, Ok("tok".into()))
-            .await
-            .is_err());
+        assert!(
+            complete_sign_in(&h.state, &stored(&h, u.id), Ok("tok".into()))
+                .await
+                .is_err()
+        );
         assert_eq!(
             universities(&h.state).unwrap()[0].login_state,
             LoginState::Error
@@ -370,7 +413,7 @@ mod tests {
             .universities
             .set_login(u.id, LoginState::Ok, Some("Ana Pérez"))
             .unwrap();
-        let error = complete_sign_in(&h.state, u.id, Ok("tok".into()))
+        let error = complete_sign_in(&h.state, &stored(&h, u.id), Ok("tok".into()))
             .await
             .unwrap_err();
         assert_eq!(error.kind, CommandErrorKind::Connection);

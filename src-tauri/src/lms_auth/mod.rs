@@ -3,4 +3,7 @@
 mod capture;
 mod window;
 
-pub use window::{capture_credential, LoginMode, TauriLmsAuthenticator};
+pub use window::{
+    capture_credential, close_all_login_windows, close_login_window, LoginMode,
+    TauriLmsAuthenticator,
+};

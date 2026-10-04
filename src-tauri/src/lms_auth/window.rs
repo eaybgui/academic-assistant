@@ -6,7 +6,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 
-use academic_core::domain::{LmsPlatform, LmsUniversity};
+use academic_core::domain::{LmsPlatform, LmsUniversity, UniversityId};
 use academic_core::lms::{adopt_credential, SessionError};
 use academic_core::ports::{LmsAuthenticator, LmsClientFactory, LmsError, SecretStore};
 use academic_infra::lms::moodle::decode_launch_token;
@@ -23,6 +23,7 @@ use super::capture::{
 };
 
 const AUTH_PROFILE_DIR: &str = "lms-auth";
+const LOGIN_LABEL_PREFIX: &str = "lms-login-";
 const INTERACTIVE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const SILENT_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -50,6 +51,26 @@ impl Drop for LoginWindow {
     }
 }
 
+fn login_label(id: UniversityId) -> String {
+    format!("{LOGIN_LABEL_PREFIX}{id}")
+}
+
+/// Destroys the university's sign-in window, if one is open.
+pub fn close_login_window(app: &AppHandle, id: UniversityId) {
+    if let Some(window) = app.get_webview_window(&login_label(id)) {
+        let _ = window.destroy();
+    }
+}
+
+/// Destroys every open sign-in window so the process can exit with the main window.
+pub fn close_all_login_windows(app: &AppHandle) {
+    for (label, window) in app.webview_windows() {
+        if label.starts_with(LOGIN_LABEL_PREFIX) {
+            let _ = window.destroy();
+        }
+    }
+}
+
 enum Signal {
     MoodlePayload(String),
     BlackboardSignedIn,
@@ -61,7 +82,7 @@ pub async fn capture_credential(
     university: &LmsUniversity,
     mode: LoginMode,
 ) -> Result<String, LmsError> {
-    let label = format!("lms-login-{}", university.id);
+    let label = login_label(university.id);
     if let Some(existing) = app.get_webview_window(&label) {
         if mode == LoginMode::Silent {
             return Err(LmsError::Auth("Sign-in required".into()));
