@@ -1,314 +1,241 @@
-# Academic Assistant — Especificación técnica
+# Academic Assistant — Technical specification
 
-## 1. Stack inicial
-- Tauri.
-- Rust.
-- React.
-- TypeScript.
-- Tailwind CSS.
-- SQLite.
+This document describes the overall architecture. The detailed design of each phase lives in `docs/superpowers/specs/` (Phase 1: `2026-09-28-phase-1-email-analysis-design.md`).
 
-La aplicación será local-first, modular y extensible.
+## 1. Stack
+- Tauri 2.
+- Rust (stable, MSVC toolchain on Windows).
+- React + TypeScript (Vite).
+- Tailwind CSS v4.
+- SQLite (`rusqlite`, bundled).
+- npm as the frontend package manager.
 
-## 2. Arquitectura
+The application is local-first, modular and extensible.
+
+## 2. Architecture
 
 ```text
 Tauri Desktop
-├── React + TypeScript + Tailwind
+├── React + TypeScript + Tailwind        (src/)
 │   ├── Dashboard
-│   ├── Avisos / historial
-│   └── Configuración
+│   ├── Results / Runs
+│   └── Accounts / Catalog / Settings
 │
-└── Rust Core
-    ├── Scheduler
-    ├── Source orchestration
-    ├── Change detection
-    ├── AI orchestration
-    ├── Notifications
-    ├── Secure credentials
-    └── SQLite
-         ├── Accounts
-         ├── Sync state
-         ├── AI results
-         └── Runs
+└── Rust (Cargo workspace)
+    ├── crates/core      domain, ports (traits), filters, date candidates,
+    │                    analyzer, CheckRunner pipeline — no I/O
+    ├── crates/infra     SQLite, IMAP, Microsoft Graph, jev, Ollama,
+    │                    Windows Credential Manager — implements core ports
+    └── src-tauri        composition root + thin Tauri commands/events
 ```
 
-React no accederá directamente a correo, SQLite o proveedores externos. Se comunicará con Rust mediante comandos/eventos de Tauri.
+React never accesses email, SQLite or external providers directly. It communicates with Rust through Tauri commands and events.
 
-## 3. Capas
+Dependency rule: `src-tauri → infra → core`. `core` never depends on `infra` or `src-tauri`; the compiler enforces it through crate boundaries.
+
+## 3. Layers
 
 ### Presentation
-React/TypeScript: presentación, formularios, configuración, estado de lectura e invocación de comandos.
+React/TypeScript: presentation, forms, configuration, read state and command invocation. No business logic.
 
-### Application/Core
-Rust: orquestación, sincronización, filtros, IA, persistencia, scheduler y notificaciones.
+### Application/Core (`crates/core`)
+Domain model, ports, orchestration (pipeline), filters, date candidate extraction and AI question design. Pure Rust, testable with fakes.
 
-### Infrastructure
-Implementaciones concretas de SQLite, IMAP, Microsoft Graph/Exchange, proveedores de IA, almacenamiento seguro y notificaciones.
+### Infrastructure (`crates/infra`)
+Concrete implementations: SQLite repositories and migrations, IMAP, Microsoft Graph, jev, Ollama, secure storage.
 
-Las capas superiores dependerán de abstracciones y no de implementaciones concretas.
+Upper layers depend on abstractions, never on concrete implementations.
 
-## 4. Providers de correo
-
-Se definirá una abstracción equivalente a:
+## 4. Email providers
 
 ```rust
-trait EmailProvider {
-    fn test_connection(&self) -> Result<ConnectionStatus>;
-    fn get_new_messages(&self, state: &SyncState) -> Result<Vec<Email>>;
+#[async_trait]
+trait EmailProvider: Send + Sync {
+    async fn test_connection(&self) -> Result<(), ProviderError>;
+    async fn fetch_new(&self, folder: &str, cursor: Option<&SyncCursor>, since: DateTime<Utc>)
+        -> Result<FetchBatch, ProviderError>;
 }
 ```
 
-Implementaciones previstas:
+Implementations:
 
 ```text
 EmailProvider
-├── ImapEmailProvider
-└── MicrosoftGraphEmailProvider
+├── ImapEmailProvider            (Phase 1)
+└── MicrosoftGraphEmailProvider  (Phase 1)
 ```
 
-Cada provider convertirá su protocolo a un modelo común.
+Each provider converts its protocol into the common `Email` model. Providers are read-only: IMAP uses `BODY.PEEK[]`; Graph uses the `Mail.Read` scope.
 
-## 5. Modelo normalizado
+## 5. Normalized model
 
 ```text
 Email
 ├── account_id
+├── folder
 ├── provider_message_id
-├── message_id
+├── message_id_header
 ├── sender
 ├── recipients
 ├── subject
-├── date
-├── body
-├── folder
-└── source_url
+├── received_at
+├── body_text      (HTML converted to text, quoted replies/signatures removed)
+└── source_url     (Graph webLink; none for IMAP)
 ```
 
-El mensaje completo podrá existir temporalmente durante el procesamiento sin convertirse en almacenamiento histórico permanente.
+The full message only exists in memory during processing.
 
-## 6. Sincronización incremental
+## 6. Incremental synchronization
 
-Cada cuenta tendrá estado independiente:
+Each account and folder has independent state:
 
 ```text
 SyncState
 ├── account_id
+├── folder
+├── cursor          IMAP: {uidvalidity, last_uid} · Graph: {delta_link}
 ├── last_run_at
 ├── last_success_at
-├── provider_cursor / last_uid
-└── status
+├── status
+└── last_error
 ```
 
-La sincronización utilizará el cursor/UID disponible y, cuando sea útil, Message-ID y hash del contenido. No dependerá únicamente de fechas.
+Synchronization uses the provider cursor and, as a safety net, Message-ID and a content hash. It never relies on dates alone. The first sync (no cursor) fetches the last N days configured per account.
+
+The cursor only advances once every message of the fetched batch has been persisted in a terminal state. If processing stops midway, the next run fetches the same batch again and deduplication skips what was already processed.
 
 ## 7. Pipeline
 
 ```text
-Scheduler / Check now
+Check now (Phase 1) / Scheduler (later)
         ↓
-Cuentas activas
+Enabled accounts
         ↓
-Sincronización de correo
+Email sync (per account and folder)
         ↓
-Normalización
+Normalization
         ↓
-Filtros deterministas
+Deduplication + deterministic filters
         ↓
-Candidatos nuevos
+New candidates
         ↓
-AIProvider
+core::analyzer → StructuredModel
         ↓
-Resultado estructurado
+Validated structured result
         ↓
-Detección/relación de cambios
+SQLite (transaction per message)
         ↓
-SQLite
-        ↓
-UI + notificaciones
+UI (events) + notifications (later)
 ```
 
-Cada etapa deberá poder registrar errores y métricas.
+Every stage records errors and metrics. Errors are isolated per account.
 
-## 8. Filtros
-Antes de IA se podrán descartar:
-- mensajes ya procesados;
-- duplicados;
-- carpetas no relevantes;
-- remitentes/dominios bloqueados;
-- promociones claramente irrelevantes;
-- mensajes propios no relevantes;
-- reglas futuras del usuario.
+## 8. Filters
+Before AI, the following can be discarded:
+- already processed messages;
+- duplicates;
+- non-relevant folders (only configured folders are fetched);
+- blocked senders/domains;
+- messages sent by the account itself;
+- empty messages (no subject and no body);
+- future user rules.
 
-La estrategia por defecto será conservadora para evitar falsos negativos.
+The default strategy is conservative to avoid false negatives. No promotion heuristics in Phase 1.
 
-## 9. AIProvider
+## 9. AI: structured model abstraction
 
-Se abstraerá el proveedor:
+The AI providers used only answer typed questions; they do not generate free text. The abstraction reflects that:
 
 ```rust
-trait AIProvider {
-    fn analyze_email(&self, email: &Email) -> Result<AIAnalysis>;
+#[async_trait]
+trait StructuredModel: Send + Sync {
+    fn descriptor(&self) -> ModelDescriptor;   // provider + model name
+    async fn ask(&self, state: &serde_json::Value, questions: &QuestionSet)
+        -> Result<AnswerSet, ModelError>;
 }
 ```
 
-Implementaciones conceptuales:
+Question types (the jev primitives):
+- **Noul** — yes/no, answered with the probability of "yes".
+- **Choice** — one option from a closed set (max 255 options).
+- **Score** — one level from an ordered set (2–10 levels).
+
+Implementations:
 
 ```text
-AIProvider
-├── ExternalApiProvider
-└── LocalProvider
+StructuredModel
+├── JevModel     external, TypeSafe API (POST https://api.typesafe.ai/v1/systemone)
+└── OllamaModel  local, emulates the primitives with JSON-schema constrained output
 ```
 
-El núcleo no dependerá de un proveedor concreto. La salida será estructurada y validada antes de persistirla.
+`core::analyzer` is provider-agnostic: it builds the question set for an email, calls `StructuredModel::ask` once, and assembles and validates the result in code. Code, not the model, generates candidates (e.g. dates found by regex) and performs all normalization and date arithmetic.
 
-## 10. Resultado de IA
+## 10. AI result
 
 ```text
 AIAnalysis
-├── relevant
+├── relevant            (Noul probability ≥ threshold)
 ├── university
 ├── course
-├── professor
-├── category
-├── summary
+├── professor           (the sender)
+├── category            notice | task | exam | event | change | general_info
 ├── action_required
-├── priority
-├── dates[]
-├── deadlines[]
+├── priority            low | medium | high | urgent
+├── dates[]             {date, time?, kind: exam | deadline | event | class | other}
 ├── possible_change
-├── change_description
-└── confidence
+└── confidence          min of answer confidences (null when the provider has none)
 ```
 
-Los campos podrán evolucionar durante el desarrollo.
+Fields may evolve during development.
 
-## 11. Detección de cambios
+## 11. Change detection
 
-Los resultados podrán relacionarse semánticamente. Ejemplo:
+Results can be related semantically. Example:
 
 ```text
-Resultado A: examen 20/06
+Result A: exam 20/06
         ↓
-Resultado B: examen trasladado al 27/06
+Result B: exam moved to 27/06
         ↓
-Cambio: 20/06 → 27/06
+Change: 20/06 → 27/06
 ```
 
-La primera implementación podrá utilizar heurísticas y procesamiento estructurado antes de introducir mecanismos más complejos.
+Phase 1 only records the `possible_change` flag. Relating results is a later phase and will start with heuristics over structured data before more complex mechanisms.
 
 ## 12. SQLite
 
-SQLite será la fuente de verdad local.
+SQLite is the local source of truth: single-user desktop app, no server, single-file persistence, transactions, queries and search, easy backups, natural Rust integration.
 
-Ventajas para esta fase:
-- aplicación de escritorio;
-- un único usuario;
-- sin servidor;
-- persistencia en un archivo;
-- transacciones;
-- consultas y búsqueda;
-- backups sencillos;
-- integración natural con Rust.
+The schema is managed through versioned migrations embedded in the binary.
 
-## 13. Modelo de datos inicial
+## 13. Data model (overview)
 
-### Account
+- `universities`, `courses` — catalog used by the AI (future scraping will populate it).
+- `accounts` — account metadata and non-secret configuration.
+- `sync_states` — cursor and status per account and folder.
+- `processed_messages` — deduplication and processing outcome per message.
+- `ai_results`, `result_dates` — structured results and their dates.
+- `runs`, `run_accounts` — run log with per-account detail.
+- `settings` — key/value application settings.
 
-```text
-Account
-├── id
-├── name
-├── email_address
-├── provider_type
-├── configuration
-├── enabled
-├── created_at
-└── updated_at
-```
+The concrete Phase 1 schema is defined in the Phase 1 design document.
 
-### SyncState
+## 14. Retention
 
-```text
-SyncState
-├── account_id
-├── last_run_at
-├── last_success_at
-├── provider_cursor
-└── status
-```
+The full body of each email is never stored. The application keeps AI results, subject and sender, deduplication metadata, synchronization state, run history and (later) relations between results.
 
-### AIResult
+## 15. Credentials
 
-```text
-AIResult
-├── id
-├── account_id
-├── source_message_id
-├── detected_at
-├── university
-├── course
-├── professor
-├── category
-├── summary
-├── action_required
-├── priority
-├── dates
-├── deadlines
-├── change_data
-├── confidence
-├── source_url
-└── seen
-```
+- OAuth2 when available (Microsoft 365: authorization code + PKCE with a loopback redirect).
+- Passwords, refresh tokens and API keys in Windows Credential Manager (`keyring` crate).
+- SQLite never stores secrets; credential entries are derived from ids (e.g. `academic-assistant/account/{id}`).
+- Logs and error messages never include credentials, tokens, API keys or email bodies.
 
-### Run
+## 16. Scheduler (later phase)
 
-```text
-Run
-├── id
-├── started_at
-├── finished_at
-├── status
-├── accounts_processed
-├── messages_found
-├── messages_filtered
-├── messages_analyzed
-├── results_created
-└── error_summary
-```
+Rust will manage manual runs, 1–2 daily runs, configurable times, background execution and reasonable recovery from errors. The Windows solution may use a tray process with autostart or a headless binary reusing the same crates, without depending on React being open.
 
-El esquema definitivo se gestionará mediante migraciones versionadas.
-
-## 14. Retención
-
-No se almacenará históricamente el cuerpo completo de cada correo. Se conservarán resultados de IA, metadatos de deduplicación, estado de sincronización, historial de ejecuciones y relaciones entre resultados.
-
-El contenido completo podrá mantenerse únicamente en memoria/almacenamiento temporal durante el procesamiento.
-
-## 15. Credenciales
-
-Se priorizará:
-- OAuth cuando exista;
-- tokens en almacenamiento seguro del sistema operativo;
-- Credential Manager/keychain equivalente;
-- API keys en secure storage.
-
-SQLite podrá almacenar referencias, pero no secretos en texto plano. Los logs tampoco incluirán credenciales, tokens, API keys ni cuerpos completos.
-
-## 16. Scheduler
-
-Rust gestionará:
-- ejecución manual;
-- 1–2 ejecuciones diarias;
-- horarios configurables;
-- ejecución en segundo plano;
-- recuperación razonable ante errores.
-
-La solución concreta de Windows podrá utilizar el mecanismo de tareas/inicio apropiado sin depender de que React esté abierto.
-
-## 17. Notificaciones
-
-Se abstraerá un servicio:
+## 17. Notifications (later phase)
 
 ```text
 NotificationService
@@ -317,48 +244,19 @@ NotificationService
 └── notify_error()
 ```
 
-La implementación inicial usará notificaciones nativas de Windows.
+The implementation will use native Windows notifications.
 
 ## 18. React ↔ Rust
 
-Comandos conceptuales:
+Commands and events are defined in the phase design documents. Critical logic stays in Rust. DTOs use `camelCase` and are mirrored manually in `src/lib/api/types.ts`.
 
-```text
-check_now()
-get_dashboard()
-get_results()
-mark_result_seen(id)
-get_accounts()
-add_account(...)
-update_account(...)
-remove_account(id)
-test_account(id)
-get_settings()
-update_settings(...)
-get_run_history()
-```
+## 19. Configuration
 
-La lógica crítica permanecerá en Rust.
+Persisted: accounts, enabled state, AI provider and its configuration, Microsoft client ID, blocked senders/domains, first-sync window. Later: schedules, notifications and future preferences.
 
-## 19. Configuración
+## 20. Errors and observability
 
-Se persistirán:
-- cuentas;
-- activación/desactivación;
-- horarios;
-- frecuencia;
-- proveedor de IA;
-- configuración del proveedor externo;
-- notificaciones;
-- preferencias futuras.
-
-La interfaz concreta se diseñará posteriormente.
-
-## 20. Errores y observabilidad
-
-Los errores se aislarán por cuenta/componente cuando sea posible.
-
-Ejemplo:
+Errors are isolated per account/component whenever possible.
 
 ```text
 Run
@@ -367,104 +265,54 @@ Run
 └── AI → OK
 ```
 
-Se registrarán duración, cuentas, mensajes encontrados/filtrados/analizados, resultados y errores.
+Duration, accounts, found/filtered/analyzed messages, results and errors are recorded. Application logs use `tracing` with a rotating file in the app data directory.
 
-## 21. Extensibilidad de fuentes
+## 21. Source extensibility
 
-Se preverá una abstracción general:
-
-```rust
-trait SourceProvider {
-    fn sync(&self, state: &SourceState) -> Result<Vec<SourceItem>>;
-}
-```
-
-Futuras implementaciones:
+Phase 1 implements email sources only. When new sources arrive (web scraping, Moodle, Blackboard, calendars), a new port will be added to `core` alongside `EmailProvider`, with its implementations in `infra`, reusing the analysis, storage and presentation layers. The exact abstraction will be designed with the first non-email source rather than anticipated now.
 
 ```text
-SourceProvider
-├── EmailSource
-│   ├── IMAP
-│   └── Microsoft Graph
+Future sources
+├── Email (IMAP, Microsoft Graph)
+├── Course web pages (scraping → course catalog)
 ├── UVMoodleSource
 ├── UAHBlackboardSource
 └── CalendarSource
 ```
 
-Esto permitirá reutilizar detección de cambios, IA, almacenamiento y presentación.
+## 22. Strategy for future platforms
 
-## 22. Estrategia para futuras plataformas
+Order of preference:
+1. Official API.
+2. Standard protocol.
+3. Stable HTTP scraping.
+4. Browser automation only when necessary.
 
-Orden de preferencia:
-1. API oficial.
-2. Protocolo estándar.
-3. Scraping/control HTTP estable.
-4. Automatización de navegador solo cuando sea necesaria.
+No autonomous agent is used if a stable interface can solve the problem.
 
-No se usará un agente autónomo si una interfaz estable puede resolver el problema.
+## 23. Agents
 
-## 23. Agentes
-
-El núcleo inicial será determinista:
+The core is deterministic:
 
 ```text
-obtener → filtrar → analizar → estructurar → guardar
+fetch → filter → analyze → structure → store
 ```
 
-La IA se utilizará para clasificación, extracción, resumen, acciones y cambios. Los agentes de navegador quedan como posible herramienta futura para fuentes especialmente difíciles.
+AI is used for classification and extraction. Browser agents remain a possible future tool for especially difficult sources.
 
 ## 24. Testing
 
-### Unit tests
-- filtros;
-- deduplicación;
-- sincronización incremental;
-- parsing;
-- validación de IA;
-- fechas;
-- prioridad;
-- detección de cambios.
+### Unit tests (`core`)
+- filters;
+- deduplication;
+- date candidate extraction and resolution;
+- question building and answer assembly;
+- pipeline with fakes (including the cursor rule).
 
-### Integration tests
-- SQLite;
-- providers de correo;
-- providers de IA;
-- scheduler;
-- ejecución completa.
+### Integration tests (`infra`)
+- SQLite migrations and repositories;
+- IMAP parsing from `.eml` fixtures;
+- Microsoft Graph, jev and Ollama against HTTP mocks (`wiremock`);
+- real providers in `#[ignore]` tests, run manually.
 
-Los providers deberán poder sustituirse por mocks/fakes.
-
-## 25. Primera versión técnica
-
-```text
-Tauri
-├── React + TypeScript + Tailwind
-│
-└── Rust
-    ├── SQLite
-    ├── Account management
-    ├── IMAP provider
-    ├── Email normalization
-    ├── Incremental sync
-    ├── Deterministic filtering
-    ├── AIProvider
-    ├── Local AI provider
-    ├── External API provider
-    ├── Scheduler
-    ├── Windows notifications
-    └── Run logging
-```
-
-El primer hito funcional deberá permitir:
-1. añadir una cuenta;
-2. validar conexión;
-3. ejecutar una comprobación manual;
-4. obtener mensajes nuevos;
-5. filtrar;
-6. analizar candidatos;
-7. validar y guardar resultados;
-8. mostrar novedades;
-9. marcar resultados como vistos;
-10. registrar la ejecución;
-11. notificar en Windows;
-12. repetir automáticamente el proceso.
+All providers can be replaced with fakes.

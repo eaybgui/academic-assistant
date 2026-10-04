@@ -1,0 +1,26 @@
+{
+  "id": "AAMkAGI2VGU-exam-change-001",
+  "internetMessageId": "<exam-change-20260920@uv.es>",
+  "subject": "Cambio de fecha del examen de Cálculo II",
+  "from": {
+    "emailAddress": {
+      "name": "Secretaría del Departamento de Matemáticas",
+      "address": "secretaria.matematicas@uv.es"
+    }
+  },
+  "toRecipients": [
+    {
+      "emailAddress": {
+        "name": "Ana García",
+        "address": "ana.garcia@alumni.uv.es"
+      }
+    }
+  ],
+  "ccRecipients": [],
+  "receivedDateTime": "2026-09-20T08:30:00Z",
+  "body": {
+    "contentType": "text",
+    "content": "Estimados alumnos, el examen de Cálculo II se traslada al lunes 5 de octubre a las 10:00h en el Aula Magna. Un saludo."
+  },
+  "webLink": "https://outlook.office.com/mail/deeplink/read/exam-change-001"
+}

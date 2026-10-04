@@ -1,137 +1,146 @@
-# Academic Assistant — Requisitos funcionales
+# Academic Assistant — Functional requirements
 
-## 1. Objetivo
-Academic Assistant es una aplicación de escritorio para centralizar y automatizar el seguimiento de la información académica de varias universidades. Su objetivo es detectar novedades relevantes en correo electrónico, resumirlas y estructurarlas mediante IA, evitando revisiones manuales constantes.
+## 1. Goal
+Academic Assistant is a desktop application that centralizes and automates tracking academic information from several universities. Its goal is to detect relevant news in email, classify it and structure it using AI, so the user does not have to check every source manually.
 
-La primera versión se centrará en el correo. La arquitectura deberá permitir incorporar posteriormente Moodle, Blackboard, calendarios y otras fuentes.
+The first version focuses on email. The architecture must allow adding Moodle, Blackboard, calendars, external web pages (scraping course information) and other sources later.
 
-## 2. Alcance inicial
-Incluye:
-- Gestión de múltiples cuentas desde la interfaz.
-- Conexión mediante distintos proveedores/protocolos.
-- Comprobaciones manuales y automáticas.
-- Frecuencia de 1–2 comprobaciones diarias y horarios configurables.
-- Ejecución en segundo plano.
-- Filtros deterministas antes de la IA.
-- Análisis de asunto y cuerpo únicamente.
-- Clasificación y extracción estructurada mediante IA.
-- Conservación de resultados de IA y enlaces a los correos originales.
-- Estado nuevo/visto.
-- Dashboard.
-- Notificaciones nativas de Windows.
-- Registro de ejecuciones y errores.
-- Funcionamiento completamente local.
-- Opción de utilizar una API externa mediante API key.
+## 2. Phases
 
-Fuera del alcance inicial:
-- Adjuntos.
-- Moodle.
-- Blackboard.
-- Calendarios.
-- Scraping web.
-- Agentes de navegador.
+### Phase 1 — Email analysis (current)
+Includes:
+- Management of multiple email accounts from the UI (IMAP and Microsoft 365).
+- Manual checks ("Check now") across all enabled accounts.
+- Incremental synchronization; the first sync covers a configurable number of past days.
+- Deterministic filters before AI.
+- Analysis of subject and body only.
+- AI classification and structured extraction (relevance, category, priority, action required, possible change, university, course, dates).
+- Manual catalog of universities and courses used by the AI to identify the course.
+- Persistence of AI results and links to the original emails.
+- New/seen status (including undoing "seen").
+- Dashboard, results history (search, filters, sorting) and run history.
+- Run and error logging.
+- Fully local operation (local AI provider) or an explicitly configured external AI provider (API key).
+
+Excluded from Phase 1 (planned for later phases):
+- Automatic scheduled checks and background execution.
+- Native Windows notifications.
+- Linking related communications and computing changes between them (Phase 1 only flags "possible change").
+- Free-text summaries.
+
+### Later phases (not scheduled)
+- Scraping external web pages to gather course information (feeds the course catalog).
+- Moodle (UV), Blackboard (UAH), calendars.
+- Attachments.
+- Browser agents.
 - Notion.
-- Diseño visual definitivo de todas las pantallas.
-- Comparativa de LLM.
+- Final visual design of all screens.
+- LLM comparison.
 
-## 3. Gestión de cuentas
-El usuario podrá añadir, editar, activar/desactivar, eliminar y comprobar cuentas desde la aplicación. No se limitará inicialmente a UV y UAH.
+## 3. Account management
+The user can add, edit, enable/disable, delete and test accounts from the application. It is not limited to UV and UAH.
 
-La arquitectura deberá soportar distintos métodos de acceso, por ejemplo IMAP y Microsoft Graph/Exchange. Las credenciales y tokens no se almacenarán como texto plano en SQLite.
+The architecture must support different access methods. Phase 1 implements IMAP (username + password) and Microsoft 365 through Microsoft Graph (OAuth2 sign-in). Credentials and tokens are never stored as plain text in SQLite.
 
-## 4. Obtención y filtrado
-Cada ejecución localizará información nueva desde la última sincronización. Antes de utilizar IA se aplicarán filtros deterministas basados, entre otros, en remitente, dominio, destinatarios, asunto, carpeta, identificadores, estado de procesamiento y duplicados.
+Each account can have a default university and a configurable first-sync window (default 14 days).
 
-Los filtros tendrán como objetivo descartar información claramente irrelevante, no sustituir la clasificación semántica de la IA.
+## 4. Fetching and filtering
+Each run finds messages that are new since the last synchronization. Before AI, deterministic filters are applied based on, among others, sender, domain, own messages, folder, identifiers, processing state and duplicates.
 
-## 5. Análisis mediante IA
-La primera versión analizará únicamente asunto y cuerpo. Para cada comunicación seleccionada deberá producir información estructurada:
+Filters only discard clearly irrelevant information; they do not replace the AI's semantic classification. The default strategy is conservative to avoid false negatives.
 
-- relevancia;
-- universidad;
-- asignatura/curso;
-- profesor/remitente;
-- tipo;
-- resumen;
-- acción requerida;
-- prioridad;
-- fechas;
-- plazos;
-- posibles cambios respecto a información anterior;
-- enlace al correo original.
+Email accounts are accessed read-only: the application never marks messages as read, moves or deletes them.
 
-Tipos mínimos: aviso, tarea, examen, evento, cambio e información general.
+## 5. AI analysis
+Phase 1 analyzes subject and body only. For each selected communication it produces structured information:
 
-## 6. Detección de cambios
-Deberá poder identificar modificaciones de información previamente conocida, como cambios de fecha de examen o entrega, aula, cancelaciones o nuevas instrucciones.
+- relevance;
+- university;
+- course;
+- professor/sender;
+- category;
+- action required;
+- priority;
+- dates and deadlines, each classified by type (exam, deadline, event, class, other);
+- possible change with respect to previously known information;
+- link to the original email (or its Message-ID when the protocol provides no link).
 
-La aplicación deberá poder relacionar comunicaciones relacionadas en lugar de tratar siempre cada correo como una novedad independiente.
+Minimum categories: notice, task, exam, event, change and general information.
 
-## 7. Persistencia
-Se conservarán los resultados estructurados de IA, metadatos necesarios para deduplicación/relación, estado de sincronización y registro de ejecuciones. No se almacenará indefinidamente el cuerpo completo de los correos.
+The AI providers used produce only structured answers (typed questions with closed answer sets). Free-text summaries are out of scope for Phase 1.
 
-Los resultados deberán permitir consultar qué ocurrió, cuándo se detectó, de qué cuenta procede, su clasificación y el enlace al mensaje original.
+## 6. Change detection
+The application must identify modifications of previously known information, such as changes of exam or submission dates, rooms, cancellations or new instructions.
 
-## 8. Avisos nuevos/vistos
-Los resultados no revisados deberán distinguirse de los vistos. El usuario podrá marcarlos como vistos y consultar posteriormente el historial.
+Phase 1 flags communications that announce a possible change. Later phases will relate communications to each other instead of treating every email as an independent item.
 
-## 9. Dashboard
-La vista principal deberá mostrar al menos última comprobación, estado, novedades y recuentos de tareas, exámenes, eventos y cambios/avisos. Incluirá una acción equivalente a «Comprobar ahora».
+## 7. Persistence
+The application keeps structured AI results, the metadata needed for deduplication, synchronization state and the run log. The full email body is never stored; it only exists in memory during processing.
 
-La especificación visual detallada se realizará posteriormente. También existirán vistas de configuración y gestión de cuentas.
+Results must allow consulting what happened, when it was detected, which account it came from, its classification and the link to the original message.
 
-## 10. Automatización
-Se soportarán:
-- ejecución manual;
-- 1–2 ejecuciones automáticas al día;
-- horarios configurables;
-- ejecución aunque la ventana principal no esté abierta.
+## 8. New/seen status
+Unreviewed results are distinguished from seen ones. The user can mark results as seen (individually or all at once), mark them as new again, and browse the history.
 
-Cada ejecución tendrá estado y estadísticas. Un fallo de una cuenta no deberá impedir necesariamente procesar las demás.
+## 9. User interface
+Navigation: Dashboard, Results, Runs, Accounts, Catalog, Settings.
 
-## 11. Notificaciones
-Se utilizarán notificaciones nativas de Windows para informar, cuando corresponda, de finalización, novedades relevantes y errores importantes.
+- **Dashboard:** last check (time and status), "Check now" with progress, a warning when an account needs attention, counters of unseen results (new, tasks, exams, events, changes and notices) and the list of new results with sorting options (nearest upcoming date — default —, priority, received date).
+- **Results:** full history with text search (subject/sender) and a "Filters and sort" modal (state, category, account, course, sort order). Rows expand to show details.
+- **Runs:** run history with per-account detail and errors.
+- **Accounts:** list and add/edit form (IMAP or Microsoft 365), test connection, enable/disable, reconnect, delete.
+- **Catalog:** universities and their courses (with aliases/codes).
+- **Settings:** AI provider selection, provider configuration, Microsoft sign-in configuration and blocked senders/domains.
 
-## 12. Registro
-Se registrarán como mínimo:
-- inicio/fin;
-- cuenta procesada;
-- mensajes encontrados;
-- mensajes descartados;
-- mensajes enviados a IA;
-- resultados creados;
-- errores de conexión/autenticación/IA.
+The UI language is English. The visual design of Phase 1 is functional, not final.
 
-La forma de visualización de logs se decidirá posteriormente.
+## 10. Automation
+- Phase 1: manual execution.
+- Later phase: 1–2 automatic executions per day, configurable times, execution even when the main window is not open.
 
-## 13. IA local y API externa
-La aplicación deberá poder funcionar sin enviar información académica fuera del equipo.
+Each run has a status and statistics. A failure in one account does not prevent processing the others.
 
-Existirán dos posibilidades:
-1. proveedor de IA local;
-2. proveedor de IA externo configurado mediante API key.
+## 11. Notifications (later phase)
+Native Windows notifications to report, when appropriate, completion, relevant news and important errors.
 
-El proveedor será intercambiable y la elección será explícita.
+## 12. Logging
+At minimum, the following are recorded:
+- start/end;
+- processed account;
+- messages found;
+- messages discarded;
+- messages sent to AI;
+- results created;
+- connection/authentication/AI errors.
 
-## 14. Privacidad
-No se almacenarán contraseñas, tokens ni API keys en texto plano. No se enviará información a servicios externos salvo que el usuario configure un proveedor externo. Se minimizará la información persistida.
+## 13. Local AI and external API
+The application must be able to work without sending academic information outside the computer.
 
-## 15. Extensibilidad
-La arquitectura deberá permitir añadir posteriormente:
-- Moodle de UV;
-- Blackboard de UAH;
-- calendarios;
-- páginas web;
-- otras plataformas.
+Two options exist:
+1. local AI provider (Ollama);
+2. external AI provider configured with an API key (jev, by TypeSafe).
 
-## 16. Principios funcionales
-1. Automatizar la recopilación.
-2. Detectar cambios antes de usar IA cuando sea posible.
-3. Minimizar procesamiento innecesario.
-4. Transformar comunicaciones en información estructurada.
-5. Mantener historial útil sin almacenar innecesariamente correos completos.
-6. Mostrar siempre el estado de la última comprobación.
-7. Desacoplar fuentes e IA.
-8. Priorizar privacidad y funcionamiento local.
-9. Permitir añadir cuentas y fuentes.
-10. Mantener la base de datos como fuente de verdad, no la interfaz.
+The provider is interchangeable and the choice is explicit.
+
+## 14. Privacy
+Passwords, tokens and API keys are never stored as plain text. No information is sent to external services unless the user configures an external provider. Persisted information is minimized.
+
+## 15. Extensibility
+The architecture must allow adding later:
+- UV Moodle;
+- UAH Blackboard;
+- calendars;
+- web pages (course information scraping);
+- other platforms.
+
+## 16. Functional principles
+1. Automate collection.
+2. Detect changes before using AI when possible.
+3. Minimize unnecessary processing.
+4. Turn communications into structured information.
+5. Keep a useful history without storing full emails.
+6. Always show the status of the last check.
+7. Decouple sources and AI.
+8. Prioritize privacy and local operation.
+9. Allow adding accounts and sources.
+10. The database is the source of truth, not the UI.

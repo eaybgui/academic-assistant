@@ -3,7 +3,7 @@
 El desarrollo se divide en dos responsabilidades claramente separadas:
 
 1. **Planificación y orquestación:** realizada por un agente de mayor capacidad.
-2. **Implementación:** realizada por sub-agentes basados en Sonnet 5.
+2. **Implementación:** realizada por sub-agentes basados en Sonnet 5.5
 
 Estas responsabilidades **no deben mezclarse**.
 
