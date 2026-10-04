@@ -26,6 +26,7 @@ const AUTH_PROFILE_DIR: &str = "lms-auth";
 const LOGIN_LABEL_PREFIX: &str = "lms-login-";
 const INTERACTIVE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const SILENT_TIMEOUT: Duration = Duration::from_secs(20);
+const URL_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoginMode {
@@ -159,7 +160,11 @@ pub async fn capture_credential(
         LoginMode::Interactive => INTERACTIVE_TIMEOUT,
         LoginMode::Silent => SILENT_TIMEOUT,
     };
-    let signal = tokio::time::timeout(timeout, rx.recv()).await;
+    let signal = tokio::time::timeout(
+        timeout,
+        wait_for_signal(&mut rx, &window, platform_poll_base_url(university)),
+    )
+    .await;
     let result = match signal {
         Ok(Some(Signal::MoodlePayload(payload))) => {
             decode_launch_token(&payload, &base_url, &passport)
@@ -183,6 +188,37 @@ pub async fn capture_credential(
         "lms sign-in window closed"
     );
     result
+}
+
+fn platform_poll_base_url(university: &LmsUniversity) -> Option<&str> {
+    match university.platform {
+        LmsPlatform::Blackboard => Some(&university.base_url),
+        LmsPlatform::Moodle => None,
+    }
+}
+
+/// Waits for the next signal. Blackboard Ultra is a single-page app that can change its
+/// URL without a page-load event, so for Blackboard (`blackboard_base_url`) the window's
+/// URL is also polled. The polled URL is never logged and a read error is ignored.
+async fn wait_for_signal(
+    rx: &mut mpsc::UnboundedReceiver<Signal>,
+    window: &WebviewWindow,
+    blackboard_base_url: Option<&str>,
+) -> Option<Signal> {
+    let mut poll = tokio::time::interval(URL_POLL_INTERVAL);
+    loop {
+        tokio::select! {
+            signal = rx.recv() => return signal,
+            _ = poll.tick(), if blackboard_base_url.is_some() => {
+                let signed_in = window.url().ok().zip(blackboard_base_url).is_some_and(
+                    |(url, base_url)| is_blackboard_signed_in(url.as_str(), base_url),
+                );
+                if signed_in {
+                    return Some(Signal::BlackboardSignedIn);
+                }
+            }
+        }
+    }
 }
 
 /// Reads the window's cookies off the main thread (WebView2 deadlocks when cookies
