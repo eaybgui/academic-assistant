@@ -104,9 +104,14 @@ impl MoodleClient {
     }
 }
 
+/// Moodle reports an expired token (`validuntil`) as `accessexception` from the
+/// verify call (`core_webservice_get_site_info`), so that case needs a new sign-in.
 fn map_error_code(function: &str, code: &str) -> LmsError {
     match code {
         "invalidtoken" => LmsError::Auth("Your Moodle session has expired".into()),
+        "accessexception" if function == "core_webservice_get_site_info" => {
+            LmsError::Auth("Your Moodle session has expired".into())
+        }
         "servicenotavailable" | "accessexception" => {
             LmsError::Protocol(format!("{function} is not available on this Moodle site"))
         }
