@@ -6,6 +6,8 @@ mod account_status;
 mod commands;
 mod dto;
 mod error;
+#[allow(dead_code, unused_imports)] // wired in by the university commands (M1 Task 5)
+mod lms_auth;
 mod observer;
 mod setup;
 mod state;
