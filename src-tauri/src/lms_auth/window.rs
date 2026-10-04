@@ -2,6 +2,7 @@
 //! separate browser profile and captures the credential (spec §6.1–§6.3, §6.5).
 //! Never logs URLs seen in the window.
 
+use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -31,6 +32,24 @@ pub enum LoginMode {
     Silent,
 }
 
+/// Destroys the login window when dropped, so it is closed on every exit path,
+/// including the `capture_credential` future being dropped before it completes.
+struct LoginWindow(WebviewWindow);
+
+impl Deref for LoginWindow {
+    type Target = WebviewWindow;
+
+    fn deref(&self) -> &WebviewWindow {
+        &self.0
+    }
+}
+
+impl Drop for LoginWindow {
+    fn drop(&mut self) {
+        let _ = self.0.destroy();
+    }
+}
+
 enum Signal {
     MoodlePayload(String),
     BlackboardSignedIn,
@@ -44,6 +63,9 @@ pub async fn capture_credential(
 ) -> Result<String, LmsError> {
     let label = format!("lms-login-{}", university.id);
     if let Some(existing) = app.get_webview_window(&label) {
+        if mode == LoginMode::Silent {
+            return Err(LmsError::Auth("Sign-in required".into()));
+        }
         let _ = existing.set_focus();
         return Err(LmsError::Auth(
             "A sign-in window for this university is already open".into(),
@@ -93,9 +115,11 @@ pub async fn capture_credential(
             })
         }
     };
-    let window = builder
-        .build()
-        .map_err(|e| LmsError::Protocol(format!("Could not open the sign-in window: {e}")))?;
+    let window = LoginWindow(
+        builder
+            .build()
+            .map_err(|e| LmsError::Protocol(format!("Could not open the sign-in window: {e}")))?,
+    );
     {
         let tx = tx.clone();
         window.on_window_event(move |event| {
@@ -126,7 +150,7 @@ pub async fn capture_credential(
             LoginMode::Silent => "Sign-in required".into(),
         })),
     };
-    let _ = window.destroy();
+    drop(window);
     let stage = if result.is_ok() {
         "captured"
     } else {

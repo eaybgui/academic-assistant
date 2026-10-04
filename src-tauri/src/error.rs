@@ -5,7 +5,8 @@
 //! in `detail` — never serialized, only logged.
 
 use academic_core::domain::RunError;
-use academic_core::ports::{ProviderError, RepoError, SecretError};
+use academic_core::lms::SessionError;
+use academic_core::ports::{LmsError, ProviderError, RepoError, SecretError};
 use serde::Serialize;
 
 const STORAGE_MESSAGE: &str = "Something went wrong while saving data";
@@ -43,6 +44,10 @@ impl CommandError {
 
     pub fn not_found(message: impl Into<String>) -> Self {
         Self::new(CommandErrorKind::NotFound, message)
+    }
+
+    pub fn conflict(message: impl Into<String>) -> Self {
+        Self::new(CommandErrorKind::Conflict, message)
     }
 
     fn new(kind: CommandErrorKind, message: impl Into<String>) -> Self {
@@ -122,6 +127,28 @@ impl From<ProviderError> for CommandError {
     }
 }
 
+impl From<LmsError> for CommandError {
+    fn from(error: LmsError) -> Self {
+        let kind = match error {
+            LmsError::Auth(_) => CommandErrorKind::Auth,
+            LmsError::Connection(_) => CommandErrorKind::Connection,
+            LmsError::Protocol(_) => CommandErrorKind::Internal,
+        };
+        Self::new(kind, error.to_string())
+    }
+}
+
+impl From<SessionError> for CommandError {
+    fn from(error: SessionError) -> Self {
+        match error {
+            SessionError::LoginRequired(_) => Self::new(CommandErrorKind::Auth, error.to_string()),
+            SessionError::Lms(e) => e.into(),
+            SessionError::Storage(detail) => Self::internal(STORAGE_MESSAGE, detail),
+            SessionError::Secret(detail) => Self::internal(SECRET_STORAGE_MESSAGE, detail),
+        }
+    }
+}
+
 impl From<SecretError> for CommandError {
     fn from(error: SecretError) -> Self {
         Self::internal(SECRET_STORAGE_MESSAGE, error.0)
@@ -156,6 +183,13 @@ mod tests {
             CommandError::validation("Enter a name").message_for_log(),
             "Enter a name"
         );
+    }
+
+    #[test]
+    fn conflict_builds_a_conflict_error() {
+        let error = CommandError::conflict("This platform is already added");
+        assert_eq!(error.kind, CommandErrorKind::Conflict);
+        assert_eq!(error.message, "This platform is already added");
     }
 
     #[test]
@@ -220,5 +254,34 @@ mod tests {
         assert_eq!(error.kind, CommandErrorKind::Internal);
         assert_eq!(error.message, SECRET_STORAGE_MESSAGE);
         assert_eq!(error.detail.as_deref(), Some("locked"));
+    }
+
+    #[test]
+    fn lms_errors_map_by_kind_keeping_the_message() {
+        let auth = CommandError::from(LmsError::Auth("Sign-in cancelled".into()));
+        assert_eq!(auth.kind, CommandErrorKind::Auth);
+        assert_eq!(auth.message, "Sign-in cancelled");
+        let connection = CommandError::from(LmsError::Connection("down".into()));
+        assert_eq!(connection.kind, CommandErrorKind::Connection);
+        let protocol = CommandError::from(LmsError::Protocol("odd".into()));
+        assert_eq!(protocol.kind, CommandErrorKind::Internal);
+    }
+
+    #[test]
+    fn session_errors_map_per_variant() {
+        let login = CommandError::from(SessionError::LoginRequired("UAH".into()));
+        assert_eq!(login.kind, CommandErrorKind::Auth);
+        assert_eq!(login.message, "UAH needs you to sign in again");
+
+        let lms = CommandError::from(SessionError::Lms(LmsError::Connection("down".into())));
+        assert_eq!(lms.kind, CommandErrorKind::Connection);
+
+        let storage = CommandError::from(SessionError::Storage("x".into()));
+        assert_eq!(storage.kind, CommandErrorKind::Internal);
+        assert_eq!(storage.message, STORAGE_MESSAGE);
+
+        let secret = CommandError::from(SessionError::Secret("locked".into()));
+        assert_eq!(secret.message, SECRET_STORAGE_MESSAGE);
+        assert_eq!(secret.detail.as_deref(), Some("locked"));
     }
 }

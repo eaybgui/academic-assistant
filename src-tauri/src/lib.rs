@@ -6,7 +6,6 @@ mod account_status;
 mod commands;
 mod dto;
 mod error;
-#[allow(dead_code, unused_imports)] // wired in by the university commands (M1 Task 5)
 mod lms_auth;
 mod observer;
 mod setup;
@@ -15,7 +14,7 @@ mod state;
 mod test_support;
 mod validation;
 
-use commands::{accounts, catalog, results, runs, settings};
+use commands::{accounts, catalog, results, runs, settings, universities};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -36,6 +35,14 @@ pub fn run() {
             accounts::test_account,
             accounts::connect_microsoft_account,
             catalog::get_catalog,
+            universities::lms_probe,
+            universities::get_universities,
+            universities::add_university,
+            universities::rename_university,
+            universities::remove_university,
+            universities::lms_sign_in,
+            universities::lms_sign_out,
+            universities::lms_check_session,
             settings::get_settings,
             settings::update_settings,
             settings::set_jev_api_key,

@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use academic_core::pipeline::{CheckRunner, Repositories};
 use academic_core::ports::{
-    AccountRepository, CatalogRepository, Clock, EmailProviderFactory, ModelProvider,
-    ResultRepository, RunObserver, RunRepository, SecretStore, SettingsRepository,
-    SyncStateRepository,
+    AccountRepository, CatalogRepository, Clock, CourseRepository, EmailProviderFactory,
+    LmsAuthenticator, LmsClientFactory, ModelProvider, ResultRepository, RunObserver,
+    RunRepository, SecretStore, SettingsRepository, SyncStateRepository, UniversityRepository,
 };
 use academic_infra::db::Database;
 use chrono::NaiveDate;
@@ -22,12 +22,16 @@ pub struct Collaborators {
     pub http: reqwest::Client,
     pub observer: Arc<dyn RunObserver>,
     pub clock: Arc<dyn Clock>,
+    pub lms_factory: Arc<dyn LmsClientFactory>,
+    pub lms_authenticator: Arc<dyn LmsAuthenticator>,
 }
 
 pub struct AppState {
     pub accounts: Arc<dyn AccountRepository>,
     pub catalog: Arc<dyn CatalogRepository>,
     pub sync: Arc<dyn SyncStateRepository>,
+    pub universities: Arc<dyn UniversityRepository>,
+    pub courses: Arc<dyn CourseRepository>,
     pub results: Arc<dyn ResultRepository>,
     pub runs: Arc<dyn RunRepository>,
     pub settings: Arc<dyn SettingsRepository>,
@@ -37,6 +41,8 @@ pub struct AppState {
     pub http: reqwest::Client,
     pub clock: Arc<dyn Clock>,
     pub observer: Arc<dyn RunObserver>,
+    pub lms_factory: Arc<dyn LmsClientFactory>,
+    pub lms_authenticator: Arc<dyn LmsAuthenticator>,
     pub runner: Arc<CheckRunner>,
     /// Keeps the non-blocking log writer flushing for the lifetime of the app.
     _log_guard: Option<WorkerGuard>,
@@ -53,6 +59,8 @@ impl AppState {
             http,
             observer,
             clock,
+            lms_factory,
+            lms_authenticator,
         } = collaborators;
         let runner = Arc::new(CheckRunner::new(
             Repositories {
@@ -73,6 +81,8 @@ impl AppState {
             accounts: db.clone(),
             catalog: db.clone(),
             sync: db.clone(),
+            universities: db.clone(),
+            courses: db.clone(),
             results: db.clone(),
             runs: db.clone(),
             settings: db,
@@ -82,6 +92,8 @@ impl AppState {
             http,
             clock,
             observer,
+            lms_factory,
+            lms_authenticator,
             runner,
             _log_guard: None,
         }
