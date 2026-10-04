@@ -3,12 +3,14 @@
 //! here, only contracts.
 
 mod email;
+mod lms;
 mod model;
 mod repositories;
 mod runtime;
 mod secrets;
 
 pub use email::*;
+pub use lms::*;
 pub use model::*;
 pub use repositories::*;
 pub use runtime::*;

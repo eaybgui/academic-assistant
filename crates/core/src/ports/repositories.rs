@@ -1,9 +1,10 @@
 use chrono::{DateTime, NaiveDate, Utc};
 
 use crate::domain::{
-    Account, AccountDraft, AccountId, Catalog, Counters, Course, DashboardCounts, NewResult, Page,
-    ProcessedMessage, ResultQuery, RunAccountResult, RunId, RunRecord, RunStatus, RunTrigger,
-    Settings, StoredResult, SyncCursor, SyncState, University,
+    Account, AccountDraft, AccountId, Catalog, Counters, Course, DashboardCounts, LmsCourse,
+    LmsPlatform, LmsUniversity, LoginState, NewResult, Page, ProcessedMessage, RemoteCourse,
+    ResultQuery, RunAccountResult, RunId, RunRecord, RunStatus, RunTrigger, Settings, StoredResult,
+    SyncCursor, SyncOutcome, SyncState, University, UniversityId,
 };
 
 /// Error returned by a repository operation.
@@ -123,4 +124,58 @@ pub trait SettingsRepository: Send + Sync {
     /// Missing keys fall back to `Settings::default()` values.
     fn load(&self) -> RepoResult<Settings>;
     fn save(&self, settings: &Settings) -> RepoResult<()>;
+}
+
+/// Persistence for LMS universities.
+pub trait UniversityRepository: Send + Sync {
+    fn list_universities(&self) -> RepoResult<Vec<LmsUniversity>>;
+    fn get_university(&self, id: UniversityId) -> RepoResult<Option<LmsUniversity>>;
+    /// Duplicate name or base URL → `RepoError::Conflict`.
+    fn insert_university(
+        &self,
+        name: &str,
+        platform: LmsPlatform,
+        base_url: &str,
+        now: DateTime<Utc>,
+    ) -> RepoResult<LmsUniversity>;
+    fn rename_university(&self, id: UniversityId, name: &str) -> RepoResult<LmsUniversity>;
+    /// Cascades to its courses (and, from M3, items). Missing → `NotFound`.
+    fn delete_university(&self, id: UniversityId) -> RepoResult<()>;
+    fn set_login(
+        &self,
+        id: UniversityId,
+        state: LoginState,
+        account_label: Option<&str>,
+    ) -> RepoResult<LmsUniversity>;
+    fn record_sync(
+        &self,
+        id: UniversityId,
+        at: DateTime<Utc>,
+        outcome: SyncOutcome,
+        error: Option<&str>,
+    ) -> RepoResult<()>;
+}
+
+/// Persistence for courses discovered on LMS platforms.
+pub trait CourseRepository: Send + Sync {
+    /// Ordered by name.
+    fn list_courses(&self, university_id: UniversityId) -> RepoResult<Vec<LmsCourse>>;
+    /// In one transaction: inserts unknown courses (untracked, unreviewed, available),
+    /// updates name/short name/url of known ones, marks every returned course
+    /// available and every other course of the university unavailable.
+    /// Missing university → `NotFound`.
+    fn upsert_remote_courses(
+        &self,
+        university_id: UniversityId,
+        courses: &[RemoteCourse],
+        now: DateTime<Utc>,
+    ) -> RepoResult<()>;
+    /// Exactly `course_ids` become tracked; every course of the university becomes
+    /// reviewed. An id that is not a course of this university → `NotFound` and no
+    /// change. Returns the university's courses.
+    fn set_tracked_courses(
+        &self,
+        university_id: UniversityId,
+        course_ids: &[i64],
+    ) -> RepoResult<Vec<LmsCourse>>;
 }
