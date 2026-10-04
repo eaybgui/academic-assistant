@@ -174,15 +174,38 @@ fn set_tracked_courses_tracks_exactly_the_given_ids_and_reviews_all() {
         db.set_tracked_courses(other.id, &[ids[1]]),
         Err(RepoError::NotFound)
     ));
-    assert_eq!(
-        db.list_courses(id)
-            .unwrap()
-            .iter()
-            .filter(|c| c.tracked)
-            .count(),
-        1,
-        "no partial change"
-    );
+}
+
+#[test]
+fn set_tracked_courses_rolls_back_every_write_when_an_id_is_unknown() {
+    let db = Database::open_in_memory().unwrap();
+    let id = uv(&db);
+    db.upsert_remote_courses(
+        id,
+        &[remote("1", "Algebra", None), remote("2", "Calculus", None)],
+        Utc::now(),
+    )
+    .unwrap();
+    let ids: Vec<i64> = db.list_courses(id).unwrap().iter().map(|c| c.id).collect();
+
+    // Never reviewed: a failing call must undo the initial `reviewed = 1` update.
+    assert!(matches!(
+        db.set_tracked_courses(id, &[9_999]),
+        Err(RepoError::NotFound)
+    ));
+    assert!(db.list_courses(id).unwrap().iter().all(|c| !c.reviewed));
+
+    // Reviewed: the failure happens after ids[1] was already updated in the same call.
+    db.set_tracked_courses(id, &[ids[0]]).unwrap();
+    let before = db.list_courses(id).unwrap();
+    assert!(matches!(
+        db.set_tracked_courses(id, &[ids[1], 9_999]),
+        Err(RepoError::NotFound)
+    ));
+    let after = db.list_courses(id).unwrap();
+    assert_eq!(after, before, "no partial change");
+    assert!(after.iter().find(|c| c.id == ids[0]).unwrap().tracked);
+    assert!(!after.iter().find(|c| c.id == ids[1]).unwrap().tracked);
 }
 
 #[test]

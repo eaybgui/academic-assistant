@@ -102,7 +102,8 @@ fn register_unicode_lower(conn: &Connection) -> Result<(), RepoError> {
 /// updated without the version recorded (or vice versa).
 fn apply_migrations(conn: &Connection) -> Result<(), RepoError> {
     conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS schema_migrations (            version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);",
+        "CREATE TABLE IF NOT EXISTS schema_migrations (\
+            version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);",
     )
     .map_err(map_err)?;
 
