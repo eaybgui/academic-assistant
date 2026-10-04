@@ -4,9 +4,11 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use academic_core::domain::{Category, DateKind, Priority, ResultDate, ResultQuery, ResultSort};
+use academic_core::domain::{
+    Category, DateKind, LmsPlatform, Priority, RemoteCourse, ResultDate, ResultQuery, ResultSort,
+};
 use academic_core::ports::{
-    CatalogRepository, ProcessedMessageRepository, RepoError, ResultRepository,
+    CourseRepository, ProcessedMessageRepository, RepoError, ResultRepository, UniversityRepository,
 };
 use academic_infra::db::Database;
 use chrono::{DateTime, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
@@ -410,10 +412,26 @@ fn query_filters_by_course_id() {
     let db = Database::open_in_memory().unwrap();
     let account = insert_account(&db, "acc");
     let run_id = insert_run(&db);
-    let uni = db.add_university("UV", Utc::now()).unwrap();
-    let course = db
-        .add_course(uni.id, "Programacion", &[], Utc::now())
+    let uni = db
+        .insert_university(
+            "UV",
+            LmsPlatform::Moodle,
+            "https://aulavirtual.uv.es",
+            Utc::now(),
+        )
         .unwrap();
+    db.upsert_remote_courses(
+        uni.id,
+        &[RemoteCourse {
+            external_id: "1".into(),
+            name: "Programacion".into(),
+            short_name: None,
+            url: None,
+        }],
+        Utc::now(),
+    )
+    .unwrap();
+    let course = db.list_courses(uni.id).unwrap().remove(0);
 
     let received_at = dt(2026, 9, 20);
     let message = analyzed_message(account.id, run_id, "with-course", received_at);

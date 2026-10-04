@@ -1,10 +1,10 @@
 use chrono::{DateTime, NaiveDate, Utc};
 
 use crate::domain::{
-    Account, AccountDraft, AccountId, Catalog, Counters, Course, DashboardCounts, LmsCourse,
-    LmsPlatform, LmsUniversity, LoginState, NewResult, Page, ProcessedMessage, RemoteCourse,
-    ResultQuery, RunAccountResult, RunId, RunRecord, RunStatus, RunTrigger, Settings, StoredResult,
-    SyncCursor, SyncOutcome, SyncState, University, UniversityId,
+    Account, AccountDraft, AccountId, Catalog, Counters, DashboardCounts, LmsCourse, LmsPlatform,
+    LmsUniversity, LoginState, NewResult, Page, ProcessedMessage, RemoteCourse, ResultQuery,
+    RunAccountResult, RunId, RunRecord, RunStatus, RunTrigger, Settings, StoredResult, SyncCursor,
+    SyncOutcome, SyncState, UniversityId,
 };
 
 /// Error returned by a repository operation.
@@ -34,21 +34,10 @@ pub trait AccountRepository: Send + Sync {
     fn delete(&self, id: AccountId) -> RepoResult<()>;
 }
 
-/// Persistence for the university/course catalog.
+/// Read-only projection of universities and tracked courses, used by the email
+/// analyzer as its course catalog (spec §11).
 pub trait CatalogRepository: Send + Sync {
     fn catalog(&self) -> RepoResult<Catalog>;
-    fn add_university(&self, name: &str, now: DateTime<Utc>) -> RepoResult<University>;
-    fn rename_university(&self, id: i64, name: &str) -> RepoResult<University>;
-    fn delete_university(&self, id: i64) -> RepoResult<()>;
-    fn add_course(
-        &self,
-        university_id: i64,
-        name: &str,
-        aliases: &[String],
-        now: DateTime<Utc>,
-    ) -> RepoResult<Course>;
-    fn update_course(&self, id: i64, name: &str, aliases: &[String]) -> RepoResult<Course>;
-    fn delete_course(&self, id: i64) -> RepoResult<()>;
 }
 
 /// Persistence for per-account, per-folder sync cursors.
