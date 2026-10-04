@@ -1,32 +1,30 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import Modal from '../../components/Modal';
 import ErrorMessage from '../../components/ErrorMessage';
 import Field from '../../components/forms/Field';
 import TextInput from '../../components/forms/TextInput';
 import { api, toCommandError } from '../../lib/api/client';
-import { queryKeys } from '../../lib/api/queryKeys';
-import type { CommandError, UniversityDto } from '../../lib/api/types';
+import type { CommandError, LmsUniversityDto } from '../../lib/api/types';
+import { useInvalidateUniversities } from './useInvalidateUniversities';
 
-export interface UniversityFormModalProps {
+export interface RenameUniversityModalProps {
   open: boolean;
-  university: UniversityDto | null;
+  university: LmsUniversityDto;
   onClose: () => void;
 }
 
-/** Add/rename modal for a university. */
-export default function UniversityFormModal({ open, university, onClose }: UniversityFormModalProps) {
-  const isCreate = university === null;
-  const [name, setName] = useState(university?.name ?? '');
+/** Modal with a single Name field to rename a university. */
+export default function RenameUniversityModal({ open, university, onClose }: RenameUniversityModalProps) {
+  const [name, setName] = useState(university.name);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<CommandError | null>(null);
-  const queryClient = useQueryClient();
+  const invalidate = useInvalidateUniversities();
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      university ? api.updateUniversity(university.id, name.trim()) : api.addUniversity(name.trim()),
+    mutationFn: () => api.renameUniversity(university.id, name.trim()),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.catalog });
+      invalidate();
       onClose();
     },
     onError: (e) => setSaveError(toCommandError(e)),
@@ -38,13 +36,14 @@ export default function UniversityFormModal({ open, university, onClose }: Unive
       return;
     }
     setValidationError(null);
+    setSaveError(null);
     saveMutation.mutate();
   }
 
   return (
     <Modal
       open={open}
-      title={isCreate ? 'Add university' : 'Edit university'}
+      title="Rename university"
       onClose={onClose}
       footer={
         <>

@@ -10,5 +10,6 @@ export const queryKeys = {
   runs: (limit: number) => ['runs', limit] as const,
   accounts: ['accounts'] as const,
   catalog: ['catalog'] as const,
+  universities: ['universities'] as const,
   settings: ['settings'] as const,
 };

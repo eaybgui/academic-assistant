@@ -12,7 +12,7 @@ vi.mock('../lib/api/client', () => ({
 }));
 
 const STORAGE_KEY = 'academic-assistant.sidebar-collapsed';
-const NAV_LABELS = ['Dashboard', 'Results', 'Runs', 'Accounts', 'University catalog', 'Settings'];
+const NAV_LABELS = ['Dashboard', 'Results', 'Runs', 'Accounts', 'Universities', 'Settings'];
 
 function renderLayout() {
   const queryClient = new QueryClient();

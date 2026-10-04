@@ -179,3 +179,30 @@ export interface RunFinishedEvent {
   runId: number;
   status: RunStatus;
 }
+
+// LMS sign-in contract (phase 2, milestone 1). Mirrors src-tauri/src/dto/lms.rs.
+
+export type LmsPlatform = 'moodle' | 'blackboard';
+export type LoginState = 'never' | 'ok' | 'expired' | 'error';
+export type SyncOutcome = 'success' | 'failed' | 'login_required';
+
+export interface LmsUniversityDto {
+  id: number;
+  name: string;
+  platform: LmsPlatform;
+  baseUrl: string;
+  loginState: LoginState;
+  accountLabel: string | null;
+  lastSync: { at: string | null; outcome: SyncOutcome | null; error: string | null };
+  courses: { tracked: number; total: number; unreviewed: number };
+}
+
+export interface LmsUniversityInput {
+  name: string;
+  platform: LmsPlatform;
+  baseUrl: string;
+}
+
+export interface ProbeDto {
+  baseUrl: string;
+}

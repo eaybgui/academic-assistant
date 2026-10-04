@@ -26,7 +26,7 @@ const NAV_ITEMS: readonly NavItemConfig[] = [
   { to: '/results', label: 'Results', end: false, Icon: ResultsIcon },
   { to: '/runs', label: 'Runs', end: false, Icon: RunsIcon },
   { to: '/accounts', label: 'Accounts', end: false, Icon: AccountsIcon },
-  { to: '/catalog', label: 'University catalog', end: false, Icon: UniversityIcon },
+  { to: '/universities', label: 'Universities', end: false, Icon: UniversityIcon },
   { to: '/settings', label: 'Settings', end: false, Icon: SettingsIcon },
 ];
 
