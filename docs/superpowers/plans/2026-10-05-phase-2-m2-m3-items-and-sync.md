@@ -14,6 +14,7 @@
 
 - Follow `AGENTS.md`: implement only your task, no unrelated refactors, no new dependencies, report deviations instead of improvising.
 - Dependency rule `src-tauri → infra → core`; `core` stays free of I/O.
+- **The GitHub repository is PUBLIC (AGENTS.md §11.2).** Never commit real API responses, real ids, course names, titles, grades or anything from the user's accounts. Committed tests use invented data only. Captured fixtures live only in the git-ignored `crates/infra/tests/fixtures/lms-local/`; tests that read them must skip when the folder is absent.
 - Secrets (Moodle token, Blackboard cookies) only in `SecretStore` and in memory; never in SQLite, logs, DTOs, events, errors, fixtures or test output. Item titles and notes are personal data: never log them.
 - LMS access is read-only: Moodle read functions and Blackboard `GET` only.
 - `fetch_items` is all-or-nothing: any failed request fails the whole call (spec §4.2), except the explicitly listed "404 means empty" Blackboard endpoints in Task 5.
@@ -53,7 +54,7 @@
 
 **Interfaces:**
 - Consumes: `academic_core::domain::{lms_credential_key, LmsPlatform}`, `academic_core::ports::SecretStore`, `academic_infra::secrets::KeyringSecretStore`, `academic_infra::lms::blackboard::decode_session`, `academic_infra::factory::http_client`.
-- Produces: an example binary that writes redacted JSON to `crates/infra/tests/fixtures/lms/{moodle|blackboard}/<name>.json`, used by Tasks 4 and 5.
+- Produces: an example binary that writes redacted JSON to `crates/infra/tests/fixtures/lms-local/{moodle|blackboard}/<name>.json`, used by Tasks 4 and 5.
 
 The tool calls the raw platform endpoints with the credential the app stored (read-only), redacts personal text and writes one file per endpoint. It never prints credentials or response bodies.
 
@@ -125,7 +126,7 @@ mod tests {
 
 Implementation rules (exact): for objects, recurse with the child key; for arrays, recurse with the parent key; for strings: replace when `key` is in `PERSONAL_KEYS`, or the string contains whitespace, or its length > 60; for numbers: replace with `7.5` when `key` (lowercased) contains one of `RESULT_KEY_FRAGMENTS`, does not end with `id`, and the number is not `0` or `-1`; when the parent key is `displayGrade` (or `feedback`) apply the same number rule to `score`/`grade`. Booleans and nulls unchanged.
 
-- [ ] **Step 2: Write the capture `main`.** Configuration through env vars (fail with a clear message if missing): `LMS_CAPTURE_UNIVERSITY_ID`, `LMS_CAPTURE_PLATFORM` (`moodle`|`blackboard`), `LMS_CAPTURE_BASE_URL`, optional `LMS_CAPTURE_MAX_COURSES` (default 3). Read the credential with `KeyringSecretStore.get(&lms_credential_key(platform, id))`. Use `http_client()` and `url::form_urlencoded::Serializer` for form bodies and query strings. Write each response, redacted and pretty-printed, to `crates/infra/tests/fixtures/lms/<platform>/<name>.json` (create the directory). Print only `wrote <path> (<n> bytes)` per file and a final count.
+- [ ] **Step 2: Write the capture `main`.** Configuration through env vars (fail with a clear message if missing): `LMS_CAPTURE_UNIVERSITY_ID`, `LMS_CAPTURE_PLATFORM` (`moodle`|`blackboard`), `LMS_CAPTURE_BASE_URL`, optional `LMS_CAPTURE_MAX_COURSES` (default 3). Read the credential with `KeyringSecretStore.get(&lms_credential_key(platform, id))`. Use `http_client()` and `url::form_urlencoded::Serializer` for form bodies and query strings. Write each response, redacted and pretty-printed, to `crates/infra/tests/fixtures/lms-local/<platform>/<name>.json` (create the directory). Print only `wrote <path> (<n> bytes)` per file and a final count.
 
 Moodle (POST `{base}/webservice/rest/server.php`, fields `wstoken`, `wsfunction`, `moodlewsrestformat=json`; arrays as `courseids[0]=…`):
 
@@ -163,9 +164,9 @@ git commit -m "test(infra): add LMS fixture capture tool with redaction"
 
 Not a subagent task. The controller, with the user's prior consent:
 1. Runs `cargo run -p academic-infra --example lms_capture` once per university (env vars as in Task 1; university ids from the app).
-2. Checks the written files for leftover personal data (`grep` for whitespace-containing strings and known names), and lists the files and sizes to the user.
-3. Commits the fixtures on branch `feature/p2-m23-t2-fixtures` (`test: add redacted LMS API fixtures`) and merges it.
-4. Records in the ledger any surprising shape (e.g. different `scoreProviderHandle` strings, empty endpoints) and carries it into Tasks 4–5 dispatches.
+2. Checks the written files for leftover free text and lists the files and sizes to the user (redaction is defense in depth only — the files stay local).
+3. **Does not commit them.** The folder is git-ignored because the repository is public; `git status` must show nothing new under `crates/infra/tests/fixtures/`.
+4. Records in the ledger any surprising shape (e.g. different `scoreProviderHandle` strings, empty endpoints) — described generically, never with real values — and carries it into Tasks 4–5 dispatches.
 
 If capture fails for a platform, Tasks 4/5 still proceed with synthetic tests only; the fixture smoke test for that platform is then skipped and the gap is reported to the user.
 
@@ -469,7 +470,7 @@ async fn non_numeric_course_ids_are_rejected() {
 
 #[tokio::test]
 async fn captured_fixtures_parse() {
-    // Skip (return early with eprintln!) when crates/infra/tests/fixtures/lms/moodle/assignments.json is absent.
+    // Skip (return early with eprintln!) when crates/infra/tests/fixtures/lms-local/moodle/assignments.json is absent.
     // Mount assignments.json, quizzes.json, calendar_events.json, every submission_status_*.json for any
     // assignid (fallback: first file), quiz_attempts_*/quiz_best_grade_* likewise.
     // Course ids: the ids present in assignments.json.
@@ -528,7 +529,7 @@ Run the test file → PASS; then gates.
 - Consumes: Task 3 types; Task 4 helpers `format_number` from `lms/mod.rs`.
 - Produces: `impl BlackboardClient { pub async fn fetch_items(&self, courses: &[RemoteCourseRef], window: &SyncWindow) -> Result<Vec<RemoteItem>, LmsError> }`.
 
-- [ ] **Step 1: Write failing wiremock tests** (synthetic shapes below; plus a fixture smoke test like Task 4's, reading `fixtures/lms/blackboard/columns_*.json`, `user_grades_*.json`, `attempts_*.json`, `calendar_items.json`, `courses.json`):
+- [ ] **Step 1: Write failing wiremock tests** (synthetic shapes below; plus a fixture smoke test like Task 4's, reading `fixtures/lms-local/blackboard/columns_*.json`, `user_grades_*.json`, `attempts_*.json`, `calendar_items.json`, `courses.json`):
 
 ```rust
 #[tokio::test]

@@ -7,3 +7,6 @@ src-tauri/gen/schemas/
 .claude/worktrees/
 
 .superpowers/
+
+# Real LMS API captures: personal data, never commit (public repo, see AGENTS.md 11.2)
+crates/infra/tests/fixtures/lms-local/
