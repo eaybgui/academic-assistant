@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use academic_core::domain::{
-    Account, AccountDraft, AccountId, Catalog, Counters, Course, DashboardCounts, NewResult, Page,
+    Account, AccountDraft, AccountId, Catalog, Counters, DashboardCounts, NewResult, Page,
     ProcessedMessage, ResultQuery, RunAccountResult, RunAccountView, RunId, RunRecord, RunStatus,
-    RunTrigger, Settings, StoredResult, SyncCursor, SyncState, SyncStatus, University,
+    RunTrigger, Settings, StoredResult, SyncCursor, SyncState, SyncStatus,
 };
 use academic_core::ports::{
     AccountRepository, CatalogRepository, ProcessedMessageRepository, RepoError, RepoResult,
@@ -24,8 +24,6 @@ pub struct TestStore {
 
     catalog: Mutex<Catalog>,
     catalog_fails: Mutex<bool>,
-    next_university_id: Mutex<i64>,
-    next_course_id: Mutex<i64>,
 
     sync_states: Mutex<HashMap<(AccountId, String), SyncState>>,
     sync_successes: Mutex<Vec<(AccountId, String, SyncCursor)>>,
@@ -51,8 +49,6 @@ impl TestStore {
             next_account_id: Mutex::new(next_account_id),
             catalog: Mutex::new(catalog),
             catalog_fails: Mutex::new(false),
-            next_university_id: Mutex::new(1),
-            next_course_id: Mutex::new(1),
             sync_states: Mutex::new(HashMap::new()),
             sync_successes: Mutex::new(Vec::new()),
             sync_failures: Mutex::new(Vec::new()),
@@ -206,77 +202,6 @@ impl CatalogRepository for TestStore {
             return Err(RepoError::Storage("catalog load failed".to_string()));
         }
         Ok(self.catalog.lock().unwrap().clone())
-    }
-
-    fn add_university(&self, name: &str, _now: DateTime<Utc>) -> RepoResult<University> {
-        let mut next_id = self.next_university_id.lock().unwrap();
-        let university = University {
-            id: *next_id,
-            name: name.to_string(),
-        };
-        *next_id += 1;
-        self.catalog
-            .lock()
-            .unwrap()
-            .universities
-            .push(university.clone());
-        Ok(university)
-    }
-
-    fn rename_university(&self, id: i64, name: &str) -> RepoResult<University> {
-        let mut catalog = self.catalog.lock().unwrap();
-        let university = catalog
-            .universities
-            .iter_mut()
-            .find(|u| u.id == id)
-            .ok_or(RepoError::NotFound)?;
-        university.name = name.to_string();
-        Ok(university.clone())
-    }
-
-    fn delete_university(&self, id: i64) -> RepoResult<()> {
-        self.catalog
-            .lock()
-            .unwrap()
-            .universities
-            .retain(|u| u.id != id);
-        Ok(())
-    }
-
-    fn add_course(
-        &self,
-        university_id: i64,
-        name: &str,
-        aliases: &[String],
-        _now: DateTime<Utc>,
-    ) -> RepoResult<Course> {
-        let mut next_id = self.next_course_id.lock().unwrap();
-        let course = Course {
-            id: *next_id,
-            university_id,
-            name: name.to_string(),
-            aliases: aliases.to_vec(),
-        };
-        *next_id += 1;
-        self.catalog.lock().unwrap().courses.push(course.clone());
-        Ok(course)
-    }
-
-    fn update_course(&self, id: i64, name: &str, aliases: &[String]) -> RepoResult<Course> {
-        let mut catalog = self.catalog.lock().unwrap();
-        let course = catalog
-            .courses
-            .iter_mut()
-            .find(|c| c.id == id)
-            .ok_or(RepoError::NotFound)?;
-        course.name = name.to_string();
-        course.aliases = aliases.to_vec();
-        Ok(course.clone())
-    }
-
-    fn delete_course(&self, id: i64) -> RepoResult<()> {
-        self.catalog.lock().unwrap().courses.retain(|c| c.id != id);
-        Ok(())
     }
 }
 

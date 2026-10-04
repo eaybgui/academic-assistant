@@ -7,11 +7,13 @@
 
 mod accounts;
 mod catalog;
+mod courses;
 mod processed;
 mod results;
 mod runs;
 mod settings;
 mod sync;
+mod universities;
 pub(crate) mod util;
 
 use std::path::Path;
@@ -24,9 +26,12 @@ use rusqlite::Connection;
 
 use util::map_err;
 
-/// SQL for the one migration this app currently ships. Embedded at compile time so
-/// the binary never depends on a file existing next to it at runtime.
-const MIGRATION_0001: &str = include_str!("../../migrations/0001_init.sql");
+/// Every migration, in order. Embedded at compile time so the binary never depends
+/// on files next to it at runtime. Versions are never edited once released.
+const MIGRATIONS: [(i64, &str); 2] = [
+    (1, include_str!("../../migrations/0001_init.sql")),
+    (2, include_str!("../../migrations/0002_lms.sql")),
+];
 
 /// Handle to the application's SQLite database. Cheap to clone-share via `Arc`
 /// (construct once, wrap in `Arc<Database>`); every method takes `&self` and
@@ -92,33 +97,34 @@ fn register_unicode_lower(conn: &Connection) -> Result<(), RepoError> {
 }
 
 /// Tracks which migrations have been applied, so reopening the same database file
-/// is idempotent. Applying a pending migration and recording it in
-/// `schema_migrations` happens in a single transaction, so a failure partway through
-/// never leaves the schema updated without the version recorded (or vice versa).
+/// is idempotent. Each pending migration and its `schema_migrations` row are applied
+/// in their own transaction, so a failure partway through never leaves the schema
+/// updated without the version recorded (or vice versa).
 fn apply_migrations(conn: &Connection) -> Result<(), RepoError> {
     conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS schema_migrations (\
-            version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);",
+        "CREATE TABLE IF NOT EXISTS schema_migrations (            version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);",
     )
     .map_err(map_err)?;
 
-    let already_applied: bool = conn
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = 1)",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(map_err)?;
-
-    if !already_applied {
+    for (version, sql) in MIGRATIONS {
+        let applied: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?1)",
+                [version],
+                |row| row.get(0),
+            )
+            .map_err(map_err)?;
+        if applied {
+            continue;
+        }
         // `unchecked_transaction` is safe here: `from_connection` runs before the
         // connection is shared behind its `Mutex`, so nothing else can be using it
         // concurrently.
         let tx = conn.unchecked_transaction().map_err(map_err)?;
-        tx.execute_batch(MIGRATION_0001).map_err(map_err)?;
+        tx.execute_batch(sql).map_err(map_err)?;
         tx.execute(
-            "INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?1)",
-            [Utc::now().to_rfc3339()],
+            "INSERT INTO schema_migrations (version, applied_at) VALUES (?1, ?2)",
+            rusqlite::params![version, Utc::now().to_rfc3339()],
         )
         .map_err(map_err)?;
         tx.commit().map_err(map_err)?;
@@ -160,7 +166,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version_count, 1);
+        assert_eq!(version_count, MIGRATIONS.len() as i64);
     }
 
     #[test]
