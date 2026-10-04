@@ -4,13 +4,14 @@
 use std::sync::Arc;
 
 use academic_core::domain::{
-    AIAnalysis, Account, AccountDraft, Category, FetchBatch, MessageOutcome, ModelDescriptor,
-    NewResult, Priority, ProcessedMessage, ProviderConfig, RunId, RunProgress, RunStatus,
-    RunTrigger, Settings, SyncCursor,
+    lms_credential_key, AIAnalysis, Account, AccountDraft, Category, FetchBatch, LmsIdentity,
+    LmsUniversity, MessageOutcome, ModelDescriptor, NewResult, Priority, ProcessedMessage,
+    ProviderConfig, RemoteCourse, RunId, RunProgress, RunStatus, RunTrigger, Settings, SyncCursor,
 };
 use academic_core::ports::{
-    Answer, AnswerSet, EmailProvider, EmailProviderFactory, ModelError, ModelProvider,
-    ProviderError, QuestionSet, RunObserver, StructuredModel, SystemClock,
+    Answer, AnswerSet, EmailProvider, EmailProviderFactory, LmsAuthenticator, LmsClient,
+    LmsClientFactory, LmsError, ModelError, ModelProvider, ProviderError, QuestionSet, RunObserver,
+    SecretStore, StructuredModel, SystemClock,
 };
 use academic_infra::db::Database;
 use academic_infra::secrets::InMemorySecretStore;
@@ -38,6 +39,73 @@ impl Default for FakeProviderBehavior {
             create: || Ok(()),
             test_connection: || Ok(()),
         }
+    }
+}
+
+/// Scripted LMS behavior for command tests.
+#[derive(Clone, Copy)]
+pub struct FakeLmsBehavior {
+    pub verify: fn() -> Result<LmsIdentity, LmsError>,
+    pub renew: fn() -> Result<(), LmsError>,
+}
+
+impl Default for FakeLmsBehavior {
+    fn default() -> Self {
+        Self {
+            verify: || {
+                Ok(LmsIdentity {
+                    user_id: "1".into(),
+                    display_name: "Ana Pérez".into(),
+                })
+            },
+            renew: || Err(LmsError::Auth("Sign-in required".into())),
+        }
+    }
+}
+
+/// Like the real factory, `create` fails with `Auth` when no credential is stored.
+struct FakeLmsFactory {
+    behavior: FakeLmsBehavior,
+    secrets: Arc<dyn SecretStore>,
+}
+
+struct FakeLmsClient(FakeLmsBehavior);
+
+struct FakeLmsAuthenticator(FakeLmsBehavior);
+
+impl LmsClientFactory for FakeLmsFactory {
+    fn create(&self, university: &LmsUniversity) -> Result<Box<dyn LmsClient>, LmsError> {
+        let key = lms_credential_key(university.platform, university.id);
+        match self.secrets.get(&key) {
+            Ok(Some(_)) => Ok(Box::new(FakeLmsClient(self.behavior))),
+            _ => Err(LmsError::Auth("Sign in".into())),
+        }
+    }
+
+    fn create_with_credential(
+        &self,
+        _university: &LmsUniversity,
+        _credential: &str,
+    ) -> Result<Box<dyn LmsClient>, LmsError> {
+        Ok(Box::new(FakeLmsClient(self.behavior)))
+    }
+}
+
+#[async_trait]
+impl LmsClient for FakeLmsClient {
+    async fn verify(&self) -> Result<LmsIdentity, LmsError> {
+        (self.0.verify)()
+    }
+
+    async fn list_courses(&self) -> Result<Vec<RemoteCourse>, LmsError> {
+        Ok(vec![])
+    }
+}
+
+#[async_trait]
+impl LmsAuthenticator for FakeLmsAuthenticator {
+    async fn renew_silently(&self, _university: &LmsUniversity) -> Result<(), LmsError> {
+        (self.0.renew)()
     }
 }
 
@@ -126,9 +194,25 @@ pub fn harness() -> Harness {
     )
 }
 
+pub fn harness_with_lms(behavior: FakeLmsBehavior) -> Harness {
+    build_harness(
+        FakeProviderBehavior::default(),
+        Ok(Arc::new(FakeModel(answer_yes))),
+        behavior,
+    )
+}
+
 pub fn harness_with(
     provider: FakeProviderBehavior,
     model: Result<Arc<dyn StructuredModel>, String>,
+) -> Harness {
+    build_harness(provider, model, FakeLmsBehavior::default())
+}
+
+fn build_harness(
+    provider: FakeProviderBehavior,
+    model: Result<Arc<dyn StructuredModel>, String>,
+    lms: FakeLmsBehavior,
 ) -> Harness {
     let secrets = Arc::new(InMemorySecretStore::default());
     let state = AppState::new(
@@ -140,6 +224,11 @@ pub fn harness_with(
             http: academic_infra::factory::http_client(),
             observer: Arc::new(NoopObserver),
             clock: Arc::new(SystemClock),
+            lms_factory: Arc::new(FakeLmsFactory {
+                behavior: lms,
+                secrets: secrets.clone(),
+            }),
+            lms_authenticator: Arc::new(FakeLmsAuthenticator(lms)),
         },
     );
     Harness { state, secrets }
