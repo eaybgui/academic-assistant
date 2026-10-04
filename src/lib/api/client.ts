@@ -4,9 +4,12 @@ import type {
   AccountInput,
   CommandError,
   ConnectionTestDto,
-  CourseDto,
   DashboardDto,
+  LmsPlatform,
+  LmsUniversityDto,
+  LmsUniversityInput,
   Page,
+  ProbeDto,
   ResultDto,
   ResultQuery,
   ResultSort,
@@ -67,20 +70,24 @@ export const api = {
 
   getCatalog: () => invoke<UniversityDto[]>('get_catalog', {}),
 
-  addUniversity: (name: string) => invoke<UniversityDto>('add_university', { name }),
+  getUniversities: () => invoke<LmsUniversityDto[]>('get_universities', {}),
 
-  updateUniversity: (id: number, name: string) =>
-    invoke<UniversityDto>('update_university', { id, name }),
+  lmsProbe: (url: string, platform: LmsPlatform) =>
+    invoke<ProbeDto>('lms_probe', { url, platform }),
+
+  addUniversity: (input: LmsUniversityInput) =>
+    invoke<LmsUniversityDto>('add_university', { input }),
+
+  renameUniversity: (id: number, name: string) =>
+    invoke<LmsUniversityDto>('rename_university', { id, name }),
 
   removeUniversity: (id: number) => invoke<void>('remove_university', { id }),
 
-  addCourse: (universityId: number, name: string, aliases: string[]) =>
-    invoke<CourseDto>('add_course', { universityId, name, aliases }),
+  lmsSignIn: (id: number) => invoke<LmsUniversityDto>('lms_sign_in', { id }),
 
-  updateCourse: (id: number, name: string, aliases: string[]) =>
-    invoke<CourseDto>('update_course', { id, name, aliases }),
+  lmsSignOut: (id: number) => invoke<LmsUniversityDto>('lms_sign_out', { id }),
 
-  removeCourse: (id: number) => invoke<void>('remove_course', { id }),
+  lmsCheckSession: (id: number) => invoke<LmsUniversityDto>('lms_check_session', { id }),
 
   getSettings: () => invoke<SettingsDto>('get_settings', {}),
 

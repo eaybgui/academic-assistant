@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { api, toCommandError } from './client';
-import type { AccountInput, ResultQuery, SettingsInput } from './types';
+import type { AccountInput, LmsUniversityInput, ResultQuery, SettingsInput } from './types';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -99,14 +99,28 @@ describe('api client', () => {
     expect(mockedInvoke).toHaveBeenCalledWith('get_catalog', {});
   });
 
-  it('addUniversity(name) → add_university { name }', async () => {
-    await api.addUniversity('UV');
-    expect(mockedInvoke).toHaveBeenCalledWith('add_university', { name: 'UV' });
+  it('getUniversities() → get_universities {}', async () => {
+    await api.getUniversities();
+    expect(mockedInvoke).toHaveBeenCalledWith('get_universities', {});
   });
 
-  it('updateUniversity(id, name) → update_university { id, name }', async () => {
-    await api.updateUniversity(1, 'UV');
-    expect(mockedInvoke).toHaveBeenCalledWith('update_university', { id: 1, name: 'UV' });
+  it('lmsProbe(url, platform) → lms_probe { url, platform }', async () => {
+    await api.lmsProbe('aulavirtual.uv.es', 'moodle');
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_probe', {
+      url: 'aulavirtual.uv.es',
+      platform: 'moodle',
+    });
+  });
+
+  it('addUniversity(input) → add_university { input }', async () => {
+    const input: LmsUniversityInput = { name: 'UV', platform: 'moodle', baseUrl: 'aulavirtual.uv.es' };
+    await api.addUniversity(input);
+    expect(mockedInvoke).toHaveBeenCalledWith('add_university', { input });
+  });
+
+  it('renameUniversity(id, name) → rename_university { id, name }', async () => {
+    await api.renameUniversity(1, 'UV');
+    expect(mockedInvoke).toHaveBeenCalledWith('rename_university', { id: 1, name: 'UV' });
   });
 
   it('removeUniversity(id) → remove_university { id }', async () => {
@@ -114,27 +128,19 @@ describe('api client', () => {
     expect(mockedInvoke).toHaveBeenCalledWith('remove_university', { id: 1 });
   });
 
-  it('addCourse(universityId, name, aliases) → add_course { universityId, name, aliases }', async () => {
-    await api.addCourse(1, 'Algebra', ['ALG']);
-    expect(mockedInvoke).toHaveBeenCalledWith('add_course', {
-      universityId: 1,
-      name: 'Algebra',
-      aliases: ['ALG'],
-    });
+  it('lmsSignIn(id) → lms_sign_in { id }', async () => {
+    await api.lmsSignIn(1);
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_sign_in', { id: 1 });
   });
 
-  it('updateCourse(id, name, aliases) → update_course { id, name, aliases }', async () => {
-    await api.updateCourse(3, 'Algebra II', []);
-    expect(mockedInvoke).toHaveBeenCalledWith('update_course', {
-      id: 3,
-      name: 'Algebra II',
-      aliases: [],
-    });
+  it('lmsSignOut(id) → lms_sign_out { id }', async () => {
+    await api.lmsSignOut(1);
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_sign_out', { id: 1 });
   });
 
-  it('removeCourse(id) → remove_course { id }', async () => {
-    await api.removeCourse(3);
-    expect(mockedInvoke).toHaveBeenCalledWith('remove_course', { id: 3 });
+  it('lmsCheckSession(id) → lms_check_session { id }', async () => {
+    await api.lmsCheckSession(1);
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_check_session', { id: 1 });
   });
 
   it('getSettings() → get_settings {}', async () => {
