@@ -3,7 +3,7 @@
 use academic_core::domain::{
     lms_credential_key, LmsPlatform, LmsUniversity, LoginState, UniversityId,
 };
-use academic_core::lms::{adopt_credential, ensure_session, normalize_base_url};
+use academic_core::lms::{adopt_credential, ensure_session, normalize_base_url, SessionError};
 use academic_core::ports::LmsError;
 use academic_infra::lms::probe::{probe, ProbeError};
 use tauri::{AppHandle, State};
@@ -205,10 +205,21 @@ async fn complete_sign_in(
             dto(state, &updated)
         }
         Err(error) => {
-            state.universities.set_login(id, LoginState::Error, None)?;
+            if rejects_credential(&error) {
+                state.universities.set_login(id, LoginState::Error, None)?;
+            }
             Err(error.into())
         }
     }
+}
+
+/// Only a credential the platform rejected or could not use marks the university
+/// `Error`; transient connection and local storage failures leave its state alone.
+fn rejects_credential(error: &SessionError) -> bool {
+    matches!(
+        error,
+        SessionError::Lms(LmsError::Auth(_) | LmsError::Protocol(_))
+    )
 }
 
 fn sign_out(state: &AppState, id: UniversityId) -> Result<LmsUniversityDto, CommandError> {
@@ -340,6 +351,32 @@ mod tests {
             universities(&h.state).unwrap()[0].login_state,
             LoginState::Error
         );
+        assert_eq!(
+            h.secrets
+                .get(&lms_credential_key(LmsPlatform::Moodle, u.id))
+                .unwrap(),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn connection_failure_during_sign_in_keeps_the_login_state_and_label() {
+        let h = harness_with_lms(FakeLmsBehavior {
+            verify: || Err(LmsError::Connection("down".into())),
+            ..FakeLmsBehavior::default()
+        });
+        let u = add(&h, "UV", "https://aulavirtual.uv.es");
+        h.state
+            .universities
+            .set_login(u.id, LoginState::Ok, Some("Ana Pérez"))
+            .unwrap();
+        let error = complete_sign_in(&h.state, u.id, Ok("tok".into()))
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind, CommandErrorKind::Connection);
+        let after = &universities(&h.state).unwrap()[0];
+        assert_eq!(after.login_state, LoginState::Ok);
+        assert_eq!(after.account_label.as_deref(), Some("Ana Pérez"));
         assert_eq!(
             h.secrets
                 .get(&lms_credential_key(LmsPlatform::Moodle, u.id))
