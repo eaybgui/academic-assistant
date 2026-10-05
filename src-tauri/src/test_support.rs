@@ -6,7 +6,8 @@ use std::sync::Arc;
 use academic_core::domain::{
     lms_credential_key, AIAnalysis, Account, AccountDraft, Category, FetchBatch, LmsIdentity,
     LmsUniversity, MessageOutcome, ModelDescriptor, NewResult, Priority, ProcessedMessage,
-    ProviderConfig, RemoteCourse, RunId, RunProgress, RunStatus, RunTrigger, Settings, SyncCursor,
+    ProviderConfig, RemoteCourse, RemoteCourseRef, RemoteItem, RunId, RunProgress, RunStatus,
+    RunTrigger, Settings, SyncCursor, SyncWindow,
 };
 use academic_core::ports::{
     Answer, AnswerSet, EmailProvider, EmailProviderFactory, LmsAuthenticator, LmsClient,
@@ -98,6 +99,14 @@ impl LmsClient for FakeLmsClient {
     }
 
     async fn list_courses(&self) -> Result<Vec<RemoteCourse>, LmsError> {
+        Ok(vec![])
+    }
+
+    async fn fetch_items(
+        &self,
+        _courses: &[RemoteCourseRef],
+        _window: &SyncWindow,
+    ) -> Result<Vec<RemoteItem>, LmsError> {
         Ok(vec![])
     }
 }

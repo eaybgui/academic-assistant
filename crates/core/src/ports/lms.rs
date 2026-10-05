@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 
-use crate::domain::{ErrorKind, LmsIdentity, LmsUniversity, RemoteCourse};
+use crate::domain::{
+    ErrorKind, LmsIdentity, LmsUniversity, RemoteCourse, RemoteCourseRef, RemoteItem, SyncWindow,
+};
 
 /// Error returned by an LMS client, factory or authenticator. Every message is
 /// user-facing and never contains a token, cookie or URL from the login window.
@@ -27,12 +29,18 @@ impl LmsError {
 }
 
 /// Read-only access to one university's platform as the signed-in user.
-/// M2 adds `fetch_items`.
 #[async_trait]
 pub trait LmsClient: Send + Sync {
     /// Who the credential belongs to; also checks the platform exposes what we need.
     async fn verify(&self) -> Result<LmsIdentity, LmsError>;
     async fn list_courses(&self) -> Result<Vec<RemoteCourse>, LmsError>;
+    /// Assignments, quizzes, gradebook items and course events of `courses`.
+    /// All or nothing: any failed request fails the whole call.
+    async fn fetch_items(
+        &self,
+        courses: &[RemoteCourseRef],
+        window: &SyncWindow,
+    ) -> Result<Vec<RemoteItem>, LmsError>;
 }
 
 pub trait LmsClientFactory: Send + Sync {

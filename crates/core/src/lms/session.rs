@@ -116,7 +116,9 @@ mod tests {
     use chrono::{DateTime, Utc};
 
     use super::*;
-    use crate::domain::{LmsPlatform, RemoteCourse, SyncOutcome};
+    use crate::domain::{
+        LmsPlatform, RemoteCourse, RemoteCourseRef, RemoteItem, SyncOutcome, SyncWindow,
+    };
     use crate::ports::{LmsClient, RepoError, RepoResult, SecretError};
 
     fn university(state: LoginState) -> LmsUniversity {
@@ -160,6 +162,13 @@ mod tests {
             }
         }
         async fn list_courses(&self) -> Result<Vec<RemoteCourse>, LmsError> {
+            Ok(vec![])
+        }
+        async fn fetch_items(
+            &self,
+            _courses: &[RemoteCourseRef],
+            _window: &SyncWindow,
+        ) -> Result<Vec<RemoteItem>, LmsError> {
             Ok(vec![])
         }
     }

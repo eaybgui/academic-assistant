@@ -4,9 +4,10 @@
 //!   cargo test -p academic-infra --test lms_live -- --ignored --nocapture
 //! Prints only counts and the display name, never credentials or course data.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use academic_core::domain::{LmsPlatform, LmsUniversity, LoginState};
+use academic_core::domain::{LmsPlatform, LmsUniversity, LoginState, RemoteCourseRef, SyncWindow};
 use academic_core::ports::LmsClientFactory;
 use academic_infra::factory::http_client;
 use academic_infra::lms::factory::DefaultLmsClientFactory;
@@ -51,4 +52,48 @@ async fn live_verify_and_list_courses() {
     let courses = client.list_courses().await.expect("list_courses");
     println!("courses: {}", courses.len());
     assert!(!courses.is_empty());
+}
+
+#[tokio::test]
+#[ignore = "needs a real platform and a credential stored by the app"]
+async fn live_fetch_items() {
+    let factory = DefaultLmsClientFactory::new(Arc::new(KeyringSecretStore), http_client());
+    let client = factory
+        .create(&university_from_env())
+        .expect("stored credential");
+    let refs: Vec<RemoteCourseRef> = client
+        .list_courses()
+        .await
+        .expect("list_courses")
+        .into_iter()
+        .take(3)
+        .map(|course| RemoteCourseRef {
+            external_id: course.external_id,
+        })
+        .collect();
+    let items = client
+        .fetch_items(&refs, &SyncWindow::around(Utc::now()))
+        .await
+        .expect("fetch_items");
+
+    let mut per_kind: BTreeMap<String, usize> = BTreeMap::new();
+    let mut per_status: BTreeMap<String, usize> = BTreeMap::new();
+    for item in &items {
+        *per_kind.entry(item.kind.as_str().to_string()).or_default() += 1;
+        *per_status
+            .entry(item.platform_status.as_str().to_string())
+            .or_default() += 1;
+    }
+    println!("courses queried: {}", refs.len());
+    println!("items: {}", items.len());
+    println!("per kind: {per_kind:?}");
+    println!("per platform status: {per_status:?}");
+    println!(
+        "with due date: {}",
+        items.iter().filter(|i| i.due_at.is_some()).count()
+    );
+    println!(
+        "with grade: {}",
+        items.iter().filter(|i| i.grade.is_some()).count()
+    );
 }
