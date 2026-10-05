@@ -50,10 +50,21 @@ fn attempts_path(course: &str, column: &str) -> String {
     format!("/learn/api/public/v1/courses/{course}/gradebook/columns/{column}/attempts")
 }
 
+/// A captured error response (`{"httpStatus": 403, ...}`) is replayed as that status.
+fn response_for(body: Value) -> ResponseTemplate {
+    match body["httpStatus"]
+        .as_u64()
+        .and_then(|s| u16::try_from(s).ok())
+    {
+        Some(status) => ResponseTemplate::new(status),
+        None => ResponseTemplate::new(200).set_body_json(body),
+    }
+}
+
 async fn mock_body(server: &MockServer, url_path: &str, body: Value) {
     Mock::given(method("GET"))
         .and(path(url_path))
-        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .respond_with(response_for(body))
         .mount(server)
         .await;
 }
@@ -70,7 +81,7 @@ async fn mock_attempts(server: &MockServer, course: &str, column: &str, user: &s
     Mock::given(method("GET"))
         .and(path(attempts_path(course, column)))
         .and(query_param("userId", user))
-        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .respond_with(response_for(body))
         .mount(server)
         .await;
 }
@@ -156,7 +167,7 @@ async fn maps_columns_with_attempts_and_grades() {
 
     let other = &items[2];
     assert_eq!(other.kind, ItemKind::Other);
-    assert_eq!(other.platform_status, PlatformStatus::NotSubmitted);
+    assert_eq!(other.platform_status, PlatformStatus::NotApplicable);
 
     let requests = server.received_requests().await.unwrap();
     assert!(
@@ -256,16 +267,186 @@ async fn other_http_errors_fail_the_fetch() {
 }
 
 #[tokio::test]
-async fn a_missing_columns_list_fails_the_fetch() {
+async fn a_missing_columns_list_means_no_items() {
     let server = MockServer::start().await;
     mock_me(&server).await;
     mock_status(&server, &columns_path("_10_1"), 404).await;
+    mock_empty_calendar(&server).await;
+
+    let items = client(&server)
+        .fetch_items(&[course("_10_1")], &short_window())
+        .await
+        .unwrap();
+
+    assert!(items.is_empty());
+}
+
+#[tokio::test]
+async fn a_course_without_gradebook_access_is_skipped() {
+    let server = MockServer::start().await;
+    mock_me(&server).await;
+    mock_status(&server, &columns_path("_10_1"), 403).await;
+    mock_body(
+        &server,
+        &columns_path("_11_1"),
+        json!({"results": [
+            {"id": "_1_1", "name": "Memoria", "contentId": "_100_1", "score": {"possible": 10},
+             "grading": {"type": "Attempts"}, "scoreProviderHandle": "resource/x-bb-assignment"}
+        ]}),
+    )
+    .await;
+    mock_body(
+        &server,
+        &grades_path("_11_1", "_9_1"),
+        json!({"results": []}),
+    )
+    .await;
+    mock_attempts(&server, "_11_1", "_1_1", "_9_1", json!({"results": []})).await;
+    mock_empty_calendar(&server).await;
+
+    let items = client(&server)
+        .fetch_items(&[course("_10_1"), course("_11_1")], &short_window())
+        .await
+        .unwrap();
+
+    let ids: Vec<&str> = items.iter().map(|i| i.external_id.as_str()).collect();
+    assert_eq!(ids, ["column:_1_1"]);
+    assert_eq!(items[0].course_external_id, "_11_1");
+}
+
+#[tokio::test]
+async fn forbidden_user_grades_or_attempts_mean_none() {
+    let server = MockServer::start().await;
+    mock_me(&server).await;
+    mock_body(
+        &server,
+        &columns_path("_10_1"),
+        json!({"results": [
+            {"id": "_1_1", "name": "Memoria", "contentId": "_100_1", "score": {"possible": 10},
+             "grading": {"type": "Attempts"}, "scoreProviderHandle": "resource/x-bb-assignment"}
+        ]}),
+    )
+    .await;
+    mock_status(&server, &grades_path("_10_1", "_9_1"), 403).await;
+    mock_status(&server, &attempts_path("_10_1", "_1_1"), 403).await;
+    mock_empty_calendar(&server).await;
+
+    let items = client(&server)
+        .fetch_items(&[course("_10_1")], &short_window())
+        .await
+        .unwrap();
+
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].platform_status, PlatformStatus::NotSubmitted);
+    assert_eq!(items[0].grade, None);
+}
+
+#[tokio::test]
+async fn forbidden_outside_the_gradebook_is_still_an_expired_session() {
+    let server = MockServer::start().await;
+    mock_status(&server, ME, 403).await;
+    let result = client(&server)
+        .fetch_items(&[course("_10_1")], &short_window())
+        .await;
+    assert!(matches!(result, Err(LmsError::Auth(_))));
+
+    let server = MockServer::start().await;
+    mock_me(&server).await;
+    mock_body(&server, &columns_path("_10_1"), json!({"results": []})).await;
+    mock_status(&server, CALENDAR, 403).await;
+    let result = client(&server)
+        .fetch_items(&[course("_10_1")], &short_window())
+        .await;
+    assert!(matches!(result, Err(LmsError::Auth(_))));
+}
+
+#[tokio::test]
+async fn forbidden_on_a_later_page_is_an_error() {
+    let server = MockServer::start().await;
+    mock_me(&server).await;
+    let next = format!("{}?page=2", columns_path("_10_1"));
+    Mock::given(method("GET"))
+        .and(path(columns_path("_10_1")))
+        .and(query_param("page", "2"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(columns_path("_10_1")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [],
+            "paging": {"nextPage": next}
+        })))
+        .mount(&server)
+        .await;
 
     let result = client(&server)
         .fetch_items(&[course("_10_1")], &short_window())
         .await;
 
-    assert!(matches!(result, Err(LmsError::Protocol(_))));
+    assert!(matches!(result, Err(LmsError::Auth(_))));
+}
+
+#[tokio::test]
+async fn maps_assessment_attendance_and_manual_columns() {
+    let server = MockServer::start().await;
+    mock_me(&server).await;
+    mock_body(
+        &server,
+        &columns_path("_10_1"),
+        json!({"results": [
+            {"id": "_1_1", "name": "Práctica", "contentId": "_100_1", "score": {"possible": 10},
+             "grading": {"type": "Attempts"}, "scoreProviderHandle": "resource/x-bb-assessment"},
+            {"id": "_2_1", "name": "Asistencia", "contentId": "_101_1", "score": {"possible": 10},
+             "grading": {"type": "Manual"}, "scoreProviderHandle": "resource/x-bb-attendance"},
+            {"id": "_3_1", "name": "Participación", "score": {"possible": 5},
+             "grading": {"type": "Manual"}},
+            {"id": "_4_1", "name": "Actitud", "score": {"possible": 5},
+             "grading": {"type": "Manual"}}
+        ]}),
+    )
+    .await;
+    mock_body(
+        &server,
+        &grades_path("_10_1", "_9_1"),
+        json!({"results": [{"columnId": "_4_1", "score": 4.0}]}),
+    )
+    .await;
+    mock_attempts(&server, "_10_1", "_1_1", "_9_1", json!({"results": []})).await;
+    mock_empty_calendar(&server).await;
+
+    let items = client(&server)
+        .fetch_items(&[course("_10_1")], &short_window())
+        .await
+        .unwrap();
+
+    let summary: Vec<_> = items
+        .iter()
+        .map(|i| (i.external_id.as_str(), i.kind, i.platform_status))
+        .collect();
+    assert_eq!(
+        summary,
+        [
+            (
+                "column:_1_1",
+                ItemKind::Assignment,
+                PlatformStatus::NotSubmitted
+            ),
+            (
+                "column:_3_1",
+                ItemKind::Other,
+                PlatformStatus::NotApplicable
+            ),
+            ("column:_4_1", ItemKind::Other, PlatformStatus::Graded),
+        ]
+    );
+    let requests = server.received_requests().await.unwrap();
+    assert!(
+        !requests
+            .iter()
+            .any(|r| r.url.path() == attempts_path("_10_1", "_2_1")),
+        "an attendance column is skipped before any attempts request"
+    );
 }
 
 #[tokio::test]
