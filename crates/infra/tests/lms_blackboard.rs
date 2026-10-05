@@ -29,7 +29,10 @@ async fn verify_sends_the_cookies_and_builds_the_display_name() {
     Mock::given(method("GET"))
         .and(path("/learn/api/public/v1/users/me"))
         // wiremock splits request header values on commas, and the BbRouter value has one.
-        .and(headers("cookie", vec!["BbRouter=expires:1", "id:abc; JSESSIONID=J1"]))
+        .and(headers(
+            "cookie",
+            vec!["BbRouter=expires:1", "id:abc; JSESSIONID=J1"],
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "id": "_1234_1", "userName": "ana.perez", "name": { "given": "Ana", "family": "Pérez" }
         })))
