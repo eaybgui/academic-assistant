@@ -1,7 +1,9 @@
 use async_trait::async_trait;
+use serde::Serialize;
 
 use crate::domain::{
-    ErrorKind, LmsIdentity, LmsUniversity, RemoteCourse, RemoteCourseRef, RemoteItem, SyncWindow,
+    ErrorKind, LmsIdentity, LmsUniversity, RemoteCourse, RemoteCourseRef, RemoteItem, SyncOutcome,
+    SyncWindow, UniversityId,
 };
 
 /// Error returned by an LMS client, factory or authenticator. Every message is
@@ -62,4 +64,42 @@ pub trait LmsAuthenticator: Send + Sync {
     /// On success the new credential is already verified and stored.
     /// `Err(LmsError::Auth)` when the user has to sign in interactively.
     async fn renew_silently(&self, university: &LmsUniversity) -> Result<(), LmsError>;
+}
+
+/// Step a university's sync is currently in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LmsSyncStage {
+    Courses,
+    Items,
+    Saving,
+    Done,
+    Failed,
+    LoginRequired,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LmsSyncProgress {
+    pub university_id: UniversityId,
+    pub university_name: String,
+    pub stage: LmsSyncStage,
+}
+
+/// What happened to one university in a sync.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LmsSyncResult {
+    pub university_id: UniversityId,
+    pub university_name: String,
+    pub outcome: SyncOutcome,
+    pub new_items: u32,
+    pub due_changed: u32,
+    pub removed: u32,
+    pub error: Option<String>,
+}
+
+/// Receives sync progress and completion notifications.
+pub trait LmsSyncObserver: Send + Sync {
+    fn progress(&self, progress: &LmsSyncProgress);
+    /// Called exactly once per executed sync.
+    fn finished(&self, results: &[LmsSyncResult]);
 }

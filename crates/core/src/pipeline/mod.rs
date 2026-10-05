@@ -17,7 +17,7 @@
 //! spawns; nothing here assumes a particular async runtime.
 
 mod account;
-mod lock;
+pub(crate) mod lock;
 mod message;
 
 use std::sync::Arc;
