@@ -1,11 +1,12 @@
 use chrono::{DateTime, NaiveDate, Utc};
 
 use crate::domain::{
-    Account, AccountDraft, AccountId, Catalog, Counters, DashboardCounts, LmsCourse, LmsPlatform,
-    LmsUniversity, LoginState, NewResult, Page, ProcessedMessage, RemoteCourse, ResultQuery,
-    RunAccountResult, RunId, RunRecord, RunStatus, RunTrigger, Settings, StoredResult, SyncCursor,
-    SyncOutcome, SyncState, UniversityId,
+    Account, AccountDraft, AccountId, Catalog, Counters, DashboardCounts, LmsCourse, LmsItem,
+    LmsPlatform, LmsUniversity, LoginState, NewResult, Page, ProcessedMessage, RemoteCourse,
+    ResultQuery, RunAccountResult, RunId, RunRecord, RunStatus, RunTrigger, Settings, StoredResult,
+    SyncCursor, SyncOutcome, SyncState, TrackedItem, TrackerQuery, UniversityId,
 };
+use crate::lms::SyncChanges;
 
 /// Error returned by a repository operation.
 #[derive(Debug, thiserror::Error)]
@@ -167,4 +168,27 @@ pub trait CourseRepository: Send + Sync {
         university_id: UniversityId,
         course_ids: &[i64],
     ) -> RepoResult<Vec<LmsCourse>>;
+}
+
+/// Persistence for LMS items (spec §7, §8).
+pub trait LmsItemRepository: Send + Sync {
+    fn list_items_for_university(&self, university_id: UniversityId) -> RepoResult<Vec<LmsItem>>;
+    /// One transaction: inserts (first_seen_at = updated_at = now), updates (platform fields,
+    /// course, change; removed_at cleared; updated_at = now), removals (removed_at = now),
+    /// and `items_synced_at = now` for `synced_course_ids`. Personal fields never change.
+    fn apply_sync(
+        &self,
+        university_id: UniversityId,
+        changes: &SyncChanges,
+        now: DateTime<Utc>,
+    ) -> RepoResult<()>;
+    /// Items of tracked, available courses, ordered by due date (undated last), then title.
+    fn query_items(&self, query: &TrackerQuery) -> RepoResult<Vec<TrackedItem>>;
+    fn get_item(&self, id: i64) -> RepoResult<Option<TrackedItem>>;
+    fn set_item_done(&self, id: i64, done: bool) -> RepoResult<TrackedItem>;
+    fn set_item_hidden(&self, id: i64, hidden: bool) -> RepoResult<TrackedItem>;
+    fn set_item_note(&self, id: i64, note: Option<&str>) -> RepoResult<TrackedItem>;
+    fn dismiss_item_change(&self, id: i64) -> RepoResult<TrackedItem>;
+    /// Clears every badge (of one university, or all). Returns rows changed.
+    fn dismiss_all_changes(&self, university_id: Option<UniversityId>) -> RepoResult<u64>;
 }
