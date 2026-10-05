@@ -158,11 +158,14 @@ fn parse_instant(text: &str) -> Result<DateTime<Utc>, LmsError> {
         .map_err(|_| LmsError::Protocol("Blackboard returned an invalid date".into()))
 }
 
-fn item_kind(provider_handle: Option<&str>) -> ItemKind {
+/// The kind of a gradebook column, or `None` for columns that are not deliverables
+/// (attendance). Ultra uses `x-bb-assessment` for both assignments and tests.
+fn item_kind(provider_handle: Option<&str>) -> Option<ItemKind> {
     match provider_handle {
-        Some("resource/x-bb-assignment") => ItemKind::Assignment,
-        Some(handle) if handle.contains("test") || handle.contains("asmt") => ItemKind::Test,
-        _ => ItemKind::Other,
+        Some("resource/x-bb-attendance") => None,
+        Some("resource/x-bb-assignment" | "resource/x-bb-assessment") => Some(ItemKind::Assignment),
+        Some(handle) if handle.contains("test") || handle.contains("asmt") => Some(ItemKind::Test),
+        _ => Some(ItemKind::Other),
     }
 }
 
@@ -211,10 +214,14 @@ impl BlackboardClient {
         }
     }
 
-    /// GET `path` (starting with `/learn/api/`); `None` when the resource answers 404.
-    /// A 401/403, or a redirect that lands outside the API (the login page), means the
-    /// session is no longer valid.
-    async fn get_optional<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>, LmsError> {
+    /// GET `path` (starting with `/learn/api/`); `None` when the resource answers 404,
+    /// or 403 when `forbidden_is_none`. Otherwise a 401/403, or a redirect that lands
+    /// outside the API (the login page), means the session is no longer valid.
+    async fn get_optional<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        forbidden_is_none: bool,
+    ) -> Result<Option<T>, LmsError> {
         let expired = || LmsError::Auth("Your Blackboard session has expired".into());
         let response = self
             .http
@@ -226,6 +233,9 @@ impl BlackboardClient {
             .await
             .map_err(|e| connection_error(&e))?;
         let status = response.status();
+        if status == reqwest::StatusCode::FORBIDDEN && forbidden_is_none {
+            return Ok(None);
+        }
         if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
             return Err(expired());
         }
@@ -247,7 +257,7 @@ impl BlackboardClient {
     }
 
     async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, LmsError> {
-        self.get_optional(path)
+        self.get_optional(path, false)
             .await?
             .ok_or_else(|| http_error(endpoint_of(path), 404))
     }
@@ -256,7 +266,9 @@ impl BlackboardClient {
         self.get_pages(first, false).await
     }
 
-    /// Like `get_all`, but a 404 on the first page means there is nothing to list.
+    /// Like `get_all`, but a 404 or 403 on the first page means there is nothing to list.
+    /// For course-scoped gradebook endpoints, where a 403 means the student has no
+    /// gradebook in that course rather than an expired session.
     async fn get_all_or_empty<T: DeserializeOwned>(&self, first: &str) -> Result<Vec<T>, LmsError> {
         self.get_pages(first, true).await
     }
@@ -276,7 +288,10 @@ impl BlackboardClient {
                     "Blackboard returned too many pages".into(),
                 ));
             }
-            let page: Page<T> = match self.get_optional(&path).await? {
+            let page: Page<T> = match self
+                .get_optional(&path, empty_if_missing && pages == 1)
+                .await?
+            {
                 Some(page) => page,
                 None if empty_if_missing && pages == 1 => return Ok(items),
                 None => return Err(http_error(endpoint_of(&path), 404)),
@@ -303,7 +318,7 @@ impl BlackboardClient {
     ) -> Result<Vec<RemoteItem>, LmsError> {
         let gradebook = format!("/learn/api/public/v1/courses/{course_id}/gradebook");
         let columns: Vec<Column> = self
-            .get_all(&format!(
+            .get_all_or_empty(&format!(
                 "/learn/api/public/v2/courses/{course_id}/gradebook/columns"
             ))
             .await?;
@@ -317,6 +332,9 @@ impl BlackboardClient {
 
         let mut items = Vec::new();
         for column in columns {
+            let Some(kind) = item_kind(column.provider_handle.as_deref()) else {
+                continue;
+            };
             let grading = column.grading.as_ref();
             if grading.and_then(|g| g.kind.as_deref()) == Some("Calculated") {
                 continue;
@@ -331,6 +349,8 @@ impl BlackboardClient {
                 .map(|score| grade_of(*score, possible));
             let platform_status = if grade.is_some() {
                 PlatformStatus::Graded
+            } else if column.content_id.is_none() {
+                PlatformStatus::NotApplicable
             } else if self
                 .has_submitted_attempt(&gradebook, &column, user_id)
                 .await?
@@ -342,7 +362,7 @@ impl BlackboardClient {
             items.push(RemoteItem {
                 course_external_id: course_id.to_string(),
                 external_id: format!("column:{}", column.id),
-                kind: item_kind(column.provider_handle.as_deref()),
+                kind,
                 title: column.name,
                 due_at,
                 url: Some(url.clone()),
@@ -359,9 +379,6 @@ impl BlackboardClient {
         column: &Column,
         user_id: &str,
     ) -> Result<bool, LmsError> {
-        if column.content_id.is_none() {
-            return Ok(false);
-        }
         let attempts: Vec<Attempt> = self
             .get_all_or_empty(&format!(
                 "{gradebook}/columns/{}/attempts?{}",

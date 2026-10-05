@@ -188,6 +188,7 @@ impl LmsSyncRunner {
             .into_iter()
             .filter(|course| course.tracked && course.available)
             .collect();
+        let window = SyncWindow::around(now);
         let remote_items = if tracked.is_empty() {
             Vec::new()
         } else {
@@ -199,14 +200,14 @@ impl LmsSyncRunner {
                 })
                 .collect();
             client
-                .fetch_items(&refs, &SyncWindow::around(now))
+                .fetch_items(&refs, &window)
                 .await
                 .map_err(|error| self.lms_failure(&university, error))?
         };
 
         self.report(&university, LmsSyncStage::Saving);
         let stored = self.repos.items.list_items_for_university(university.id)?;
-        let changes = diff_items(&tracked, &stored, &remote_items);
+        let changes = diff_items(&tracked, &stored, &remote_items, &window);
         self.repos.items.apply_sync(university.id, &changes, now)?;
         Ok(changes)
     }

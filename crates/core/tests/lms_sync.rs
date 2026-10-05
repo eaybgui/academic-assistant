@@ -187,7 +187,7 @@ async fn syncs_courses_and_items_and_records_success() {
     );
     assert_eq!(fetches[0].window, SyncWindow::around(now()));
 
-    let expected_changes = diff_items(&[tracked], &[], &remote_items);
+    let expected_changes = diff_items(&[tracked], &[], &remote_items, &SyncWindow::around(now()));
     assert_eq!(expected_changes.new_items, 1);
     assert_eq!(h.items.applied(), vec![(1, expected_changes, now())]);
 

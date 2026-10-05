@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 
-use crate::domain::{ItemChange, LmsCourse, LmsItem, RemoteItem};
+use crate::domain::{ItemChange, ItemKind, LmsCourse, LmsItem, RemoteItem, SyncWindow};
 
 /// A new item to insert.
 #[derive(Debug, Clone, PartialEq)]
@@ -38,10 +38,13 @@ pub struct SyncChanges {
 }
 
 /// Compares what the platform returned for `fetched_courses` with what is stored.
+/// Course events are only fetched inside `window`, so a stored event outside it is
+/// never reported as removed.
 pub fn diff_items(
     fetched_courses: &[LmsCourse],
     stored: &[LmsItem],
     remote: &[RemoteItem],
+    window: &SyncWindow,
 ) -> SyncChanges {
     let courses: HashMap<&str, &LmsCourse> = fetched_courses
         .iter()
@@ -76,12 +79,21 @@ pub fn diff_items(
         if fetched_ids.contains(&item.course_id)
             && item.removed_at.is_none()
             && !returned.contains(item.external_id.as_str())
+            && !is_event_outside(item, window)
         {
             changes.removals.push(item.id);
             changes.removed += 1;
         }
     }
     changes
+}
+
+/// Whether `item` is a course event the sync could not have fetched.
+fn is_event_outside(item: &LmsItem, window: &SyncWindow) -> bool {
+    item.kind == ItemKind::Event
+        && !item
+            .due_at
+            .is_some_and(|due| due >= window.from && due <= window.to)
 }
 
 fn insert(changes: &mut SyncChanges, course: &LmsCourse, item: &RemoteItem) {
@@ -149,6 +161,22 @@ mod tests {
     use super::*;
     use crate::domain::{Grade, ItemKind, PlatformStatus};
     use chrono::{DateTime, TimeZone, Utc};
+
+    /// The days of March 2026 from the 10th to the 25th.
+    fn window() -> SyncWindow {
+        SyncWindow {
+            from: at(10),
+            to: at(25),
+        }
+    }
+
+    fn diff(
+        fetched_courses: &[LmsCourse],
+        stored: &[LmsItem],
+        remote: &[RemoteItem],
+    ) -> SyncChanges {
+        diff_items(fetched_courses, stored, remote, &window())
+    }
 
     fn at(day: u32) -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 3, day, 12, 0, 0).unwrap()
@@ -222,7 +250,7 @@ mod tests {
         let courses = [course(10, "c1", false)];
         let r = remote("c1", "a1", Some(at(5)));
 
-        let changes = diff_items(&courses, &[], std::slice::from_ref(&r));
+        let changes = diff(&courses, &[], std::slice::from_ref(&r));
 
         assert_eq!(
             changes.inserts,
@@ -241,7 +269,7 @@ mod tests {
         let courses = [course(10, "c1", true)];
         let r = remote("c1", "a1", None);
 
-        let changes = diff_items(&courses, &[], std::slice::from_ref(&r));
+        let changes = diff(&courses, &[], std::slice::from_ref(&r));
 
         assert_eq!(
             changes.inserts,
@@ -258,7 +286,7 @@ mod tests {
     fn due_date_change_records_the_original_previous_date() {
         let courses = [course(10, "c1", true)];
 
-        let first = diff_items(
+        let first = diff(
             &courses,
             &[stored(1, 10, "a1", Some(at(5)), None, false)],
             &[remote("c1", "a1", Some(at(6)))],
@@ -267,7 +295,7 @@ mod tests {
         assert_eq!(first.updates[0].change, due_changed(Some(at(5))));
         assert_eq!(first.due_changed, 1);
 
-        let second = diff_items(
+        let second = diff(
             &courses,
             &[stored(
                 1,
@@ -287,7 +315,7 @@ mod tests {
     fn returning_to_the_original_date_clears_the_badge() {
         let courses = [course(10, "c1", true)];
 
-        let changes = diff_items(
+        let changes = diff(
             &courses,
             &[stored(
                 1,
@@ -309,7 +337,7 @@ mod tests {
     fn due_date_appearing_or_disappearing_is_a_change() {
         let courses = [course(10, "c1", true)];
 
-        let appearing = diff_items(
+        let appearing = diff(
             &courses,
             &[stored(1, 10, "a1", None, None, false)],
             &[remote("c1", "a1", Some(at(5)))],
@@ -317,7 +345,7 @@ mod tests {
         assert_eq!(appearing.updates[0].change, due_changed(None));
         assert_eq!(appearing.due_changed, 1);
 
-        let disappearing = diff_items(
+        let disappearing = diff(
             &courses,
             &[stored(1, 10, "a1", Some(at(5)), None, false)],
             &[remote("c1", "a1", None)],
@@ -330,7 +358,7 @@ mod tests {
     fn new_badge_survives_a_due_change() {
         let courses = [course(10, "c1", true)];
 
-        let changes = diff_items(
+        let changes = diff(
             &courses,
             &[stored(
                 1,
@@ -352,7 +380,7 @@ mod tests {
     fn unchanged_items_produce_no_update() {
         let courses = [course(10, "c1", true)];
 
-        let changes = diff_items(
+        let changes = diff(
             &courses,
             &[stored(1, 10, "a1", Some(at(5)), None, false)],
             &[remote("c1", "a1", Some(at(5)))],
@@ -395,7 +423,7 @@ mod tests {
         variants.push(r);
 
         for r in variants {
-            let changes = diff_items(
+            let changes = diff(
                 &courses,
                 std::slice::from_ref(&base),
                 std::slice::from_ref(&r),
@@ -414,7 +442,7 @@ mod tests {
     fn course_change_updates_the_course() {
         let courses = [course(10, "c1", true), course(11, "c2", true)];
 
-        let changes = diff_items(
+        let changes = diff(
             &courses,
             &[stored(1, 10, "a1", Some(at(5)), None, false)],
             &[remote("c2", "a1", Some(at(5)))],
@@ -431,7 +459,7 @@ mod tests {
     fn missing_items_are_removed_once() {
         let courses = [course(10, "c1", true)];
 
-        let changes = diff_items(
+        let changes = diff(
             &courses,
             &[
                 stored(1, 10, "a1", None, None, false),
@@ -449,7 +477,7 @@ mod tests {
     fn reappearing_items_are_restored() {
         let courses = [course(10, "c1", true)];
 
-        let changes = diff_items(
+        let changes = diff(
             &courses,
             &[stored(1, 10, "a1", Some(at(5)), None, true)],
             &[remote("c1", "a1", Some(at(5)))],
@@ -469,7 +497,7 @@ mod tests {
     fn items_of_unfetched_courses_are_untouched() {
         let courses = [course(10, "c1", true)];
 
-        let changes = diff_items(
+        let changes = diff(
             &courses,
             &[stored(1, 99, "a1", Some(at(5)), None, false)],
             &[],
@@ -488,10 +516,57 @@ mod tests {
         second.title = "Duplicate".into();
         let unknown = remote("zzz", "a2", None);
 
-        let changes = diff_items(&courses, &[], &[first.clone(), second, unknown]);
+        let changes = diff(&courses, &[], &[first.clone(), second, unknown]);
 
         assert_eq!(changes.inserts.len(), 1);
         assert_eq!(changes.inserts[0].remote, first);
         assert_eq!(changes.new_items, 1);
+    }
+
+    fn stored_event(id: i64, due: Option<DateTime<Utc>>) -> LmsItem {
+        let mut event = stored(id, 10, &format!("e{id}"), due, None, false);
+        event.kind = ItemKind::Event;
+        event
+    }
+
+    #[test]
+    fn events_outside_the_sync_window_are_not_removed() {
+        let courses = [course(10, "c1", true)];
+
+        let changes = diff(
+            &courses,
+            &[
+                stored_event(1, Some(at(5))),
+                stored_event(2, Some(at(28))),
+                stored_event(3, None),
+            ],
+            &[],
+        );
+
+        assert!(changes.removals.is_empty());
+        assert_eq!(changes.removed, 0);
+    }
+
+    #[test]
+    fn events_inside_the_sync_window_that_vanish_are_removed() {
+        let courses = [course(10, "c1", true)];
+
+        let changes = diff(&courses, &[stored_event(1, Some(at(15)))], &[]);
+
+        assert_eq!(changes.removals, vec![1]);
+        assert_eq!(changes.removed, 1);
+    }
+
+    #[test]
+    fn assignments_before_the_window_that_vanish_are_still_removed() {
+        let courses = [course(10, "c1", true)];
+
+        let changes = diff(
+            &courses,
+            &[stored(1, 10, "a1", Some(at(5)), None, false)],
+            &[],
+        );
+
+        assert_eq!(changes.removals, vec![1]);
     }
 }
