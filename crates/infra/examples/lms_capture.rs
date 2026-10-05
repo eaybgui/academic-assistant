@@ -34,13 +34,13 @@ const FIXTURES_DIR: &str = "tests/fixtures/lms-local";
 
 type Params = Vec<(String, String)>;
 
-/// Keys whose string values are always replaced, even when they look like ids.
-const PERSONAL_KEYS: [&str; 12] = [
+/// Keys (lowercase, compared case-insensitively) whose string values are always
+/// replaced, even single words or ids: personal data and free-text fields.
+const REDACTED_KEYS: [&str; 22] = [
     "fullname",
     "firstname",
     "lastname",
     "username",
-    "userName",
     "email",
     "given",
     "family",
@@ -48,17 +48,33 @@ const PERSONAL_KEYS: [&str; 12] = [
     "shortname",
     "displayname",
     "sitename",
+    "name",
+    "title",
+    "text",
+    "feedback",
+    "description",
+    "intro",
+    "summary",
+    "comment",
+    "gradefordisplay",
+    "externalid",
+    "uuid",
 ];
-/// Keys whose numeric values are personal results and get a fixed value.
+/// Keys whose values are personal results and get a fixed value.
 const RESULT_KEY_FRAGMENTS: [&str; 3] = ["grade", "score", "mark"];
+/// Result-looking keys that are 0/1 configuration flags, not results.
+const FLAG_KEY_PREFIXES: [&str; 2] = ["marking", "blind"];
+const FLAG_KEYS: [&str; 1] = ["hidegrader"];
 const REDACTED_TEXT: &str = "redacted";
 const REDACTED_NUMBER: f64 = 7.5;
+const REDACTED_NUMBER_TEXT: &str = "7.5";
 const MAX_KEPT_STRING_LEN: usize = 60;
 
 /// Replaces personal data while keeping the JSON shape, ids, enum-like values,
 /// timestamps and URLs: any string containing whitespace or longer than 60
-/// characters becomes "redacted"; strings under personal keys always do; numbers
-/// under grade/score/mark keys become 7.5 (unless they are 0, -1 or ids named `id`/`*id`).
+/// characters becomes "redacted"; strings under free-text/personal keys always
+/// do; numbers (and numeric strings) under grade/score/mark keys become 7.5
+/// (unless they are ids named `id`/`*id` or, for numbers, 0, -1 or config flags).
 fn redact(value: &mut Value, key: Option<&str>) {
     match value {
         Value::Object(map) => {
@@ -72,8 +88,11 @@ fn redact(value: &mut Value, key: Option<&str>) {
             }
         }
         Value::String(text) => {
-            if is_personal_text(text, key) {
+            let key = key.map(str::to_lowercase);
+            if is_personal_text(text, key.as_deref()) {
                 *text = REDACTED_TEXT.to_string();
+            } else if is_result_key(key.as_deref()) && is_numeric_text(text) {
+                *text = REDACTED_NUMBER_TEXT.to_string();
             }
         }
         Value::Number(number) => {
@@ -85,19 +104,29 @@ fn redact(value: &mut Value, key: Option<&str>) {
     }
 }
 
+/// `key` is lowercase.
 fn is_personal_text(text: &str, key: Option<&str>) -> bool {
-    let personal_key = key.is_some_and(|k| PERSONAL_KEYS.iter().any(|p| p.eq_ignore_ascii_case(k)));
-    personal_key
+    key.is_some_and(|k| REDACTED_KEYS.contains(&k))
         || text.chars().any(char::is_whitespace)
         || text.chars().count() > MAX_KEPT_STRING_LEN
 }
 
+/// `key` is lowercase. Ids (`id`, `gradeid`, ...) are never results.
+fn is_result_key(key: Option<&str>) -> bool {
+    key.is_some_and(|k| RESULT_KEY_FRAGMENTS.iter().any(|f| k.contains(f)) && !k.ends_with("id"))
+}
+
+fn is_numeric_text(text: &str) -> bool {
+    text.replace(',', ".").parse::<f64>().is_ok()
+}
+
 fn is_personal_result(number: &serde_json::Number, key: Option<&str>) -> bool {
-    let Some(key) = key.map(str::to_lowercase) else {
-        return false;
-    };
+    let key = key.map(str::to_lowercase);
+    let is_flag = key.as_deref().is_some_and(|k| {
+        FLAG_KEYS.contains(&k) || FLAG_KEY_PREFIXES.iter().any(|p| k.starts_with(p))
+    });
     let is_sentinel = matches!(number.as_f64(), Some(n) if n == 0.0 || n == -1.0);
-    RESULT_KEY_FRAGMENTS.iter().any(|f| key.contains(f)) && !key.ends_with("id") && !is_sentinel
+    is_result_key(key.as_deref()) && !is_flag && !is_sentinel
 }
 
 struct CaptureConfig {
@@ -511,6 +540,37 @@ mod tests {
         assert_eq!(v["shortname"], "redacted");
         assert_eq!(v["intro"], "redacted");
         assert_eq!(v["nested"][0]["title"], "redacted");
+    }
+
+    #[test]
+    fn replaces_single_word_free_text_and_external_ids() {
+        let mut v = json!({ "title": "Calculo", "externalId": "ABC123", "uuid": "u1",
+                            "gradefordisplay": "A" });
+        redact(&mut v, None);
+        assert_eq!(v["title"], "redacted");
+        assert_eq!(v["externalId"], "redacted");
+        assert_eq!(v["uuid"], "redacted");
+        assert_eq!(v["gradefordisplay"], "redacted");
+    }
+
+    #[test]
+    fn replaces_numeric_string_grades_but_not_string_ids() {
+        let mut v = json!({ "grade": "8.50000", "rawScore": "9,5", "gradeid": "55",
+                            "gradeStatus": "Completed" });
+        redact(&mut v, None);
+        assert_eq!(v["grade"], "7.5");
+        assert_eq!(v["rawScore"], "7.5");
+        assert_eq!(v["gradeid"], "55");
+        assert_eq!(v["gradeStatus"], "Completed");
+    }
+
+    #[test]
+    fn keeps_numeric_config_flags_that_look_like_results() {
+        let mut v = json!({ "markingworkflow": 1, "markingallocation": 1, "blindmarking": 1,
+                            "hidegrader": 1 });
+        let before = v.clone();
+        redact(&mut v, None);
+        assert_eq!(v, before);
     }
 
     #[test]
