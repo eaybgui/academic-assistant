@@ -18,6 +18,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
 
 use crate::lms_auth::TauriLmsAuthenticator;
+use crate::lms_observer::TauriLmsSyncObserver;
 use crate::observer::TauriRunObserver;
 use crate::state::{AppState, Collaborators};
 
@@ -83,6 +84,7 @@ fn build_state(app: &App, data_dir: &Path) -> Result<AppState, Box<dyn Error>> {
             clock,
             lms_factory,
             lms_authenticator,
+            lms_observer: Arc::new(TauriLmsSyncObserver::new(app.handle().clone())),
         },
     ))
 }

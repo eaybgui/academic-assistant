@@ -7,6 +7,7 @@ mod commands;
 mod dto;
 mod error;
 mod lms_auth;
+mod lms_observer;
 mod observer;
 mod setup;
 mod state;
@@ -16,7 +17,7 @@ mod validation;
 
 use tauri::Manager;
 
-use commands::{accounts, catalog, results, runs, settings, universities};
+use commands::{accounts, catalog, results, runs, settings, tracker, universities};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -50,6 +51,16 @@ pub fn run() {
             universities::lms_sign_in,
             universities::lms_sign_out,
             universities::lms_check_session,
+            universities::lms_fetch_courses,
+            universities::get_courses,
+            universities::set_tracked_courses,
+            tracker::lms_sync,
+            tracker::get_tracker,
+            tracker::set_item_done,
+            tracker::set_item_hidden,
+            tracker::set_item_note,
+            tracker::dismiss_item_change,
+            tracker::dismiss_all_changes,
             settings::get_settings,
             settings::update_settings,
             settings::set_jev_api_key,
