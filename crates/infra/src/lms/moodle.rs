@@ -205,23 +205,6 @@ impl MoodleClient {
             .map_err(|_| LmsError::Protocol(format!("{function} returned an unexpected response")))
     }
 
-    /// Assignments, quizzes and course events of the given courses, in that order.
-    /// Any failed call fails the whole fetch.
-    pub async fn fetch_items(
-        &self,
-        courses: &[RemoteCourseRef],
-        window: &SyncWindow,
-    ) -> Result<Vec<RemoteItem>, LmsError> {
-        let course_ids = parse_course_ids(courses)?;
-        if course_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let mut items = self.fetch_assignments(&course_ids).await?;
-        items.extend(self.fetch_quizzes(&course_ids).await?);
-        items.extend(self.fetch_events(&course_ids, window).await?);
-        Ok(items)
-    }
-
     async fn call_with_params<T: DeserializeOwned>(
         &self,
         function: &str,
@@ -504,6 +487,22 @@ impl LmsClient for MoodleClient {
                 name: c.fullname,
             })
             .collect())
+    }
+
+    /// Assignments, then quizzes, then course events.
+    async fn fetch_items(
+        &self,
+        courses: &[RemoteCourseRef],
+        window: &SyncWindow,
+    ) -> Result<Vec<RemoteItem>, LmsError> {
+        let course_ids = parse_course_ids(courses)?;
+        if course_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut items = self.fetch_assignments(&course_ids).await?;
+        items.extend(self.fetch_quizzes(&course_ids).await?);
+        items.extend(self.fetch_events(&course_ids, window).await?);
+        Ok(items)
     }
 }
 

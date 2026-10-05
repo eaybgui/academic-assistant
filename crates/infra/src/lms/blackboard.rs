@@ -296,27 +296,6 @@ impl BlackboardClient {
         Ok(items)
     }
 
-    /// Gradebook columns of every course, then the course events inside `window`.
-    pub async fn fetch_items(
-        &self,
-        courses: &[RemoteCourseRef],
-        window: &SyncWindow,
-    ) -> Result<Vec<RemoteItem>, LmsError> {
-        if courses.is_empty() {
-            return Ok(Vec::new());
-        }
-        let user_id = self.verify().await?.user_id;
-        let mut items = Vec::new();
-        for course in courses {
-            items.extend(
-                self.fetch_course_columns(&course.external_id, &user_id)
-                    .await?,
-            );
-        }
-        items.extend(self.fetch_events(courses, window).await?);
-        Ok(items)
-    }
-
     async fn fetch_course_columns(
         &self,
         course_id: &str,
@@ -482,6 +461,27 @@ impl LmsClient for BlackboardClient {
                 })
             })
             .collect())
+    }
+
+    /// Gradebook columns of every course, then the course events inside `window`.
+    async fn fetch_items(
+        &self,
+        courses: &[RemoteCourseRef],
+        window: &SyncWindow,
+    ) -> Result<Vec<RemoteItem>, LmsError> {
+        if courses.is_empty() {
+            return Ok(Vec::new());
+        }
+        let user_id = self.verify().await?.user_id;
+        let mut items = Vec::new();
+        for course in courses {
+            items.extend(
+                self.fetch_course_columns(&course.external_id, &user_id)
+                    .await?,
+            );
+        }
+        items.extend(self.fetch_events(courses, window).await?);
+        Ok(items)
     }
 }
 

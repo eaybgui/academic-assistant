@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use academic_core::domain::{ItemKind, PlatformStatus, RemoteCourseRef, SyncWindow};
-use academic_core::ports::LmsError;
+use academic_core::ports::{LmsClient, LmsError};
 use academic_infra::lms::blackboard::{BlackboardClient, SessionCookie};
 use chrono::{DateTime, Duration, SecondsFormat, TimeZone, Utc};
 use serde_json::{json, Value};
