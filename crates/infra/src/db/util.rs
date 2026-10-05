@@ -29,6 +29,15 @@ pub(crate) fn map_err(err: rusqlite::Error) -> RepoError {
     }
 }
 
+/// Turns "no row matched" from an `UPDATE`/`DELETE` into `NotFound`.
+pub(crate) fn ensure_changed(changed: usize) -> Result<(), RepoError> {
+    if changed == 0 {
+        Err(RepoError::NotFound)
+    } else {
+        Ok(())
+    }
+}
+
 /// Parses a value out of a JSON column, mapping a malformed payload to `Storage`
 /// (this only happens if the database was corrupted or written by a future version).
 pub(crate) fn parse_json<T: serde::de::DeserializeOwned>(value: &str) -> Result<T, RepoError> {

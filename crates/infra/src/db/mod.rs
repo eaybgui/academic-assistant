@@ -8,6 +8,7 @@
 mod accounts;
 mod catalog;
 mod courses;
+mod items;
 mod processed;
 mod results;
 mod runs;
@@ -28,9 +29,10 @@ use util::map_err;
 
 /// Every migration, in order. Embedded at compile time so the binary never depends
 /// on files next to it at runtime. Versions are never edited once released.
-const MIGRATIONS: [(i64, &str); 2] = [
+const MIGRATIONS: [(i64, &str); 3] = [
     (1, include_str!("../../migrations/0001_init.sql")),
     (2, include_str!("../../migrations/0002_lms.sql")),
+    (3, include_str!("../../migrations/0003_lms_items.sql")),
 ];
 
 /// Handle to the application's SQLite database. Cheap to clone-share via `Arc`

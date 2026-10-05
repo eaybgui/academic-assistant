@@ -5,7 +5,9 @@ use academic_core::ports::{RepoError, RepoResult, UniversityRepository};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 
-use super::util::{map_err, parse_datetime, parse_datetime_opt, parse_enum, to_rfc3339};
+use super::util::{
+    ensure_changed, map_err, parse_datetime, parse_datetime_opt, parse_enum, to_rfc3339,
+};
 use super::Database;
 
 const SELECT: &str = "SELECT id, name, platform, base_url, login_state, account_label, \
@@ -68,14 +70,6 @@ fn get_on(conn: &Connection, id: UniversityId) -> RepoResult<Option<LmsUniversit
 
 fn require(conn: &Connection, id: UniversityId) -> RepoResult<LmsUniversity> {
     get_on(conn, id)?.ok_or(RepoError::NotFound)
-}
-
-fn ensure_changed(changed: usize) -> RepoResult<()> {
-    if changed == 0 {
-        Err(RepoError::NotFound)
-    } else {
-        Ok(())
-    }
 }
 
 impl UniversityRepository for Database {
