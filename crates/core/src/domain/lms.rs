@@ -188,13 +188,17 @@ pub enum EffectiveStatus {
 }
 
 /// Derived status (spec §4.1): graded › submitted/done › past event › overdue › pending.
+/// A past event, or any past item with nothing to submit (`NotApplicable`), is a
+/// `PastEvent` rather than `Overdue`.
 pub fn effective_status(item: &LmsItem, now: DateTime<Utc>) -> EffectiveStatus {
     let past = item.due_at.is_some_and(|due| due < now);
     if item.grade.is_some() || item.platform_status == PlatformStatus::Graded {
         EffectiveStatus::Graded
     } else if item.platform_status == PlatformStatus::Submitted || item.done {
         EffectiveStatus::Submitted
-    } else if item.kind == ItemKind::Event && past {
+    } else if past
+        && (item.kind == ItemKind::Event || item.platform_status == PlatformStatus::NotApplicable)
+    {
         EffectiveStatus::PastEvent
     } else if past {
         EffectiveStatus::Overdue
@@ -349,6 +353,20 @@ mod tests {
         assert_eq!(
             effective_status(
                 &item(ItemKind::Event, PlatformStatus::NotApplicable, future),
+                now
+            ),
+            EffectiveStatus::Pending
+        );
+        assert_eq!(
+            effective_status(
+                &item(ItemKind::Assignment, PlatformStatus::NotApplicable, past),
+                now
+            ),
+            EffectiveStatus::PastEvent
+        );
+        assert_eq!(
+            effective_status(
+                &item(ItemKind::Assignment, PlatformStatus::NotApplicable, future),
                 now
             ),
             EffectiveStatus::Pending
