@@ -1,7 +1,8 @@
 //! Commands: LMS universities, sign-in and session check (spec §9.2, §18.4).
 
 use academic_core::domain::{
-    lms_credential_key, LmsPlatform, LmsUniversity, LoginState, UniversityId,
+    lms_credential_key, LmsCourse, LmsPlatform, LmsUniversity, LoginState, RemoteCourse,
+    UniversityId,
 };
 use academic_core::lms::{adopt_credential, ensure_session, normalize_base_url, SessionError};
 use academic_core::ports::LmsError;
@@ -9,7 +10,7 @@ use academic_infra::lms::probe::{probe, ProbeError};
 use tauri::{AppHandle, State};
 
 use super::logged;
-use crate::dto::{LmsUniversityDto, LmsUniversityInput, ProbeDto};
+use crate::dto::{LmsCourseDto, LmsUniversityDto, LmsUniversityInput, ProbeDto};
 use crate::error::CommandError;
 use crate::lms_auth::{capture_credential, close_login_window, LoginMode};
 use crate::state::AppState;
@@ -104,6 +105,34 @@ pub async fn lms_check_session(
     logged("lms_check_session", check_session(&state, id).await)
 }
 
+#[tauri::command]
+pub async fn lms_fetch_courses(
+    state: State<'_, AppState>,
+    id: UniversityId,
+) -> Result<Vec<LmsCourseDto>, CommandError> {
+    logged("lms_fetch_courses", fetch_courses(&state, id).await)
+}
+
+#[tauri::command]
+pub async fn get_courses(
+    state: State<'_, AppState>,
+    university_id: UniversityId,
+) -> Result<Vec<LmsCourseDto>, CommandError> {
+    logged("get_courses", courses(&state, university_id))
+}
+
+#[tauri::command]
+pub async fn set_tracked_courses(
+    state: State<'_, AppState>,
+    university_id: UniversityId,
+    course_ids: Vec<i64>,
+) -> Result<Vec<LmsCourseDto>, CommandError> {
+    logged(
+        "set_tracked_courses",
+        track_courses(&state, university_id, &course_ids),
+    )
+}
+
 fn find(state: &AppState, id: UniversityId) -> Result<LmsUniversity, CommandError> {
     state
         .universities
@@ -118,7 +147,7 @@ fn dto(state: &AppState, university: &LmsUniversity) -> Result<LmsUniversityDto,
     ))
 }
 
-fn universities(state: &AppState) -> Result<Vec<LmsUniversityDto>, CommandError> {
+pub(super) fn universities(state: &AppState) -> Result<Vec<LmsUniversityDto>, CommandError> {
     state
         .universities
         .list_universities()?
@@ -196,8 +225,7 @@ async fn complete_sign_in(
 ) -> Result<LmsUniversityDto, CommandError> {
     let id = captured_for.id;
     let university = find(state, id)?;
-    if university.platform != captured_for.platform || university.base_url != captured_for.base_url
-    {
+    if !same_university(&university, captured_for) {
         return Err(CommandError::not_found(NOT_FOUND));
     }
     let credential = captured?;
@@ -210,6 +238,7 @@ async fn complete_sign_in(
     .await
     {
         Ok(identity) => {
+            keep_credential_if_still_valid(state, captured_for)?;
             let updated =
                 state
                     .universities
@@ -223,6 +252,34 @@ async fn complete_sign_in(
             Err(error.into())
         }
     }
+}
+
+fn same_university(a: &LmsUniversity, b: &LmsUniversity) -> bool {
+    a.platform == b.platform && a.base_url == b.base_url
+}
+
+/// Whether the university the sign-in started with still exists unchanged.
+fn still_matches(state: &AppState, captured_for: &LmsUniversity) -> Result<bool, CommandError> {
+    Ok(state
+        .universities
+        .get_university(captured_for.id)?
+        .is_some_and(|current| same_university(&current, captured_for)))
+}
+
+/// Verification awaits the platform, so the university may have been removed or
+/// replaced after the credential was stored; in that case the secret is deleted again
+/// and the sign-in fails.
+fn keep_credential_if_still_valid(
+    state: &AppState,
+    captured_for: &LmsUniversity,
+) -> Result<(), CommandError> {
+    if still_matches(state, captured_for)? {
+        return Ok(());
+    }
+    state
+        .secrets
+        .delete(&lms_credential_key(captured_for.platform, captured_for.id))?;
+    Err(CommandError::not_found(NOT_FOUND))
 }
 
 /// Only a credential the platform rejected or could not use marks the university
@@ -256,6 +313,64 @@ async fn check_session(
     )
     .await?;
     dto(state, &updated)
+}
+
+/// Lists the platform's courses and stores them. Requires a working sign-in; a
+/// credential the platform rejects marks the university `Expired`.
+async fn fetch_courses(
+    state: &AppState,
+    id: UniversityId,
+) -> Result<Vec<LmsCourseDto>, CommandError> {
+    let university = find(state, id)?;
+    if university.login_state != LoginState::Ok {
+        return Err(CommandError::auth(format!(
+            "Sign in to {} first",
+            university.name
+        )));
+    }
+    let remote = match list_remote_courses(state, &university).await {
+        Ok(remote) => remote,
+        Err(LmsError::Auth(_)) => {
+            state.universities.set_login(
+                id,
+                LoginState::Expired,
+                university.account_label.as_deref(),
+            )?;
+            return Err(SessionError::LoginRequired(university.name).into());
+        }
+        Err(error) => return Err(error.into()),
+    };
+    state
+        .courses
+        .upsert_remote_courses(id, &remote, state.clock.now())?;
+    courses(state, id)
+}
+
+async fn list_remote_courses(
+    state: &AppState,
+    university: &LmsUniversity,
+) -> Result<Vec<RemoteCourse>, LmsError> {
+    state.lms_factory.create(university)?.list_courses().await
+}
+
+fn courses(state: &AppState, id: UniversityId) -> Result<Vec<LmsCourseDto>, CommandError> {
+    find(state, id)?;
+    Ok(course_dtos(&state.courses.list_courses(id)?))
+}
+
+fn track_courses(
+    state: &AppState,
+    id: UniversityId,
+    course_ids: &[i64],
+) -> Result<Vec<LmsCourseDto>, CommandError> {
+    find(state, id)?;
+    Ok(course_dtos(
+        &state.courses.set_tracked_courses(id, course_ids)?,
+    ))
+}
+
+fn course_dtos(courses: &[LmsCourse]) -> Vec<LmsCourseDto> {
+    courses.iter().map(LmsCourseDto::from).collect()
 }
 
 #[cfg(test)]
@@ -471,5 +586,179 @@ mod tests {
             rename(&h.state, 99, "x").unwrap_err().kind,
             CommandErrorKind::NotFound
         );
+    }
+
+    fn signed_in(h: &crate::test_support::Harness) -> UniversityId {
+        let u = add(h, "UV", "https://aulavirtual.uv.es");
+        h.state
+            .universities
+            .set_login(u.id, LoginState::Ok, Some("Ana Pérez"))
+            .unwrap();
+        h.secrets
+            .set(&lms_credential_key(LmsPlatform::Moodle, u.id), "tok")
+            .unwrap();
+        u.id
+    }
+
+    fn remote_course(external_id: &str, name: &str) -> RemoteCourse {
+        RemoteCourse {
+            external_id: external_id.into(),
+            name: name.into(),
+            short_name: None,
+            url: None,
+        }
+    }
+
+    fn two_courses() -> Result<Vec<RemoteCourse>, LmsError> {
+        Ok(vec![
+            remote_course("10", "Algebra"),
+            remote_course("20", "Biology"),
+        ])
+    }
+
+    #[tokio::test]
+    async fn fetch_courses_requires_a_connected_university() {
+        let h = harness_with_lms(FakeLmsBehavior {
+            courses: two_courses,
+            ..FakeLmsBehavior::default()
+        });
+        let u = add(&h, "UV", "https://aulavirtual.uv.es");
+        let error = fetch_courses(&h.state, u.id).await.unwrap_err();
+        assert_eq!(
+            (error.kind, error.message.as_str()),
+            (CommandErrorKind::Auth, "Sign in to UV first")
+        );
+        assert!(courses(&h.state, u.id).unwrap().is_empty());
+
+        assert_eq!(
+            fetch_courses(&h.state, 99).await.unwrap_err().kind,
+            CommandErrorKind::NotFound
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_courses_upserts_and_returns_dtos() {
+        let h = harness_with_lms(FakeLmsBehavior {
+            courses: two_courses,
+            ..FakeLmsBehavior::default()
+        });
+        let id = signed_in(&h);
+        let fetched = fetch_courses(&h.state, id).await.unwrap();
+        let names: Vec<_> = fetched.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["Algebra", "Biology"]);
+        assert!(fetched
+            .iter()
+            .all(|c| c.is_new && !c.tracked && c.available && c.university_id == id));
+        assert_eq!(courses(&h.state, id).unwrap(), fetched);
+        assert_eq!(universities(&h.state).unwrap()[0].courses.total, 2);
+    }
+
+    #[tokio::test]
+    async fn fetch_courses_auth_error_marks_expired() {
+        let h = harness_with_lms(FakeLmsBehavior {
+            courses: || Err(LmsError::Auth("rejected".into())),
+            ..FakeLmsBehavior::default()
+        });
+        let id = signed_in(&h);
+        let error = fetch_courses(&h.state, id).await.unwrap_err();
+        assert_eq!(
+            (error.kind, error.message.as_str()),
+            (CommandErrorKind::Auth, "UV needs you to sign in again")
+        );
+        let after = &universities(&h.state).unwrap()[0];
+        assert_eq!(after.login_state, LoginState::Expired);
+        assert_eq!(after.account_label.as_deref(), Some("Ana Pérez"));
+    }
+
+    #[tokio::test]
+    async fn fetch_courses_connection_error_keeps_the_login_state() {
+        let h = harness_with_lms(FakeLmsBehavior {
+            courses: || Err(LmsError::Connection("down".into())),
+            ..FakeLmsBehavior::default()
+        });
+        let id = signed_in(&h);
+        let error = fetch_courses(&h.state, id).await.unwrap_err();
+        assert_eq!(error.kind, CommandErrorKind::Connection);
+        assert_eq!(
+            universities(&h.state).unwrap()[0].login_state,
+            LoginState::Ok
+        );
+    }
+
+    #[tokio::test]
+    async fn set_tracked_courses_returns_reviewed_courses() {
+        let h = harness_with_lms(FakeLmsBehavior {
+            courses: two_courses,
+            ..FakeLmsBehavior::default()
+        });
+        let id = signed_in(&h);
+        let fetched = fetch_courses(&h.state, id).await.unwrap();
+        let updated = track_courses(&h.state, id, &[fetched[1].id]).unwrap();
+        assert_eq!(
+            updated
+                .iter()
+                .map(|c| (c.name.as_str(), c.tracked, c.is_new))
+                .collect::<Vec<_>>(),
+            [("Algebra", false, false), ("Biology", true, false)]
+        );
+        assert_eq!(universities(&h.state).unwrap()[0].courses.unreviewed, 0);
+
+        assert_eq!(
+            track_courses(&h.state, id, &[9999]).unwrap_err().kind,
+            CommandErrorKind::NotFound
+        );
+        assert_eq!(
+            track_courses(&h.state, 99, &[]).unwrap_err().kind,
+            CommandErrorKind::NotFound
+        );
+    }
+
+    #[test]
+    fn get_courses_of_a_missing_university_is_not_found() {
+        let h = harness();
+        let error = courses(&h.state, 99).unwrap_err();
+        assert_eq!(
+            (error.kind, error.message.as_str()),
+            (CommandErrorKind::NotFound, "University not found")
+        );
+    }
+
+    #[test]
+    fn still_matches_compares_platform_and_base_url() {
+        let h = harness();
+        let u = add(&h, "UV", "https://aulavirtual.uv.es");
+        let captured_for = stored(&h, u.id);
+        assert!(still_matches(&h.state, &captured_for).unwrap());
+
+        let mut other_url = captured_for.clone();
+        other_url.base_url = "https://other.example.org".into();
+        assert!(!still_matches(&h.state, &other_url).unwrap());
+        let mut other_platform = captured_for.clone();
+        other_platform.platform = LmsPlatform::Blackboard;
+        assert!(!still_matches(&h.state, &other_platform).unwrap());
+
+        remove(&h.state, u.id).unwrap();
+        assert!(!still_matches(&h.state, &captured_for).unwrap());
+    }
+
+    #[test]
+    fn a_credential_stored_for_a_university_removed_meanwhile_is_deleted() {
+        let h = harness();
+        let u = add(&h, "UV", "https://aulavirtual.uv.es");
+        let key = lms_credential_key(LmsPlatform::Moodle, u.id);
+        let captured_for = stored(&h, u.id);
+
+        h.secrets.set(&key, "tok").unwrap();
+        keep_credential_if_still_valid(&h.state, &captured_for).unwrap();
+        assert_eq!(h.secrets.get(&key).unwrap().as_deref(), Some("tok"));
+
+        remove(&h.state, u.id).unwrap();
+        h.secrets.set(&key, "tok").unwrap();
+        let error = keep_credential_if_still_valid(&h.state, &captured_for).unwrap_err();
+        assert_eq!(
+            (error.kind, error.message.as_str()),
+            (CommandErrorKind::NotFound, "University not found")
+        );
+        assert_eq!(h.secrets.get(&key).unwrap(), None);
     }
 }

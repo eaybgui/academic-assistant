@@ -5,7 +5,7 @@
 //! in `detail` — never serialized, only logged.
 
 use academic_core::domain::RunError;
-use academic_core::lms::SessionError;
+use academic_core::lms::{LmsSyncError, SessionError};
 use academic_core::ports::{LmsError, ProviderError, RepoError, SecretError};
 use serde::Serialize;
 
@@ -44,6 +44,10 @@ impl CommandError {
 
     pub fn not_found(message: impl Into<String>) -> Self {
         Self::new(CommandErrorKind::NotFound, message)
+    }
+
+    pub fn auth(message: impl Into<String>) -> Self {
+        Self::new(CommandErrorKind::Auth, message)
     }
 
     pub fn conflict(message: impl Into<String>) -> Self {
@@ -145,6 +149,17 @@ impl From<SessionError> for CommandError {
             SessionError::Lms(e) => e.into(),
             SessionError::Storage(detail) => Self::internal(STORAGE_MESSAGE, detail),
             SessionError::Secret(detail) => Self::internal(SECRET_STORAGE_MESSAGE, detail),
+        }
+    }
+}
+
+impl From<LmsSyncError> for CommandError {
+    fn from(error: LmsSyncError) -> Self {
+        let message = error.to_string();
+        match error {
+            LmsSyncError::AlreadyRunning => Self::conflict(message),
+            LmsSyncError::NothingToSync => Self::validation(message),
+            LmsSyncError::Storage(detail) => Self::internal(STORAGE_MESSAGE, detail),
         }
     }
 }
@@ -283,5 +298,21 @@ mod tests {
         let secret = CommandError::from(SessionError::Secret("locked".into()));
         assert_eq!(secret.message, SECRET_STORAGE_MESSAGE);
         assert_eq!(secret.detail.as_deref(), Some("locked"));
+    }
+
+    #[test]
+    fn lms_sync_error_mapping() {
+        let running = CommandError::from(LmsSyncError::AlreadyRunning);
+        assert_eq!(running.kind, CommandErrorKind::Conflict);
+        assert_eq!(running.message, "A sync is already running");
+
+        let nothing = CommandError::from(LmsSyncError::NothingToSync);
+        assert_eq!(nothing.kind, CommandErrorKind::Validation);
+        assert_eq!(nothing.message, "Sign in to a university first");
+
+        let storage = CommandError::from(LmsSyncError::Storage("disk full".into()));
+        assert_eq!(storage.kind, CommandErrorKind::Internal);
+        assert_eq!(storage.message, STORAGE_MESSAGE);
+        assert_eq!(storage.detail.as_deref(), Some("disk full"));
     }
 }

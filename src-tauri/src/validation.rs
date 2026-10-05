@@ -10,6 +10,7 @@ use crate::dto::{AccountInput, ProviderInput, ResultQueryInput, SettingsInput};
 use crate::error::CommandError;
 
 pub const MAX_PAGE_SIZE: i64 = 200;
+const MAX_NOTE_CHARS: usize = 2000;
 const MIN_PAGE_SIZE: i64 = 1;
 
 /// An [`AccountInput`] that passed validation: the domain draft plus the IMAP
@@ -92,6 +93,20 @@ pub fn model_name(value: &str) -> Result<String, CommandError> {
 
 pub fn api_key(value: &str) -> Result<String, CommandError> {
     required_text(value, "Enter an API key")
+}
+
+/// Trims a personal item note; blank becomes `None`; at most 2000 characters.
+pub fn item_note(value: Option<String>) -> Result<Option<String>, CommandError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let trimmed = value.trim();
+    if trimmed.chars().count() > MAX_NOTE_CHARS {
+        return Err(CommandError::validation(
+            "Notes can have at most 2000 characters",
+        ));
+    }
+    Ok((!trimmed.is_empty()).then(|| trimmed.to_string()))
 }
 
 /// Trims every entry and drops blanks (aliases, blocked senders).
@@ -204,6 +219,23 @@ mod tests {
 
     fn message<T: std::fmt::Debug>(result: Result<T, CommandError>) -> String {
         result.unwrap_err().message
+    }
+
+    #[test]
+    fn item_notes_are_trimmed_blank_means_none_and_length_is_capped() {
+        assert_eq!(item_note(None).unwrap(), None);
+        assert_eq!(item_note(Some("  ".into())).unwrap(), None);
+        assert_eq!(
+            item_note(Some(" call the tutor ".into()))
+                .unwrap()
+                .as_deref(),
+            Some("call the tutor")
+        );
+        assert!(item_note(Some("ñ".repeat(2000))).is_ok());
+        assert_eq!(
+            message(item_note(Some("ñ".repeat(2001)))),
+            "Notes can have at most 2000 characters"
+        );
     }
 
     fn imap_input() -> AccountInput {

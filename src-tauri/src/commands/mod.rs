@@ -7,6 +7,7 @@ pub mod catalog;
 pub mod results;
 pub mod runs;
 pub mod settings;
+pub mod tracker;
 pub mod universities;
 
 use crate::error::CommandError;

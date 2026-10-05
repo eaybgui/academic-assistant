@@ -1,7 +1,7 @@
 //! Test fixtures: an [`AppState`] over an in-memory database, an in-memory secret
 //! store and fake provider/model adapters.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use academic_core::domain::{
     lms_credential_key, AIAnalysis, Account, AccountDraft, Category, FetchBatch, LmsIdentity,
@@ -11,8 +11,9 @@ use academic_core::domain::{
 };
 use academic_core::ports::{
     Answer, AnswerSet, EmailProvider, EmailProviderFactory, LmsAuthenticator, LmsClient,
-    LmsClientFactory, LmsError, ModelError, ModelProvider, ProviderError, QuestionSet, RunObserver,
-    SecretStore, StructuredModel, SystemClock,
+    LmsClientFactory, LmsError, LmsSyncObserver, LmsSyncProgress, LmsSyncResult, ModelError,
+    ModelProvider, ProviderError, QuestionSet, RunObserver, SecretStore, StructuredModel,
+    SystemClock,
 };
 use academic_infra::db::Database;
 use academic_infra::secrets::InMemorySecretStore;
@@ -24,6 +25,7 @@ use crate::state::{AppState, Collaborators};
 pub struct Harness {
     pub state: AppState,
     pub secrets: Arc<InMemorySecretStore>,
+    pub lms_observer: Arc<RecordingLmsObserver>,
 }
 
 /// How a fake provider behaves. Function pointers keep the fakes `Send + Sync`
@@ -48,6 +50,8 @@ impl Default for FakeProviderBehavior {
 pub struct FakeLmsBehavior {
     pub verify: fn() -> Result<LmsIdentity, LmsError>,
     pub renew: fn() -> Result<(), LmsError>,
+    pub courses: fn() -> Result<Vec<RemoteCourse>, LmsError>,
+    pub items: fn() -> Result<Vec<RemoteItem>, LmsError>,
 }
 
 impl Default for FakeLmsBehavior {
@@ -60,6 +64,8 @@ impl Default for FakeLmsBehavior {
                 })
             },
             renew: || Err(LmsError::Auth("Sign-in required".into())),
+            courses: || Ok(vec![]),
+            items: || Ok(vec![]),
         }
     }
 }
@@ -99,7 +105,7 @@ impl LmsClient for FakeLmsClient {
     }
 
     async fn list_courses(&self) -> Result<Vec<RemoteCourse>, LmsError> {
-        Ok(vec![])
+        (self.0.courses)()
     }
 
     async fn fetch_items(
@@ -107,7 +113,7 @@ impl LmsClient for FakeLmsClient {
         _courses: &[RemoteCourseRef],
         _window: &SyncWindow,
     ) -> Result<Vec<RemoteItem>, LmsError> {
-        Ok(vec![])
+        (self.0.items)()
     }
 }
 
@@ -180,6 +186,23 @@ impl RunObserver for NoopObserver {
     fn finished(&self, _run_id: RunId, _status: RunStatus) {}
 }
 
+/// Records every LMS sync notification so tests can assert on them.
+#[derive(Default)]
+pub struct RecordingLmsObserver {
+    pub progress: Mutex<Vec<LmsSyncProgress>>,
+    pub finished: Mutex<Vec<Vec<LmsSyncResult>>>,
+}
+
+impl LmsSyncObserver for RecordingLmsObserver {
+    fn progress(&self, progress: &LmsSyncProgress) {
+        self.progress.lock().unwrap().push(progress.clone());
+    }
+
+    fn finished(&self, results: &[LmsSyncResult]) {
+        self.finished.lock().unwrap().push(results.to_vec());
+    }
+}
+
 /// Answers every asked question `yes`.
 pub fn answer_yes(questions: &QuestionSet) -> Result<AnswerSet, ModelError> {
     Ok(questions
@@ -224,6 +247,7 @@ fn build_harness(
     lms: FakeLmsBehavior,
 ) -> Harness {
     let secrets = Arc::new(InMemorySecretStore::default());
+    let lms_observer = Arc::new(RecordingLmsObserver::default());
     let state = AppState::new(
         Arc::new(Database::open_in_memory().expect("in-memory database opens")),
         Collaborators {
@@ -238,9 +262,14 @@ fn build_harness(
                 secrets: secrets.clone(),
             }),
             lms_authenticator: Arc::new(FakeLmsAuthenticator(lms)),
+            lms_observer: lms_observer.clone(),
         },
     );
-    Harness { state, secrets }
+    Harness {
+        state,
+        secrets,
+        lms_observer,
+    }
 }
 
 pub fn imap_draft(name: &str) -> AccountDraft {
