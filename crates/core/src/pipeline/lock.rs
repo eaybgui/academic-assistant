@@ -13,8 +13,9 @@ struct LockState {
     run_id: Option<RunId>,
 }
 
-/// The single-run lock owned by [`super::CheckRunner`]. Cloning shares the same
-/// underlying state (cheap: an `Arc<Mutex<_>>` handle).
+/// The single-run lock. Each runner (`CheckRunner`, `LmsSyncRunner`) owns its own
+/// instance, one per runner. Cloning shares the same underlying state (cheap: an
+/// `Arc<Mutex<_>>` handle).
 #[derive(Clone, Default)]
 pub(crate) struct RunLock {
     state: Arc<Mutex<LockState>>,
