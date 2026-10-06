@@ -543,12 +543,12 @@ async fn course_events_are_fetched_in_chunks_and_deduplicated() {
     assert_eq!(
         ranges,
         [
-            (format(from), format(from + Duration::days(112))),
+            (format(from), format(from + Duration::days(105))),
             (
-                format(from + Duration::days(112)),
-                format(from + Duration::days(224))
+                format(from + Duration::days(105)),
+                format(from + Duration::days(210))
             ),
-            (format(from + Duration::days(224)), format(window.to)),
+            (format(from + Duration::days(210)), format(window.to)),
         ]
     );
 }

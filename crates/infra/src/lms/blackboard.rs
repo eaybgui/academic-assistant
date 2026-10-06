@@ -18,8 +18,10 @@ use super::{connection_error, format_number, REQUEST_TIMEOUT};
 /// Upper bound on followed `paging.nextPage` links, against a misbehaving server.
 const MAX_PAGES: usize = 50;
 const API_PREFIX: &str = "/learn/api/";
-/// The calendar endpoint rejects ranges longer than about 16 weeks.
-const CALENDAR_CHUNK_DAYS: i64 = 112;
+/// The calendar endpoint rejects ranges spanning more than 16 weeks, measured in the server's
+/// local time. A 112-day chunk that crosses a daylight-saving change becomes 16 weeks plus an
+/// hour there, so chunks stay at 15 weeks, safely below the limit.
+const CALENDAR_CHUNK_DAYS: i64 = 105;
 /// Attempt statuses that mean nothing has been handed in.
 const UNSUBMITTED_ATTEMPT_STATUSES: [&str; 4] =
     ["InProgress", "NotAttempted", "Abandoned", "Canceled"];
