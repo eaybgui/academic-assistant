@@ -7,5 +7,6 @@ export function useInvalidateUniversities() {
   return () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.universities });
     void queryClient.invalidateQueries({ queryKey: queryKeys.catalog });
+    void queryClient.invalidateQueries({ queryKey: ['courses'] });
   };
 }

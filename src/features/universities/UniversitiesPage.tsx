@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useLocation } from 'react-router';
 import ErrorMessage from '../../components/ErrorMessage';
 import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
@@ -10,7 +11,11 @@ import UniversityCard from './UniversityCard';
 export default function UniversitiesPage() {
   const universitiesQuery = useQuery({ queryKey: queryKeys.universities, queryFn: api.getUniversities });
 
-  const [addOpen, setAddOpen] = useState(false);
+  // Other screens link here with `state: { openAdd: true }` to start the add wizard right away.
+  const location = useLocation();
+  const [addOpen, setAddOpen] = useState(
+    (location.state as { openAdd?: boolean } | null)?.openAdd === true,
+  );
   // Part of the modal's `key`, so each open starts with a fresh form.
   const [addOpenCount, setAddOpenCount] = useState(0);
 

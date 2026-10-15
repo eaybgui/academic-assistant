@@ -3,8 +3,11 @@ import { useMutation } from '@tanstack/react-query';
 import ErrorMessage from '../../components/ErrorMessage';
 import ConfirmDialog from '../../components/forms/ConfirmDialog';
 import { PencilIcon, TrashIcon } from '../../components/forms/icons';
+import { formatRelativeDay, formatTime } from '../../components/results/format';
 import { api, toCommandError } from '../../lib/api/client';
 import type { CommandError, LmsUniversityDto } from '../../lib/api/types';
+import { useSync } from '../sync/useSync';
+import EditCoursesModal from './EditCoursesModal';
 import { PLATFORM_LABELS, connectionStatusText } from './labels';
 import RenameUniversityModal from './RenameUniversityModal';
 import { useInvalidateUniversities } from './useInvalidateUniversities';
@@ -15,10 +18,11 @@ export interface UniversityCardProps {
 
 const TEXT_BUTTON = 'text-sm text-neutral-700 hover:underline disabled:opacity-50';
 
-/** One university: connection status, sign-in/check/sign-out actions, rename and delete. */
+/** One university: connection status, sync and course actions, sign-in/check/sign-out, rename and delete. */
 export default function UniversityCard({ university }: UniversityCardProps) {
   const { id, name, loginState } = university;
   const invalidate = useInvalidateUniversities();
+  const { startSync, running: syncRunning } = useSync();
 
   const [actionError, setActionError] = useState<CommandError | null>(null);
   const [deleteError, setDeleteError] = useState<CommandError | null>(null);
@@ -26,6 +30,9 @@ export default function UniversityCard({ university }: UniversityCardProps) {
   const [renameOpen, setRenameOpen] = useState(false);
   // Part of the rename modal's `key`, so each open starts from the current name.
   const [renameOpenCount, setRenameOpenCount] = useState(0);
+  const [editCoursesOpen, setEditCoursesOpen] = useState(false);
+  // Part of the edit-courses modal's `key`, so each open reloads the course list.
+  const [editCoursesOpenCount, setEditCoursesOpenCount] = useState(0);
 
   function connectionMutation(action: (id: number) => Promise<LmsUniversityDto>) {
     return {
@@ -50,11 +57,17 @@ export default function UniversityCard({ university }: UniversityCardProps) {
   });
 
   const busy = signInMutation.isPending || signOutMutation.isPending || checkMutation.isPending;
-  const { courses } = university;
+  const { courses, lastSync } = university;
+  const hasNewCourses = courses.unreviewed > 0 && courses.total > courses.unreviewed;
 
   function openRename() {
     setRenameOpenCount((count) => count + 1);
     setRenameOpen(true);
+  }
+
+  function openEditCourses() {
+    setEditCoursesOpenCount((count) => count + 1);
+    setEditCoursesOpen(true);
   }
 
   function openDelete() {
@@ -78,10 +91,44 @@ export default function UniversityCard({ university }: UniversityCardProps) {
               {courses.tracked} of {courses.total} courses tracked
             </p>
           ) : null}
+          {hasNewCourses ? (
+            <button type="button" onClick={openEditCourses} className={`${TEXT_BUTTON} underline`}>
+              {courses.unreviewed} new courses found
+            </button>
+          ) : null}
+          {lastSync.at ? (
+            <p className="text-sm text-neutral-500">
+              Last synced {formatRelativeDay(lastSync.at)} at {formatTime(lastSync.at)}
+            </p>
+          ) : null}
+          {lastSync.outcome === 'failed' && lastSync.error ? (
+            <p className="text-sm text-red-600">{lastSync.error}</p>
+          ) : null}
           <ErrorMessage error={actionError} />
         </div>
 
         <div className="flex items-center gap-3">
+          {loginState === 'ok' ? (
+            <>
+              <button
+                type="button"
+                aria-label={`Sync ${name}`}
+                disabled={syncRunning}
+                onClick={() => void startSync(id)}
+                className={TEXT_BUTTON}
+              >
+                Sync
+              </button>
+              <button
+                type="button"
+                aria-label={`Edit courses of ${name}`}
+                onClick={openEditCourses}
+                className={TEXT_BUTTON}
+              >
+                Edit courses
+              </button>
+            </>
+          ) : null}
           {loginState !== 'ok' ? (
             <button
               type="button"
@@ -139,6 +186,13 @@ export default function UniversityCard({ university }: UniversityCardProps) {
         open={renameOpen}
         university={university}
         onClose={() => setRenameOpen(false)}
+      />
+
+      <EditCoursesModal
+        key={editCoursesOpenCount}
+        open={editCoursesOpen}
+        university={university}
+        onClose={() => setEditCoursesOpen(false)}
       />
 
       <ConfirmDialog
