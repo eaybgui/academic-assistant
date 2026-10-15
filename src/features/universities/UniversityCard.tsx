@@ -93,7 +93,7 @@ export default function UniversityCard({ university }: UniversityCardProps) {
           ) : null}
           {hasNewCourses ? (
             <button type="button" onClick={openEditCourses} className={`${TEXT_BUTTON} underline`}>
-              {courses.unreviewed} new courses found
+              {courses.unreviewed} new {courses.unreviewed === 1 ? 'course' : 'courses'} found
             </button>
           ) : null}
           {lastSync.at ? (
@@ -198,7 +198,7 @@ export default function UniversityCard({ university }: UniversityCardProps) {
       <ConfirmDialog
         open={deleteOpen}
         title="Delete university"
-        message="Deletes this university, its courses and your saved sign-in."
+        message="Deletes this university, its courses, their items and your notes, and your saved sign-in. This cannot be undone."
         error={deleteError}
         pending={deleteMutation.isPending}
         onCancel={() => setDeleteOpen(false)}

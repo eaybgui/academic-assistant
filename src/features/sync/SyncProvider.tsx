@@ -58,6 +58,7 @@ export function SyncProvider({ children }: SyncProviderProps) {
       finishedCountRef.current += 1;
       setRunning(false);
       setProgress(null);
+      setError(null);
       setLastResults(event.results);
       void queryClient.invalidateQueries({ queryKey: ['tracker'] });
       void queryClient.invalidateQueries({ queryKey: ['universities'] });

@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import UniversitiesPage from './UniversitiesPage';
 import { api } from '../../lib/api/client';
-import type { LmsUniversityDto } from '../../lib/api/types';
+import type { CommandError, LmsUniversityDto } from '../../lib/api/types';
 
 vi.mock('../../lib/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/api/client')>();
@@ -22,13 +22,14 @@ vi.mock('../../lib/api/client', async (importOriginal) => {
   };
 });
 
+const syncState: { error: CommandError | null } = { error: null };
 vi.mock('../sync/useSync', () => ({
   useSync: () => ({
     startSync: vi.fn(),
     running: false,
     progress: null,
     lastResults: null,
-    error: null,
+    error: syncState.error,
     clearResults: vi.fn(),
   }),
 }));
@@ -49,16 +50,26 @@ function university(overrides: Partial<LmsUniversityDto> = {}): LmsUniversityDto
   };
 }
 
+function LocationState() {
+  const { state } = useLocation();
+  return <p>{`location state: ${JSON.stringify(state)}`}</p>;
+}
+
 function renderPage(state?: { openAdd: true }) {
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[{ pathname: '/universities', state }]}>
         <UniversitiesPage />
+        <LocationState />
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
+
+beforeEach(() => {
+  syncState.error = null;
+});
 
 describe('UniversitiesPage', () => {
   it('lists universities with their connection state', async () => {
@@ -98,7 +109,11 @@ describe('UniversitiesPage', () => {
     mockedApi.removeUniversity.mockResolvedValue(undefined);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Delete UV' }));
-    expect(screen.getByText('Deletes this university, its courses and your saved sign-in.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Deletes this university, its courses, their items and your notes, and your saved sign-in. This cannot be undone.',
+      ),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(mockedApi.removeUniversity).toHaveBeenCalledWith(1));
   });
@@ -107,6 +122,27 @@ describe('UniversitiesPage', () => {
     mockedApi.getUniversities.mockResolvedValue([]);
     renderPage({ openAdd: true });
     expect(await screen.findByRole('dialog', { name: 'Add university' })).toBeInTheDocument();
+  });
+
+  it('clears the openAdd state so going back does not reopen the wizard', async () => {
+    mockedApi.getUniversities.mockResolvedValue([]);
+    renderPage({ openAdd: true });
+    await screen.findByRole('dialog', { name: 'Add university' });
+    expect(screen.getByText('location state: null')).toBeInTheDocument();
+  });
+
+  it('shows a sync error at the top of the page', async () => {
+    syncState.error = { kind: 'conflict', message: 'A sync is already running' };
+    mockedApi.getUniversities.mockResolvedValue([university()]);
+    renderPage();
+    expect(await screen.findByText('A sync is already running')).toBeInTheDocument();
+  });
+
+  it('shows no sync error when there is none', async () => {
+    mockedApi.getUniversities.mockResolvedValue([university()]);
+    renderPage();
+    await screen.findByText('UV');
+    expect(screen.queryByText('A sync is already running')).not.toBeInTheDocument();
   });
 
   it('does not open the add wizard by default', async () => {

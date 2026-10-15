@@ -155,6 +155,20 @@ describe('SyncProvider', () => {
     expect(screen.getByText('idle')).toBeInTheDocument();
   });
 
+  it('clears a stale sync error when a sync finishes', async () => {
+    lmsSync.mockRejectedValue({ kind: 'conflict', message: 'A sync is already running' });
+    const user = userEvent.setup();
+    renderWithProvider(new QueryClient());
+    await waitFor(() => expect(finishedCb).toBeDefined());
+
+    await user.click(screen.getByRole('button', { name: 'Sync' }));
+    expect(await screen.findByText('error:A sync is already running')).toBeInTheDocument();
+
+    act(() => finishedCb?.({ results: [result] }));
+
+    expect(await screen.findByText('no error')).toBeInTheDocument();
+  });
+
   it('marks the sync as running when a progress event arrives without a prior startSync', async () => {
     renderWithProvider(new QueryClient());
     await waitFor(() => expect(progressCb).toBeDefined());

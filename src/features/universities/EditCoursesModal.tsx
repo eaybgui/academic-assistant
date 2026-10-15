@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Modal from '../../components/Modal';
 import ErrorMessage from '../../components/ErrorMessage';
 import { api, toCommandError } from '../../lib/api/client';
+import { queryKeys } from '../../lib/api/queryKeys';
 import type { LmsUniversityDto } from '../../lib/api/types';
 import { useSync } from '../sync/useSync';
 import CourseSelectionList from './CourseSelectionList';
@@ -22,15 +23,18 @@ export interface EditCoursesModalProps {
 export default function EditCoursesModal({ open, university, onClose }: EditCoursesModalProps) {
   const { id } = university;
   const { startSync } = useSync();
+  const queryClient = useQueryClient();
   const invalidate = useInvalidateUniversities();
   const [selection, setSelection] = useState<Set<number> | null>(null);
 
   const coursesQuery = useQuery({
-    queryKey: ['edit-courses', id],
+    queryKey: queryKeys.courses(id),
     queryFn: async () => {
       try {
         return { courses: await api.lmsFetchCourses(id), fetchError: null };
       } catch (e) {
+        // A failed refresh can change the login state (e.g. the session expired): keep the card in sync.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.universities });
         return { courses: await api.getCourses(id), fetchError: toCommandError(e) };
       }
     },
@@ -49,6 +53,9 @@ export default function EditCoursesModal({ open, university, onClose }: EditCour
       await startSync(id);
     },
     onSuccess: () => {
+      // The modal is still mounted when this runs: drop the list first so the `courses` invalidation
+      // doesn't refetch it from the platform again.
+      queryClient.removeQueries({ queryKey: queryKeys.courses(id) });
       invalidate();
       onClose();
     },
