@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { api, toCommandError } from './client';
-import type { AccountInput, LmsUniversityInput, ResultQuery, SettingsInput } from './types';
+import type {
+  AccountInput,
+  LmsUniversityInput,
+  ResultQuery,
+  SettingsInput,
+  TrackerQuery,
+} from './types';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -141,6 +147,69 @@ describe('api client', () => {
   it('lmsCheckSession(id) → lms_check_session { id }', async () => {
     await api.lmsCheckSession(1);
     expect(mockedInvoke).toHaveBeenCalledWith('lms_check_session', { id: 1 });
+  });
+
+  it('lmsFetchCourses(id) → lms_fetch_courses { id }', async () => {
+    await api.lmsFetchCourses(1);
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_fetch_courses', { id: 1 });
+  });
+
+  it('getCourses(universityId) → get_courses { universityId }', async () => {
+    await api.getCourses(2);
+    expect(mockedInvoke).toHaveBeenCalledWith('get_courses', { universityId: 2 });
+  });
+
+  it('setTrackedCourses sends universityId and courseIds', async () => {
+    await api.setTrackedCourses(2, [5, 7]);
+    expect(mockedInvoke).toHaveBeenCalledWith('set_tracked_courses', {
+      universityId: 2,
+      courseIds: [5, 7],
+    });
+  });
+
+  it('lmsSync(universityId) → lms_sync { universityId }, null syncs everything', async () => {
+    await api.lmsSync(3);
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_sync', { universityId: 3 });
+    await api.lmsSync(null);
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_sync', { universityId: null });
+  });
+
+  it('getTracker wraps the query', async () => {
+    const query: TrackerQuery = { universityId: null, includeHidden: false, includeRemoved: false };
+    await api.getTracker(query);
+    expect(mockedInvoke).toHaveBeenCalledWith('get_tracker', { query });
+  });
+
+  it('setItemDone(id, value) → set_item_done { id, value }', async () => {
+    await api.setItemDone(9, true);
+    expect(mockedInvoke).toHaveBeenCalledWith('set_item_done', { id: 9, value: true });
+  });
+
+  it('setItemHidden(id, value) → set_item_hidden { id, value }', async () => {
+    await api.setItemHidden(9, false);
+    expect(mockedInvoke).toHaveBeenCalledWith('set_item_hidden', { id: 9, value: false });
+  });
+
+  it('setItemNote(id, note) → set_item_note { id, note }, null clears the note', async () => {
+    await api.setItemNote(9, 'Bring the lab report');
+    expect(mockedInvoke).toHaveBeenCalledWith('set_item_note', {
+      id: 9,
+      note: 'Bring the lab report',
+    });
+    await api.setItemNote(9, null);
+    expect(mockedInvoke).toHaveBeenCalledWith('set_item_note', { id: 9, note: null });
+  });
+
+  it('dismissItemChange(id) → dismiss_item_change { id }', async () => {
+    await api.dismissItemChange(9);
+    expect(mockedInvoke).toHaveBeenCalledWith('dismiss_item_change', { id: 9 });
+  });
+
+  it('dismissAllChanges(universityId) → dismiss_all_changes { universityId }', async () => {
+    await api.dismissAllChanges(4);
+    expect(mockedInvoke).toHaveBeenCalledWith('dismiss_all_changes', { universityId: 4 });
+    await api.dismissAllChanges(null);
+    expect(mockedInvoke).toHaveBeenCalledWith('dismiss_all_changes', { universityId: null });
   });
 
   it('getSettings() → get_settings {}', async () => {
