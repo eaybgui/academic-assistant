@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HashRouter } from 'react-router';
 import App from './App';
 import { CheckRunProvider } from './features/check-run/CheckRunProvider';
+import { SyncProvider } from './features/sync/SyncProvider';
 import './index.css';
 
 const queryClient = new QueryClient();
@@ -17,9 +18,11 @@ createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <CheckRunProvider>
-        <HashRouter>
-          <App />
-        </HashRouter>
+        <SyncProvider>
+          <HashRouter>
+            <App />
+          </HashRouter>
+        </SyncProvider>
       </CheckRunProvider>
     </QueryClientProvider>
   </StrictMode>,
