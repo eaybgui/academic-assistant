@@ -1,6 +1,6 @@
 import { Route, Routes } from 'react-router';
 import Layout from './components/Layout';
-import DashboardPage from './features/dashboard/DashboardPage';
+import TrackerPage from './features/tracker/TrackerPage';
 import ResultsPage from './features/results/ResultsPage';
 import RunsPage from './features/runs/RunsPage';
 import AccountsPage from './features/accounts/AccountsPage';
@@ -11,7 +11,7 @@ export default function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<DashboardPage />} />
+        <Route path="/" element={<TrackerPage />} />
         <Route path="/results" element={<ResultsPage />} />
         <Route path="/runs" element={<RunsPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
