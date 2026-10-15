@@ -1,7 +1,7 @@
 import { Route, Routes } from 'react-router';
 import Layout from './components/Layout';
 import TrackerPage from './features/tracker/TrackerPage';
-import ResultsPage from './features/results/ResultsPage';
+import AnnouncementsPage from './features/announcements/AnnouncementsPage';
 import RunsPage from './features/runs/RunsPage';
 import AccountsPage from './features/accounts/AccountsPage';
 import UniversitiesPage from './features/universities/UniversitiesPage';
@@ -12,7 +12,7 @@ export default function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<TrackerPage />} />
-        <Route path="/results" element={<ResultsPage />} />
+        <Route path="/announcements" element={<AnnouncementsPage />} />
         <Route path="/runs" element={<RunsPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/universities" element={<UniversitiesPage />} />

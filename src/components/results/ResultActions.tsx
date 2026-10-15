@@ -21,8 +21,8 @@ function isOpenableUrl(url: string): boolean {
 /**
  * "Open email" (when the result has an `https` `sourceUrl`, opened in the system browser) or
  * "Copy Message-ID" (when it has a `messageIdHeader`, copied to the clipboard). Renders nothing
- * when neither is available. Shared by `ResultCard` (dashboard) and the results table's row
- * detail so the two screens never diverge on this behavior.
+ * when neither is available. Used by the announcements results table row
+ * detail.
  */
 export default function ResultActions({ result, className }: ResultActionsProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
