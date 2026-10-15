@@ -1,7 +1,7 @@
 # `academic-core`: domain model and ports
 
 `academic-core` (package `academic-core`) is the pure domain crate for the Academic
-Assistant email analysis pipeline. It has **no I/O dependencies** — only `serde`,
+Assistant: the Phase 1 email analysis pipeline and the Phase 2 LMS tracker. It has **no I/O dependencies** — only `serde`,
 `serde_json`, `chrono`, `thiserror`, `async-trait`, `indexmap`, `regex`, `sha2`, `hex`
 and `html2text`. All persistence, network and OS-credential-store access lives in
 `academic-infra`, which depends on `academic-core` and implements the traits
@@ -11,7 +11,7 @@ adapters into `academic-core`'s ports and exposes Tauri commands.
 Module layout (`crates/core/src/`):
 
 ```
-lib.rs          public modules: analyzer, dates, domain, filters, normalize, pipeline, ports
+lib.rs          public modules: analyzer, dates, domain, filters, lms, normalize, pipeline, ports
 domain/         domain model (this document, "Domain" section)
 ports/          traits + port-level error types (this document, "Ports" section)
 normalize.rs    HTML→text, quote/signature stripping, content hash    (normalization-and-filters.md)
@@ -19,6 +19,7 @@ filters.rs      deterministic pre-filters                             (normaliza
 dates/          date candidate extraction                             (date-extraction.md)
 analyzer/       question building + answer assembly                    (email-analyzer.md)
 pipeline/       CheckRunner orchestration                             (pipeline.md)
+lms/            URL normalization, session check, item diff, LmsSyncRunner (../infra/lms.md)
 ```
 
 The behavior of the non-contract modules is documented in their own files:
@@ -38,7 +39,7 @@ on.
   to store/read enum columns as `TEXT`. The mapping is generated once, per enum, by the
   private `domain::enum_str!` macro (`crates/core/src/domain/mod.rs`) — it exists purely
   to avoid writing the same "match to string" / "match from string" pair by hand for the
-  ~14 enums below; it has no runtime behavior of its own.
+  ~20 enums below; it has no runtime behavior of its own.
 - Structs derive `Debug, Clone, PartialEq` plus `Eq`/`Serialize`/`Deserialize`/`Copy`
   whenever every field supports them. Types holding an `f32` (`AIAnalysis`,
   `AnalysisOutcome`, the AI-provider `Answer` enum) cannot derive `Eq`.
@@ -52,7 +53,7 @@ on.
 ## Domain (`crate::domain`)
 
 Re-exported flat from `crate::domain`; internally split by topic into
-`account.rs`, `email.rs`, `analysis.rs`, `catalog.rs`, `run.rs`, `results.rs`,
+`account.rs`, `email.rs`, `analysis.rs`, `catalog.rs`, `lms.rs`, `run.rs`, `results.rs`,
 `settings.rs`, `secrets.rs`.
 
 ### `ParseEnumError`
@@ -137,11 +138,47 @@ invalid input, for error messages.
 
 ### Catalog (`catalog.rs`)
 
+The analyzer's read-only projection of the LMS data (there is no manual catalog any more).
+
 - **`University`** — `{ id, name }`.
 - **`Course`** — `{ id, university_id, name, aliases }`; `aliases` are alternate
-  names/codes the analyzer should also recognize for the same course.
-- **`Catalog`** — `{ universities, courses }`, the full configured catalog as read by
-  `CatalogRepository::catalog` and passed into `analyzer::AnalysisInput`.
+  names/codes the analyzer should also recognize for the same course (here, the course's short
+  name when it differs from its name).
+- **`Catalog`** — `{ universities, courses }`: the configured universities and their **tracked,
+  available** courses, as read by `CatalogRepository::catalog` and passed into
+  `analyzer::AnalysisInput`.
+
+### LMS (`lms.rs`)
+
+- **`UniversityId = i64`**.
+- **`LmsPlatform`** — `Moodle` (`"moodle"`) | `Blackboard` (`"blackboard"`).
+- **`LoginState`** — `Never | Ok | Expired | Error`: whether the app holds a working credential.
+- **`SyncOutcome`** — `Success | Failed | LoginRequired` (`"login_required"`): result of a
+  university's last sync.
+- **`LmsUniversity`** — id, name, platform, `base_url` (normalized `https` origin, e.g.
+  `https://campus.demo.example`), `login_state`, `account_label` ("Connected as ..."), last sync
+  time/outcome/error, `created_at`.
+- **`LmsCourse`** — id, `university_id`, `external_id` (platform id: Moodle `"1234"`, Blackboard
+  `"_10_1"`), name, short name, URL, `tracked`, `available` (false when the platform stops
+  returning it), `reviewed` (false until the user saves a selection) and `items_synced_at`
+  (empty until the course's first item sync, which suppresses the "new" badge).
+- **`ItemKind`** — `Assignment | Quiz | Test | Event | Other`.
+- **`PlatformStatus`** — `NotSubmitted | Submitted | Graded | NotApplicable` (`"not_applicable"`).
+- **`Grade`** — `{ display, score: Option<f64>, max: Option<f64> }`.
+- **`ItemChange`** — `New | DueChanged { previous_due_at }`; the badge shown until dismissed.
+- **`LmsItem`** — a stored deliverable or event: ids, `external_id` (stable per university:
+  `assign:812`, `quiz:77`, `event:9031`, `column:_20_1`, `calendar:abc`), kind, title, due date,
+  URL, platform status, grade, change, `removed_at`, the personal fields `done`, `hidden`, `note`
+  (at most 2000 characters) and timestamps.
+- **`EffectiveStatus`** — `Pending | Overdue | Submitted | Graded | PastEvent`, derived by
+  `effective_status(item, now)`: graded, then submitted or done, then past event (a past event, or
+  any past item with nothing to submit), then overdue, else pending.
+- **`SyncWindow`** — `{ from, to }`; `SyncWindow::around(now)` is now - 180 days to now + 365 days.
+  Limits course events only.
+- **`LmsIdentity`**, **`RemoteCourse`**, **`RemoteCourseRef`**, **`RemoteItem`** — what a platform
+  returns before it is stored.
+- **`TrackedItem`** — an item with its university and course names; **`TrackerQuery`** —
+  `{ university_id, include_hidden, include_removed }`.
 
 ### Runs (`run.rs`)
 
@@ -174,7 +211,9 @@ invalid input, for error messages.
   `AlreadyRunning`, `NoEnabledAccounts`, `AiNotConfigured(String)`, `Storage(String)`.
   Derives `Debug, Clone, PartialEq, Eq, thiserror::Error`; its `Display` texts are the
   user-facing messages ("A check is already running", "There are no enabled accounts",
-  "The AI provider is not configured: {0}", "Storage error: {0}").
+  "The AI provider is not configured: {0}", "Storage error: {0}"). The "track at least one
+  course" precondition of "Check now" is checked by the `check_now` command, not here
+  ([../app/tauri-commands.md](../app/tauri-commands.md)).
 
 ### Results (`results.rs`)
 
@@ -206,7 +245,7 @@ invalid input, for error messages.
 - **`Page<T>`** — `{ items: Vec<T>, total: u64 }`; `total` counts all matches ignoring
   `limit`/`offset`.
 - **`DashboardCounts`** — `{ new_total, tasks, exams, events, changes_and_notices }`
-  (all `u32`), `Default`/`Copy`; unseen-result counts by category for the dashboard,
+  (all `u32`), `Default`/`Copy`; unseen-result counts by category for the Announcements header,
   from `ResultRepository::unseen_counts`.
 
 ### Settings (`settings.rs`)
@@ -234,6 +273,9 @@ Key-naming helpers for the OS credential store (never storage itself — see
 - **`account_refresh_token_key(id) -> String`** —
   `"academic-assistant/account/{id}/refresh-token"`, a Microsoft Graph account's OAuth
   refresh token.
+- **`lms_credential_key(platform, id) -> String`** —
+  `"academic-assistant/university/{id}/moodle-token"` (Moodle web-service token) or
+  `"academic-assistant/university/{id}/blackboard-session"` (Blackboard cookies as JSON).
 
 ## Ports (`crate::ports`)
 
@@ -242,7 +284,7 @@ the real adapters. `InMemorySecretStore` (a test fake) lives in `academic_infra:
 not in `core`; `core`'s own tests use the fakes in `crates/core/tests/support/` and
 test-only modules.
 
-Split into `email.rs`, `model.rs`, `secrets.rs`, `repositories.rs`, `runtime.rs`, all
+Split into `email.rs`, `lms.rs`, `model.rs`, `secrets.rs`, `repositories.rs`, `runtime.rs`, all
 re-exported flat from `crate::ports`.
 
 ### Email providers (`email.rs`)
@@ -258,6 +300,25 @@ re-exported flat from `crate::ports`.
   Result<Box<dyn EmailProvider>, ProviderError>`; builds the right provider for an
   account's `ProviderConfig`. Implemented in `academic-infra::factory`
   ([factories.md](../infra/factories.md)) and consumed by the pipeline and `src-tauri`.
+
+### LMS platforms (`lms.rs`)
+
+- **`LmsError`** — `Auth | Connection | Protocol`, each with a user-facing message that never
+  contains a token, cookie or login-window URL. `.kind()` maps to `ErrorKind`. `Auth` means a
+  missing, unreadable, expired or rejected credential: sign-in is needed.
+- **`LmsClient`** (`Send + Sync`, `#[async_trait]`) — read-only access to one university as the
+  signed-in user: `verify()` (who the credential belongs to; also checks the platform exposes what
+  is needed), `list_courses()` and `fetch_items(courses, window)` (all or nothing). Implemented by
+  `MoodleClient` and `BlackboardClient` ([../infra/lms.md](../infra/lms.md)).
+- **`LmsClientFactory`** (`Send + Sync`) — `create(university)` builds a client from the stored
+  credential (a missing one is `Auth`); `create_with_credential(university, credential)` builds one
+  from a credential that is not stored yet, to verify it first.
+- **`LmsAuthenticator`** (`Send + Sync`, `#[async_trait]`) — `renew_silently(university)`: a hidden
+  sign-in attempt; on success the new credential is already verified and stored; `Err(Auth)` when
+  the user has to sign in interactively. Implemented by `TauriLmsAuthenticator` in `src-tauri`.
+- **`LmsSyncObserver`** (`Send + Sync`) — `progress(&LmsSyncProgress)` with the stage (`courses`,
+  `items`, `saving`, `done`, `failed`, `login_required`) and `finished(&[LmsSyncResult])`, called
+  exactly once per executed sync. Forwarded as `lms-sync:*` events.
 
 ### AI models (`model.rs`)
 
@@ -297,8 +358,18 @@ re-exported flat from `crate::ports`.
 - **`RepoError`** — `NotFound | Conflict(String) | Storage(String)`; `RepoResult<T> =
   Result<T, RepoError>`.
 - **`AccountRepository`** — CRUD for `Account`/`AccountDraft`.
-- **`CatalogRepository`** — read the full `Catalog`; add/rename/delete universities;
-  add/update/delete courses (with aliases).
+- **`CatalogRepository`** — read-only: `catalog()` returns the `Catalog` (universities and their
+  tracked, available courses). The Phase 1 add/rename/delete methods for universities and
+  courses were removed with the manual catalog.
+- **`UniversityRepository`** — `list_universities`, `get_university`, `insert_university(name,
+  platform, base_url, now)`, `rename_university`, `delete_university` (cascades courses and
+  items), `set_login(id, state, account_label)` and `record_sync(id, at, outcome, error)`.
+- **`CourseRepository`** — `list_courses`, `upsert_remote_courses` (new courses untracked and
+  unreviewed, missing ones unavailable) and `set_tracked_courses` (exactly these become tracked and
+  every course of the university becomes reviewed).
+- **`LmsItemRepository`** — `list_items_for_university` (for diffing), `apply_sync` (one
+  transaction), `query_items(&TrackerQuery)`, `get_item`, `set_item_done`, `set_item_hidden`,
+  `set_item_note`, `dismiss_item_change` and `dismiss_all_changes`.
 - **`SyncStateRepository`** — read one/all `SyncState`(s) for an account; record
   success (advances the cursor) or failure (records the error) per account+folder.
 - **`ProcessedMessageRepository`** — `exists` (by provider message id, for cheap
@@ -316,7 +387,7 @@ re-exported flat from `crate::ports`.
 - **`SettingsRepository`** — `load` (missing keys fall back to `Settings::default()`
   values) / `save`.
 
-All seven traits are implemented by a single `academic_infra::db::Database`,
+All ten traits are implemented by a single `academic_infra::db::Database`,
 backed by one SQLite connection guarded by a mutex.
 
 ### Runtime (`runtime.rs`)

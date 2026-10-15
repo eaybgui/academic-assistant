@@ -99,11 +99,13 @@ The app stores its data in the Tauri application data directory, which on Window
 `src-tauri/tauri.conf.json`):
 
 - `academic-assistant.db` (plus `-wal` and `-shm` files while the app runs): the SQLite
-  database (accounts, catalog, settings, runs, results).
+  database (universities, courses and tracked items, email accounts, settings, runs, results).
+- `lms-auth/`: the browser profile of the university sign-in windows (the identity provider's
+  cookies, so a new sign-in may finish without typing anything).
 - `logs/academic-assistant.log.<YYYY-MM-DD>`: the daily rolling application log.
 
-Passwords, refresh tokens and the jev API key are **not** in that folder; they are in Windows
-Credential Manager under generic credentials whose names start with `academic-assistant/`.
+Passwords, refresh tokens, the jev API key and the learning-platform sign-ins are **not** in that
+folder; they are in Windows Credential Manager under generic credentials whose names start with `academic-assistant/`.
 See [app/logging-and-data.md](app/logging-and-data.md) for details. To reset the app, delete
 the data folder and remove those credentials.
 

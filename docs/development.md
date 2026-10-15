@@ -6,40 +6,49 @@
 Cargo.toml                  workspace: crates/core, crates/infra, src-tauri (shared dependency versions)
 rust-toolchain.toml         stable channel with rustfmt and clippy
 crates/core/                academic-core: pure domain, ports and logic
-  src/domain/               Account, Email, analysis, catalog, run, result and settings types, enums
-  src/ports/                EmailProvider(+Factory), StructuredModel, ModelProvider, SecretStore,
-                            repository traits, Clock, RunObserver
+  src/domain/               Account, Email, analysis, catalog, LMS (universities, courses, items),
+                            run, result and settings types, enums
+  src/ports/                EmailProvider(+Factory), LmsClient(+Factory), LmsAuthenticator,
+                            StructuredModel, ModelProvider, SecretStore, repository traits, Clock,
+                            RunObserver, LmsSyncObserver
   src/normalize.rs          HTML to text, quote/signature stripping, content hash
   src/filters.rs            deterministic filters
   src/dates/                date candidate extraction (absolute, relative, time, year resolution)
   src/analyzer/             question building and answer assembly
   src/pipeline/             CheckRunner: run, account and message processing, run lock
-  tests/                    pipeline integration tests with in-memory fakes (tests/support/)
+  src/lms/                  URL normalization, session check/renewal, item diff, LmsSyncRunner
+  tests/                    pipeline and LMS sync integration tests with in-memory fakes (tests/support/)
 crates/infra/               academic-infra: adapters
-  migrations/               SQL migrations (0001_init.sql)
+  migrations/               SQL migrations (0001_init.sql, 0002_lms.sql, 0003_lms_items.sql)
   src/db/                   Database and one repository impl per module
   src/secrets.rs            KeyringSecretStore, InMemorySecretStore
   src/imap/, src/graph/     email providers (Graph includes OAuth and the loopback listener)
+  src/lms/                  Moodle and Blackboard clients, probe, DefaultLmsClientFactory
   src/jev.rs, src/ollama.rs structured model adapters (shared helper: src/http_util.rs)
   src/factory.rs            http_client, DefaultEmailProviderFactory, DefaultModelProvider
-  tests/                    integration tests, fixtures/ (.eml and JSON), support/
+  tests/                    integration tests, fixtures/ (.eml and JSON; lms-local/ is git-ignored), support/
+  examples/lms_capture.rs   capture tool for real platform responses (see testing.md)
 src-tauri/                  academic-assistant: composition root, commands, DTOs, events, logging
   src/lib.rs                Tauri builder and the command registration list
   src/setup.rs              startup: data directory, logging, database, AppState
-  src/state.rs              AppState (repositories, adapters, CheckRunner)
-  src/commands/             one module per area: runs, results, accounts, catalog, settings
-  src/dto/                  DTOs per area (accounts, catalog, results, runs, settings)
+  src/state.rs              AppState (repositories, adapters, CheckRunner, LmsSyncRunner)
+  src/commands/             one module per area: runs, results, accounts, catalog, settings,
+                            universities (sign-in, session, courses), tracker (sync, items)
+  src/dto/                  DTOs per area (accounts, catalog, lms, results, runs, settings)
   src/validation.rs         input validation and normalization
   src/error.rs              CommandError and error mapping
   src/account_status.rs     credentials/last-sync status and dashboard attention list
   src/observer.rs           TauriRunObserver (run:progress / run:finished events)
+  src/lms_observer.rs       TauriLmsSyncObserver (lms-sync:progress / lms-sync:finished events)
+  src/lms_auth/             LMS sign-in windows, credential capture, silent renewal
   src/test_support.rs       test harness (in-memory database and secrets, fake adapters)
   capabilities/default.json Tauri capability for the main window
   tauri.conf.json           window, CSP, bundle configuration
 src/                        React app
   lib/api/                  types.ts (DTO mirror), client.ts (invoke wrappers), events.ts, queryKeys.ts
   components/               Layout, Modal, ErrorMessage, forms/, results/
-  features/                 check-run, dashboard, results, runs, accounts, catalog, settings
+  features/                 tracker (Dashboard), universities, sync, announcements, check-run,
+                            results, runs, accounts, settings
 docs/                       this documentation (index: docs/README.md)
 ```
 
@@ -63,8 +72,16 @@ See [architecture.md](architecture.md).
 - **No secrets**: never put passwords, tokens, API keys or real credentials in code, tests,
   fixtures, logs, commits or docs. Tests use fake values such as `test-key`. Secrets go through
   `SecretStore` only.
-- **Privacy in logs and errors**: log ids, counters and stages; never bodies, subjects, tokens or
-  keys. Error messages shown to the user must be sanitized.
+- **The GitHub repository is public (`AGENTS.md` 11.2)**: never commit anything from your own
+  accounts, not even redacted: real platform responses, ids (user, course, item, calendar, tenant,
+  client), course or assignment names, grades, teacher or classmate names, email addresses or
+  usernames. Tests and docs use invented data only (`Universidad Demo`, `Ana Pérez`,
+  `Álgebra Lineal`, ids such as `_10_1`, `campus.demo.example`). Captures of real APIs go only in
+  the git-ignored `crates/infra/tests/fixtures/lms-local/`, and tests that read them must skip
+  when it is absent. Check `git status` and the diff before every commit.
+- **Privacy in logs and errors**: log ids, counters and stages; never bodies, subjects, tokens,
+  cookies, keys, item titles, notes, grades or the URLs seen in the sign-in window. Error messages
+  shown to the user must be sanitized.
 - **Rust**: `core` stays pure. Repository traits are synchronous, provider and model traits are
   `async` (`async-trait`). Domain enums serialize as `snake_case` and implement `as_str` /
   `FromStr` through the `enum_str!` macro.
@@ -105,8 +122,10 @@ See [testing.md](testing.md) for the individual suites.
 ## Branch workflow
 
 ```text
-main  <-  phase-1-email-analysis  <-  feature/*
+main  <-  phase-N-<name>  <-  feature/*
 ```
+
+(`phase-1-email-analysis` and `phase-2-lms-tracker`.)
 
 - Feature branches are created from the current tip of the phase branch, one per plan task
   (`feature/<id>-<slug>`), and merged back into it with `git merge --no-ff` after the quality
@@ -122,15 +141,15 @@ main  <-  phase-1-email-analysis  <-  feature/*
 The schema lives in `crates/infra/migrations/NNNN_name.sql` and is embedded with `include_str!`
 in `crates/infra/src/db/mod.rs`. Version tracking uses the `schema_migrations` table.
 
-1. Create `crates/infra/migrations/0002_<name>.sql` with the schema change. Never edit an
-   already released migration.
-2. `apply_migrations` currently handles only version 1 (one `MIGRATION_0001` constant and a single
-   "is version 1 applied" check). Turn it into an ordered list of `(version, sql)` pairs applied
-   in order, each in its own transaction together with its `schema_migrations` row, so existing
-   databases upgrade and new ones run every step.
+1. Create `crates/infra/migrations/NNNN_<name>.sql` (the next number after `0003`) with the schema
+   change. Never edit an already released migration.
+2. Append `(NNNN, include_str!("../../migrations/NNNN_<name>.sql"))` to the `MIGRATIONS` list in
+   `crates/infra/src/db/mod.rs`. `apply_migrations` applies the pending versions in order, each in
+   its own transaction together with its `schema_migrations` row, so existing databases upgrade and
+   new ones run every step.
 3. Add or update repository code in `crates/infra/src/db/` and any port/domain types in
    `crates/core` that need the new columns.
-4. Add tests in `crates/infra/tests/db_migrations.rs` (fresh database and upgrade from version 1)
+4. Add tests in `crates/infra/tests/db_migrations.rs` (fresh database and upgrade from the previous version)
    and in the affected `db_*.rs` file. Update [infra/database.md](infra/database.md) and the data
    model table in [architecture.md](architecture.md).
 
@@ -139,7 +158,8 @@ in `crates/infra/src/db/mod.rs`. Version tracking uses the `schema_migrations` t
 Contract first: define the input/output DTO shape and the error kinds before coding.
 
 1. **Rust command**: add the function to the matching module in `src-tauri/src/commands/`
-   (`runs`, `results`, `accounts`, `catalog`, `settings`), returning `Result<T, CommandError>`.
+   (`runs`, `results`, `accounts`, `catalog`, `settings`, `universities`, `tracker`), returning
+   `Result<T, CommandError>`.
    Validate inputs, use the shared `AppState`, never return or log secrets, bodies or subjects.
    Register it in the `tauri::generate_handler!` list in `src-tauri/src/lib.rs`.
 2. **DTOs and validation**: add or extend the serde types in the matching module of
@@ -167,6 +187,14 @@ Contract first: define the input/output DTO shape and the error kinds before cod
    `src/components/Layout.tsx`.
 4. Add Vitest + Testing Library tests next to the page, mocking `../../lib/api/client`.
 5. Document it in the matching file under `docs/frontend/`.
+
+### A new learning platform
+
+See "A new learning platform" in [architecture.md](architecture.md#a-new-learning-platform) and
+[infra/lms.md](infra/lms.md). In short: a `LmsPlatform` variant plus a migration for the `CHECK`
+constraint, an `LmsClient` in `crates/infra/src/lms/`, a probe, the factory branch, the credential
+capture in `src-tauri/src/lms_auth/`, and the platform option in the add wizard. Test the client
+with `wiremock` and invented JSON; use the capture tool only to look at real responses locally.
 
 ### A new email provider
 

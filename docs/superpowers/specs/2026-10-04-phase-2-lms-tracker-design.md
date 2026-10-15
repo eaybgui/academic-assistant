@@ -436,3 +436,56 @@ These override the sections above where they differ.
 5. **Incremental port.** In M1 `LmsClient` has `verify` and `list_courses`; M2 adds `fetch_items` and the item types.
 6. **Fixtures.** Capturing anonymized API fixtures is the first task of M2 instead of an M1 exit criterion.
 7. **Stored credential readability.** A stored Blackboard session that cannot be parsed, or a missing secret, is reported by the factory as `LmsError::Auth`, so it follows the renewal path.
+
+## 19. As built (2026-10-15)
+
+What the implementation does where it differs from the sections above. These items override §1 to §18 where they differ. Everything here is stated generically: no value in this section comes from a real account.
+
+### 19.1 Amendments made by the M2+M3 plan (`2026-10-05-phase-2-m2-m3-items-and-sync.md`)
+
+1. Progress stage `renewing` is dropped (renewal happens inside `ensure_session`); the stages are `courses`, `items`, `saving`, `done`, `failed`, `login_required`.
+2. A university whose sync starts with `ensure_session` returning `LoginRequired` ends as `login_required`; `Connection` / `Protocol` errors end as `failed`. An `Auth` error after a successful session check (during `list_courses` / `fetch_items`) sets `Expired` and ends as `login_required`.
+3. Blackboard attempts and user-grade endpoints that answer 404 are treated as "no attempts / no grade" (a column without a submission flow), not as a failed sync.
+4. Duplicate `external_id`s inside one fetch (for example overlapping calendar chunks) are de-duplicated before diffing, keeping the first occurrence.
+5. An item whose course changed on the platform (same `external_id`, different course) updates its `course_id`.
+6. A due date appearing (none to a date) or disappearing (a date to none) counts as `due_changed`.
+
+### 19.2 Amendments made by the M4+M5 plan (`2026-10-08-phase-2-m4-m5-dashboard-and-integration.md`)
+
+1. **"Check now" gating lives in the command layer**, not in `CheckRunner::prepare`: `check_now` (`src-tauri/src/commands/runs.rs`) returns `validation` "Track at least one course before checking email" when the catalog has no tracked course. This replaces §11's `CourseRepository::tracked_count()` / `RunError::NoCoursesConfigured` (neither exists), because putting the check in `core` would have forced rewriting every pipeline test fixture's empty catalog.
+2. **Routes.** `/` is the tracker dashboard; `/announcements` is the former Results page plus the email header (Check now, last check, counters, attention); `/universities`, `/accounts` (label "Email accounts"), `/runs` (label "Email runs") and `/settings` remain. The `/results` route and the email `DashboardPage` are removed.
+3. **After saving tracked courses** (the wizard or "Edit courses") the app starts a sync of that university immediately (the frontend calls `lms_sync` after `set_tracked_courses`).
+4. **"Edit courses"** first refreshes the course list from the platform (`lms_fetch_courses`); if that fails (for example because the user is not signed in) it falls back to the stored list (`get_courses`) and shows the error above the list.
+
+### 19.3 Findings from real platforms
+
+Found while validating the clients against real accounts; fixed in the code and pinned by tests with invented data.
+
+- **Blackboard `resource/x-bb-assessment` is an Assignment.** Ultra uses this gradebook handle for assignments and tests alike, so it maps to `Assignment` (together with `resource/x-bb-assignment`). Handles containing `test` or `asmt` still map to `Test`; any other handle maps to `Other`.
+- **Attendance columns are skipped.** `resource/x-bb-attendance` columns are not deliverables and never become items. `Calculated` (total) columns are skipped as in §5.2.
+- **A course gradebook answering 403 or 404 means no items.** A student may have no gradebook in a course. For the course-scoped gradebook endpoints (columns, the user's grades, attempts) a 404 or 403 on the first page is "nothing to list" rather than an expired session; a 403 anywhere else is still an expired session and a 403 on a later page is an error.
+- **Calendar ranges are fetched in 105-day chunks.** The Blackboard calendar endpoint rejects ranges longer than 16 weeks, measured in the server's local time. A 112-day chunk that crosses a daylight-saving change becomes 16 weeks plus an hour there, so the sync window is split into consecutive chunks of at most 105 days (15 weeks) and overlapping items are de-duplicated. This replaces "≤ 16-week chunks" in §5.2.
+- **Moodle `-1` means no grade.** Unmarked assignments come back with a placeholder feedback (display text `-` or empty, grade `-1`), so a grade counts only when the display text is real and the numeric grade is not negative.
+- **A past item with nothing to submit is a past event, not overdue.** `effective_status` returns `PastEvent` for a past item whose platform status is `NotApplicable` as well as for past events, so course events and column-less items never show as "Overdue". This replaces the `kind == Event` condition in §4.1.
+- **Events outside the sync window are never removed.** Course events are only fetched between `now - 180 days` and `now + 365 days`, so a stored event that has aged out of (or lies beyond) that window was not refetched and must not be reported as removed; `diff_items` skips such events when computing removals.
+- **Moodle reports an expired token in two ways.** `invalidtoken`, and `accessexception` from `core_webservice_get_site_info`; both are treated as `Auth` (a session that needs renewal). `accessexception` from any other function stays `Protocol`.
+- **Blackboard Ultra can change its URL without a page-load event.** The login window's URL is therefore polled in addition to the page-load handler to detect the landing page.
+- **Credential size.** The stored Blackboard credential must fit Windows Credential Manager's 2560-byte limit; an encoded session that does not is refused with "The Blackboard session is too large to store securely" and only the cookie names are logged.
+
+### 19.4 Other differences from the design above
+
+- **Naming and files.** The item repository is `db/items.rs` (not `db/lms_items.rs`) and the sync, tracker and item commands are in `commands/tracker.rs` (not `commands/lms.rs`); the sign-in, session and course commands are in `commands/universities.rs`. `src-tauri/src/lms_observer.rs` emits the `lms-sync:*` events. Repository methods are named `list_universities`, `get_university`, `insert_university`, `rename_university`, `delete_university`, `set_login`, `record_sync`, `list_courses`, `upsert_remote_courses`, `set_tracked_courses`, `list_items_for_university`, `apply_sync`, `query_items`, `get_item`, `set_item_done`, `set_item_hidden`, `set_item_note`, `dismiss_item_change` and `dismiss_all_changes`.
+- **`LmsClientFactory::create_with_credential`** was added so a freshly captured credential can be verified before it is stored (§6.4).
+- **`get_dashboard` is kept** (§9.2 listed it as removed). It stays email-only and feeds the Announcements header and the sidebar's unseen badge. `get_catalog` stays as the read-only projection (§18.2).
+- **Migrations.** `0001` to `0003` are applied in order; `0003_lms_items.sql` holds `lms_items` and its index (§18.3). The runner is an ordered `(version, sql)` list, each version in its own transaction.
+- **Sync preconditions.** `lms_sync` selects the universities whose login state is not `never` (so an `expired` one is still attempted and ends `login_required`); an empty selection is `validation` "Sign in to a university first". `AlreadyRunning` is `conflict` "A sync is already running".
+- **Sign-in window.** 520 by 720, label `lms-login-{id}`, persistent profile `{app_data}/lms-auth`, 10 minute interactive limit and 20 second silent limit. A sign-in is verified against the university it was started for: if that university was removed or replaced while the window was open, the credential is discarded.
+- **Moodle statuses.** An assignment with `nosubmissions = 1` is `NotApplicable`. Quizzes are `Graded` when a best grade exists, `Submitted` when a finished attempt exists, else `NotSubmitted`. Calendar events keep only `course` and `group` events that are not tied to an activity.
+- **Blackboard statuses.** A column with a score is `Graded`; a column with no `contentId` is `NotApplicable`; otherwise any attempt other than `InProgress`, `NotAttempted`, `Abandoned` or `Canceled` makes it `Submitted`. The user's grades come from `/v1/courses/{id}/gradebook/users/{me}`.
+- **Credential Manager target.** A key is stored with service `academic-assistant` and user equal to the key, so the Credential Manager target is `{key}.academic-assistant`.
+- **UI copy.** The delete confirmation reads "Deletes this university, its courses and your saved sign-in."; the database cascade also removes the university's items and notes. The wizard's last button is "Save and sync". The Dashboard's empty states are "Track your deliverables" (no university, **Add your first university**) and "No courses are tracked yet." (**Choose courses**).
+- **Item note limit** is 2000 characters after trimming; a blank note becomes none.
+
+### 19.5 Validation
+
+The automated gates (`cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --workspace`, `npm run typecheck`, `npm run lint`, `npm test`) cover the behaviour above with invented data. The manual acceptance checklist for the finished phase is "Phase 2 acceptance checklist" in `docs/testing.md`; the phase branch merges into `main` after the user passes it (§15).
