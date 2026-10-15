@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { useNavigate } from 'react-router';
 import Modal from '../../components/Modal';
 import ErrorMessage from '../../components/ErrorMessage';
 import Field from '../../components/forms/Field';
 import TextInput from '../../components/forms/TextInput';
 import Select from '../../components/forms/Select';
 import { api, toCommandError } from '../../lib/api/client';
-import type { CommandError, LmsPlatform, LmsUniversityDto } from '../../lib/api/types';
+import type { CommandError, LmsCourseDto, LmsPlatform, LmsUniversityDto } from '../../lib/api/types';
+import { useSync } from '../sync/useSync';
+import CourseSelectionList from './CourseSelectionList';
 import { PLATFORM_LABELS, connectionStatusText } from './labels';
 import { useInvalidateUniversities } from './useInvalidateUniversities';
 
@@ -24,9 +27,10 @@ const PRIMARY_BUTTON =
   'rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50';
 
 /**
- * Two-step modal. Step 1 saves the university (the backend checks the URL belongs to the chosen
+ * Three-step modal. Step 1 saves the university (the backend checks the URL belongs to the chosen
  * platform and rejects it otherwise). Step 2 opens the LMS sign-in window; closing the modal at
- * that point keeps the saved university, which the page then lists as "Not signed in".
+ * that point keeps the saved university, which the page then lists as "Not signed in". Step 3 loads
+ * the courses (all pre-selected), saves the tracked ones, starts a sync and opens the tracker.
  */
 export default function AddUniversityModal({ open, onClose }: AddUniversityModalProps) {
   const [name, setName] = useState('');
@@ -36,8 +40,12 @@ export default function AddUniversityModal({ open, onClose }: AddUniversityModal
   const [urlError, setUrlError] = useState<string | null>(null);
   const [saved, setSaved] = useState<LmsUniversityDto | null>(null);
   const [connected, setConnected] = useState<LmsUniversityDto | null>(null);
+  const [courses, setCourses] = useState<LmsCourseDto[] | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
   const [error, setError] = useState<CommandError | null>(null);
   const invalidate = useInvalidateUniversities();
+  const navigate = useNavigate();
+  const { startSync } = useSync();
 
   const saveMutation = useMutation({
     mutationFn: () => api.addUniversity({ name: name.trim(), platform, baseUrl: url.trim() }),
@@ -57,6 +65,31 @@ export default function AddUniversityModal({ open, onClose }: AddUniversityModal
     },
     onError: (e) => setError(toCommandError(e)),
     onSettled: invalidate,
+  });
+
+  const loadCoursesMutation = useMutation({
+    mutationFn: (id: number) => api.lmsFetchCourses(id),
+    onMutate: () => setError(null),
+    onSuccess: (fetched) => {
+      setCourses(fetched);
+      setSelected(new Set(fetched.map((c) => c.id)));
+    },
+    onError: (e) => setError(toCommandError(e)),
+  });
+
+  const saveCoursesMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await api.setTrackedCourses(id, [...selected]);
+      // `startSync` never throws: a sync conflict is shown by the dashboard's sync state.
+      await startSync(id);
+    },
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      invalidate();
+      onClose();
+      void navigate('/');
+    },
+    onError: (e) => setError(toCommandError(e)),
   });
 
   function handleContinue() {
@@ -89,10 +122,26 @@ export default function AddUniversityModal({ open, onClose }: AddUniversityModal
         </button>
       </>
     );
-  } else if (connected !== null) {
+  } else if (connected !== null && courses === null) {
     footer = (
-      <button type="button" onClick={onClose} className={PRIMARY_BUTTON}>
-        Done
+      <button
+        type="button"
+        disabled={loadCoursesMutation.isPending}
+        onClick={() => loadCoursesMutation.mutate(saved.id)}
+        className={PRIMARY_BUTTON}
+      >
+        {loadCoursesMutation.isPending ? 'Loading courses…' : 'Choose courses'}
+      </button>
+    );
+  } else if (courses !== null) {
+    footer = (
+      <button
+        type="button"
+        disabled={saveCoursesMutation.isPending}
+        onClick={() => saveCoursesMutation.mutate(saved.id)}
+        className={PRIMARY_BUTTON}
+      >
+        {saveCoursesMutation.isPending ? 'Saving…' : 'Save and sync'}
       </button>
     );
   }
@@ -151,6 +200,9 @@ export default function AddUniversityModal({ open, onClose }: AddUniversityModal
               </div>
             </>
           )}
+          {courses !== null ? (
+            <CourseSelectionList courses={courses} selected={selected} onChange={setSelected} />
+          ) : null}
           <ErrorMessage error={error} />
         </div>
       )}
