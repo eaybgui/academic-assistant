@@ -3,6 +3,7 @@ import {
   formatDate,
   formatDateTime,
   formatDuration,
+  formatLastSynced,
   formatRelativeDay,
   formatResultDate,
   formatShortDate,
@@ -60,6 +61,20 @@ describe('formatRelativeDay', () => {
     const longAgo = new Date();
     longAgo.setDate(longAgo.getDate() - 10);
     expect(formatRelativeDay(longAgo.toISOString())).toBe(formatDate(longAgo.toISOString()));
+  });
+});
+
+describe('formatLastSynced', () => {
+  it('combines the relative day with the time', () => {
+    const iso = new Date().toISOString();
+    expect(formatLastSynced(iso)).toBe(`today at ${formatTime(iso)}`);
+  });
+
+  it('uses the date for older syncs', () => {
+    const longAgo = new Date();
+    longAgo.setDate(longAgo.getDate() - 10);
+    const iso = longAgo.toISOString();
+    expect(formatLastSynced(iso)).toBe(`${formatDate(iso)} at ${formatTime(iso)}`);
   });
 });
 

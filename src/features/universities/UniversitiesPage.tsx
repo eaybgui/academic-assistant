@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useLocation } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import ErrorMessage from '../../components/ErrorMessage';
 import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
 import AddUniversityModal from './AddUniversityModal';
+import { useSync } from '../sync/useSync';
 import UniversityCard from './UniversityCard';
 
 /** Universities screen: LMS platforms with their sign-in state, plus the add flow. */
@@ -13,9 +14,14 @@ export default function UniversitiesPage() {
 
   // Other screens link here with `state: { openAdd: true }` to start the add wizard right away.
   const location = useLocation();
-  const [addOpen, setAddOpen] = useState(
-    (location.state as { openAdd?: boolean } | null)?.openAdd === true,
-  );
+  const navigate = useNavigate();
+  const openAddRequested = (location.state as { openAdd?: boolean } | null)?.openAdd === true;
+  const [addOpen, setAddOpen] = useState(openAddRequested);
+  // Consume the request, so going back to this entry doesn't reopen the wizard.
+  useEffect(() => {
+    if (openAddRequested) void navigate(location.pathname, { replace: true, state: null });
+  }, [openAddRequested, navigate, location.pathname]);
+  const { error: syncError } = useSync();
   // Part of the modal's `key`, so each open starts with a fresh form.
   const [addOpenCount, setAddOpenCount] = useState(0);
 
@@ -44,6 +50,7 @@ export default function UniversitiesPage() {
         {isEmpty ? null : addButton}
       </div>
 
+      <ErrorMessage error={syncError} />
       <ErrorMessage error={universitiesQuery.error ? toCommandError(universitiesQuery.error) : null} />
 
       {universitiesQuery.isLoading ? <p className="text-sm text-neutral-500">Loading…</p> : null}

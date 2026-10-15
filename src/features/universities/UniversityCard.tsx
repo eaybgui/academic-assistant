@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import ErrorMessage from '../../components/ErrorMessage';
 import ConfirmDialog from '../../components/forms/ConfirmDialog';
 import { PencilIcon, TrashIcon } from '../../components/forms/icons';
-import { formatRelativeDay, formatTime } from '../../components/results/format';
+import { formatLastSynced } from '../../components/results/format';
 import { api, toCommandError } from '../../lib/api/client';
 import type { CommandError, LmsUniversityDto } from '../../lib/api/types';
 import { useSync } from '../sync/useSync';
@@ -93,12 +93,12 @@ export default function UniversityCard({ university }: UniversityCardProps) {
           ) : null}
           {hasNewCourses ? (
             <button type="button" onClick={openEditCourses} className={`${TEXT_BUTTON} underline`}>
-              {courses.unreviewed} new courses found
+              {courses.unreviewed} new {courses.unreviewed === 1 ? 'course' : 'courses'} found
             </button>
           ) : null}
           {lastSync.at ? (
             <p className="text-sm text-neutral-500">
-              Last synced {formatRelativeDay(lastSync.at)} at {formatTime(lastSync.at)}
+              Last synced {formatLastSynced(lastSync.at)}
             </p>
           ) : null}
           {lastSync.outcome === 'failed' && lastSync.error ? (
@@ -198,7 +198,7 @@ export default function UniversityCard({ university }: UniversityCardProps) {
       <ConfirmDialog
         open={deleteOpen}
         title="Delete university"
-        message="Deletes this university, its courses and your saved sign-in."
+        message="Deletes this university, its courses, their items and your notes, and your saved sign-in. This cannot be undone."
         error={deleteError}
         pending={deleteMutation.isPending}
         onCancel={() => setDeleteOpen(false)}

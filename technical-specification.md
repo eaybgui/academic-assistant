@@ -260,10 +260,9 @@ The full body of each email is never stored. The application keeps AI results, s
 
 ## 16. Scheduler (later phase)
 
-Phases 1 and 2 are manual: Check now (email) and Sync (learning platforms).
-
-
 Rust will manage manual runs, 1–2 daily runs, configurable times, background execution and reasonable recovery from errors. The Windows solution may use a tray process with autostart or a headless binary reusing the same crates, without depending on React being open.
+
+Phases 1 and 2 are manual: Check now (email) and Sync (learning platforms).
 
 ## 17. Notifications (later phase)
 

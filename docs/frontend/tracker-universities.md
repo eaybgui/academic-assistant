@@ -35,10 +35,12 @@ previous data while a new query loads. What it renders depends on the data:
 
 - No universities: a card "Track your deliverables" with **Add your first university**, which opens
   the Universities page with the add wizard already open (`state: { openAdd: true }`).
-- Universities but no tracked course: "No courses are tracked yet." with **Choose courses**.
+- Universities but no tracked course: "No courses are tracked yet." with **Choose courses**. On
+  the tab of a single university with no tracked course (and no items), the list is replaced by
+  "No courses are tracked for <name>." with the same button.
 - Otherwise the dashboard:
   - Header with **Sync** (the selected university, or all on the "All" tab; shows progress while
-    running) and "Last synced <day>" (the latest sync of the universities in view). A failed
+    running) and "Last synced <day> at <time>" (the latest sync of the universities in view). A failed
     `startSync` is shown inline.
   - Tabs: **All** plus one per university. Tab and grouping are stored in `localStorage`
     (`academic-assistant.tracker-tab`, `academic-assistant.tracker-group`) through
@@ -66,20 +68,22 @@ Pure functions, tested with a fixed `now`.
 - `ItemRow`: university chip (only on the All tab), title (opens the details), a note indicator,
   course short name (or full name) and kind, the status pill (`StatusPill`: Pending, Overdue,
   Submitted, Graded, Past), the grade text, the due date and time or "No date", the change badge
-  with a dismiss button ("New", or "Date changed: 5 Oct -> 12 Oct"), "Removed from platform", and
-  the **done** checkbox (not shown for events). Errors from the row's mutations show inline.
+  with a dismiss button ("New", or "Date changed: 5 Oct → 12 Oct"), "Removed from platform", and
+  the **done** checkbox (shown only for non-event items that are still pending or overdue on the
+  platform, or that you already ticked, so a done item can always be unticked). Errors from the row's mutations show inline.
 - `ItemDetailsModal`: university, course and kind; status and grade; due date; change text;
   "Removed from the platform on <date>"; **Open in platform** (only when the item's URL starts with
   `https://`, opened with `openUrl` from `@tauri-apps/plugin-opener`; a failure shows "Couldn't
   open the link"); a note editor (**Save note**; an empty or whitespace note clears it; over 2000
   characters shows the backend's validation message and keeps the text); **Hide** / **Show again**;
-  **Mark as done** / **Mark as not done** (not for events).
+  **Mark as done** / **Mark as not done** (same rule as the row checkbox).
 - `useItemMutations` wraps `set_item_done`, `set_item_hidden`, `set_item_note` and
   `dismiss_item_change`; each invalidates the `['tracker']` prefix.
 
 ### Banners (`SyncBanners.tsx`)
 
-- For each shown university whose login state is `expired`, or whose last sync needed a login:
+- For each shown university whose login state is `expired`, or whose last sync needed a login and
+  whose login state is not `ok` (so the banner goes away once the connection works again):
   "<name> needs you to sign in again" with **Sign in** (`lms_sign_in`, then a sync of that
   university).
 - After a sync: "Sync finished: 3 new, 1 date changed, 1 removed", a red line per university that
@@ -89,13 +93,16 @@ Pure functions, tested with a fixed `now`.
 ## Universities (`src/features/universities/`)
 
 `UniversitiesPage` lists the universities (`getUniversities`) as `UniversityCard`s and opens the
-add wizard. With no universities it shows "No universities yet" and **Add university**.
+add wizard (it clears the `openAdd` navigation state once consumed, so going back does not reopen
+the wizard). With no universities it shows "No universities yet" and **Add university**. A sync
+start error (for example "A sync is already running" after **Save** in Edit courses) shows at the
+top of the page.
 
 ### `UniversityCard`
 
 Shows the name, platform and URL, the connection line ("Connected as <name>", "Not signed in",
 "Session expired" or "Sign-in failed"), "<n> of <m> courses tracked", an "<n> new courses found"
-link (opens Edit courses; shown when some, but not all, courses are unreviewed), the last sync
+(or "1 new course found") link (opens Edit courses; shown when some, but not all, courses are unreviewed), the last sync
 time and, when the last sync failed, its error. Actions by login state:
 
 | State | Actions |
@@ -105,7 +112,7 @@ time and, when the last sync failed, its error. Actions by login state:
 | `expired`, `error` | **Sign in**, **Check connection**, **Sign out** |
 | any | Rename (pencil), Delete (trash) |
 
-Delete asks for confirmation ("Deletes this university, its courses and your saved sign-in."). On
+Delete asks for confirmation ("Deletes this university, its courses, their items and your notes, and your saved sign-in. This cannot be undone."). On
 the backend the delete also removes the university's stored items and notes (cascade) and closes
 any open sign-in window. A failed delete shows its error inside the dialog. Rename uses
 `RenameUniversityModal`; the platform and URL cannot be changed (delete and add again).
@@ -126,8 +133,11 @@ any open sign-in window. A failed delete shows its error inside the dialog. Rena
 
 Refreshes the list from the platform (`lms_fetch_courses`). If that fails (for example the session
 expired) it shows the stored list (`get_courses`) together with the error above it. **Save** stores
-the selection and starts a sync of that university; a sync problem is reported by the dashboard,
-not by the modal.
+the selection and starts a sync of that university; a sync problem is reported at the top of the
+Universities page (and on the Dashboard), not by the modal. The list lives under
+`queryKeys.courses(id)`; saving drops it before the `['courses']` invalidation so the platform is
+fetched once per open. A failed refresh also invalidates `['universities']`, so the card shows the
+new login state even if the modal is cancelled.
 
 `CourseSelectionList` is a checkbox list sorted by name with **Select all** / **Select none**, the
 short name when it differs, a **New** tag for courses the user has not reviewed yet, and "Not

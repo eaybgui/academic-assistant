@@ -30,7 +30,7 @@ function university(overrides: Partial<LmsUniversityDto> = {}): LmsUniversityDto
     id: 1,
     name: 'UV',
     platform: 'moodle',
-    baseUrl: 'https://aulavirtual.uv.es',
+    baseUrl: 'https://campus.demo.example',
     loginState: 'ok',
     accountLabel: 'Ana Pérez',
     lastSync: { at: null, outcome: null, error: null },
@@ -76,6 +76,11 @@ describe('UniversityCard', () => {
     expect(screen.getByRole('button', { name: '2 new courses found' })).toBeInTheDocument();
   });
 
+  it('uses the singular for a single new course', () => {
+    renderCard({ courses: { total: 5, tracked: 3, unreviewed: 1 } });
+    expect(screen.getByRole('button', { name: '1 new course found' })).toBeInTheDocument();
+  });
+
   it('does not show the new courses link when nothing was reviewed yet', () => {
     renderCard({ courses: { total: 5, tracked: 0, unreviewed: 5 } });
     expect(screen.queryByText(/new courses found/)).not.toBeInTheDocument();
@@ -95,6 +100,16 @@ describe('UniversityCard', () => {
     });
     expect(screen.getByText(/^Last synced today/)).toBeInTheDocument();
     expect(screen.getByText('Session expired during the sync')).toBeInTheDocument();
+  });
+
+  it('lists everything a deletion removes in the confirmation', () => {
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete UV' }));
+    expect(
+      screen.getByText(
+        'Deletes this university, its courses, their items and your notes, and your saved sign-in. This cannot be undone.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('shows no last sync line before the first sync', () => {

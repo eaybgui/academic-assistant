@@ -115,6 +115,21 @@ describe('ItemRow', () => {
     expect(mockedApi.setItemDone).toHaveBeenCalledWith(7, false);
   });
 
+  it('has no checkbox for items already submitted or graded on the platform', () => {
+    renderRow({ status: 'submitted' });
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('keeps the checkbox of a done item whose platform status is submitted', () => {
+    renderRow({ status: 'submitted', done: true });
+    expect(screen.getByRole('checkbox', { name: 'Mark Hoja de problemas 1 as done' })).toBeChecked();
+  });
+
+  it('shows the checkbox for an overdue item', () => {
+    renderRow({ status: 'overdue' });
+    expect(screen.getByRole('checkbox')).toBeInTheDocument();
+  });
+
   it('has no checkbox for events', () => {
     renderRow({ kind: 'event' });
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
@@ -132,7 +147,7 @@ describe('ItemRow', () => {
   it('indicates a note and a removed item', () => {
     renderRow({ note: 'Entregar el viernes', removedAt: '2026-10-10T08:00:00Z' });
 
-    expect(screen.getByLabelText('Has a note')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Has a note' })).toBeInTheDocument();
     expect(screen.getByText('Removed from platform')).toBeInTheDocument();
   });
 

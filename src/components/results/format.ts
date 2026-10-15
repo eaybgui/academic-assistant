@@ -83,6 +83,11 @@ export function formatRelativeDay(iso: string): string {
   return formatDate(iso);
 }
 
+/** Formats an ISO timestamp as relative day plus time, e.g. "today at 10:30" or "5 Oct 2026 at 10:30". */
+export function formatLastSynced(iso: string): string {
+  return `${formatRelativeDay(iso)} at ${formatTime(iso)}`;
+}
+
 /**
  * Formats the duration between two ISO timestamps, e.g. "2m 15s" or "45s".
  * Returns `null` while the run has not finished yet (`finishedAt` is `null`).

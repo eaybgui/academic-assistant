@@ -70,6 +70,19 @@ describe('tracker grouping', () => {
     ]);
   });
 
+  it('on a Sunday, later that day is today and Monday is already next week', () => {
+    const sunday = new Date(2026, 9, 11, 10, 0);
+    const { groups } = groupByTime(
+      [
+        item({ id: 1, status: 'pending', dueAt: new Date(2026, 9, 11, 23, 0).toISOString() }),
+        item({ id: 2, status: 'pending', dueAt: new Date(2026, 9, 12, 0, 10).toISOString() }),
+      ],
+      sunday,
+    );
+    const ids = Object.fromEntries(groups.map((g) => [g.key, g.items.map((i) => i.id)]));
+    expect(ids).toEqual({ today: [1], next_week: [2] });
+  });
+
   it('omits empty groups', () => {
     const { groups } = groupByTime([item({ status: 'pending', dueAt: null })], now);
     expect(groups.map((g) => g.key)).toEqual(['no_date']);

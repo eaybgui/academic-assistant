@@ -209,6 +209,20 @@ describe('TrackerPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('offers to choose courses on the tab of a university with no tracked courses', async () => {
+    getTracker.mockResolvedValue(
+      tracker({
+        universities: [UV, university({ id: 2, name: 'UAH', courses: { tracked: 0, total: 3, unreviewed: 0 } })],
+      }),
+    );
+    renderPage();
+    await userEvent.click(await screen.findByRole('tab', { name: 'UAH' }));
+    expect(await screen.findByText('No courses are tracked for UAH.')).toBeInTheDocument();
+    expect(screen.queryByText(/Press Sync/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Choose courses' }));
+    expect(await screen.findByText('Universities route')).toBeInTheDocument();
+  });
+
   it('switches university tab, persists it and restores it', async () => {
     const first = renderPage();
     await userEvent.click(await screen.findByRole('tab', { name: 'UAH' }));
@@ -280,6 +294,11 @@ describe('TrackerPage', () => {
     expect(await screen.findByText('A sync is already running')).toBeInTheDocument();
   });
 
+  it('uses the same heading size as the other pages', async () => {
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toHaveClass('text-2xl');
+  });
+
   it('shows when the shown universities were last synced', async () => {
     getTracker.mockResolvedValue(
       tracker({
@@ -300,7 +319,7 @@ describe('TrackerPage', () => {
       }),
     );
     renderPage();
-    expect(await screen.findByText('Last synced today')).toBeInTheDocument();
+    expect(await screen.findByText(/^Last synced today at \d{2}:\d{2}$/)).toBeInTheDocument();
   });
 
   it('asks to sign in again and syncs after signing in', async () => {
@@ -315,6 +334,37 @@ describe('TrackerPage', () => {
     await userEvent.click(within(banner as HTMLElement).getByRole('button', { name: 'Sign in' }));
     await waitFor(() => expect(startSync).toHaveBeenCalledWith(1));
     expect(lmsSignIn).toHaveBeenCalledWith(1);
+  });
+
+  it('shows no sign-in banner once the connection works again after a login_required sync', async () => {
+    getTracker.mockResolvedValue(
+      tracker({
+        universities: [
+          university({
+            loginState: 'ok',
+            lastSync: { at: daysFromNow(-1), outcome: 'login_required', error: null },
+          }),
+        ],
+      }),
+    );
+    renderPage();
+    await screen.findByRole('heading', { name: 'Dashboard' });
+    expect(screen.queryByText('UV needs you to sign in again')).not.toBeInTheDocument();
+  });
+
+  it('asks to sign in when the last sync needed it and the connection is not confirmed', async () => {
+    getTracker.mockResolvedValue(
+      tracker({
+        universities: [
+          university({
+            loginState: 'never',
+            lastSync: { at: daysFromNow(-1), outcome: 'login_required', error: null },
+          }),
+        ],
+      }),
+    );
+    renderPage();
+    expect(await screen.findByText('UV needs you to sign in again')).toBeInTheDocument();
   });
 
   it('shows a sign-in failure inside the banner and does not sync', async () => {
@@ -395,5 +445,22 @@ describe('TrackerPage', () => {
     getTracker.mockResolvedValue(tracker({ items: [] }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Show removed' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('does not reopen the details modal when a hidden item comes back into the list', async () => {
+    const shown = item({ id: 2, title: 'Final project', dueAt: daysFromNow(30) });
+    getTracker.mockResolvedValue(tracker({ items: [shown] }));
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Final project' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+
+    getTracker.mockResolvedValue(tracker({ items: [] }));
+    await userEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    getTracker.mockResolvedValue(tracker({ items: [{ ...shown, hidden: true }] }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Show hidden' }));
+    expect(await screen.findByRole('button', { name: 'Final project' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

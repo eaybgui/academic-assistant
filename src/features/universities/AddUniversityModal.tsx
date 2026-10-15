@@ -169,7 +169,7 @@ export default function AddUniversityModal({ open, onClose }: AddUniversityModal
           >
             <TextInput
               id="university-url"
-              placeholder="https://aulavirtual.uv.es"
+              placeholder="https://campus.example.edu"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
             />

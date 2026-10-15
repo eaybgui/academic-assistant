@@ -258,7 +258,7 @@ migrated database.
 9. **A second sync shows no badges.** Press **Sync** again without anything changing on the
    platform: the summary says "0 new, 0 date changed, 0 removed" and no badge appears.
 10. **Badges on change.** If something new appears or a due date moves on a platform, the next
-    sync shows **New** or **Date changed: A -> B** on that item and counts it in the summary. The
+    sync shows **New** or **Date changed: A → B** on that item and counts it in the summary. The
     x removes one badge; **Dismiss all changes** removes the rest. (Skip if nothing changes in your
     courses during the test.)
 11. **Edit courses, then sync.** On a university card press **Edit courses**: the list is

@@ -483,7 +483,7 @@ Found while validating the clients against real accounts; fixed in the code and 
 - **Moodle statuses.** An assignment with `nosubmissions = 1` is `NotApplicable`. Quizzes are `Graded` when a best grade exists, `Submitted` when a finished attempt exists, else `NotSubmitted`. Calendar events keep only `course` and `group` events that are not tied to an activity.
 - **Blackboard statuses.** A column with a score is `Graded`; a column with no `contentId` is `NotApplicable`; otherwise any attempt other than `InProgress`, `NotAttempted`, `Abandoned` or `Canceled` makes it `Submitted`. The user's grades come from `/v1/courses/{id}/gradebook/users/{me}`.
 - **Credential Manager target.** A key is stored with service `academic-assistant` and user equal to the key, so the Credential Manager target is `{key}.academic-assistant`.
-- **UI copy.** The delete confirmation reads "Deletes this university, its courses and your saved sign-in."; the database cascade also removes the university's items and notes. The wizard's last button is "Save and sync". The Dashboard's empty states are "Track your deliverables" (no university, **Add your first university**) and "No courses are tracked yet." (**Choose courses**).
+- **UI copy.** The delete confirmation reads "Deletes this university, its courses, their items and your notes, and your saved sign-in. This cannot be undone." The wizard's last button is "Save and sync". The Dashboard's empty states are "Track your deliverables" (no university, **Add your first university**) and "No courses are tracked yet." (**Choose courses**).
 - **Item note limit** is 2000 characters after trimming; a blank note becomes none.
 
 ### 19.5 Validation

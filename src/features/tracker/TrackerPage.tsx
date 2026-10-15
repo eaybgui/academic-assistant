@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import ErrorMessage from '../../components/ErrorMessage';
-import { formatRelativeDay } from '../../components/results/format';
+import { formatLastSynced } from '../../components/results/format';
 import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
 import type { LmsUniversityDto, TrackerQuery } from '../../lib/api/types';
@@ -52,7 +52,7 @@ export default function TrackerPage() {
     includeHidden,
     includeRemoved,
   };
-  const { data, error } = useQuery({
+  const { data, error, isPlaceholderData } = useQuery({
     queryKey: queryKeys.tracker(query),
     queryFn: () => api.getTracker(query),
     placeholderData: keepPreviousData,
@@ -63,6 +63,14 @@ export default function TrackerPage() {
   useEffect(() => {
     if (tabMissing) setTab('all');
   }, [tabMissing, setTab]);
+
+  // Forget the open item once fresh data no longer has it, so it can't pop open again if it returns.
+  const openItemGone =
+    openItemId !== null &&
+    data !== undefined &&
+    !isPlaceholderData &&
+    !data.items.some((i) => i.id === openItemId);
+  if (openItemGone) setOpenItemId(null);
 
   if (error && !data) return <ErrorMessage error={toCommandError(error)} />;
   if (!data) return <p className="text-sm text-neutral-500">Loading…</p>;
@@ -90,7 +98,7 @@ export default function TrackerPage() {
   if (universities.every((u) => u.courses.tracked === 0)) {
     return (
       <div className={`${CARD} flex max-w-xl flex-col items-start gap-3`}>
-        <h1 className="text-lg font-semibold text-neutral-900">Dashboard</h1>
+        <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
         <p className="text-sm text-neutral-600">No courses are tracked yet.</p>
         <button
           type="button"
@@ -104,6 +112,7 @@ export default function TrackerPage() {
   }
 
   const shown = tab === 'all' ? universities : universities.filter((u) => String(u.id) === tab);
+  const selectedUntracked = tab !== 'all' && shown[0]?.courses.tracked === 0 ? shown[0] : null;
   const lastSyncAt = latestSyncAt(shown);
   const syncBusy = running || syncRunning;
   const openItem = items.find((i) => i.id === openItemId) ?? null;
@@ -111,12 +120,12 @@ export default function TrackerPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold text-neutral-900">Dashboard</h1>
+        <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-3">
             {lastSyncAt ? (
               <span className="text-xs text-neutral-500">
-                Last synced {formatRelativeDay(lastSyncAt)}
+                Last synced {formatLastSynced(lastSyncAt)}
               </span>
             ) : null}
             <button
@@ -196,12 +205,27 @@ export default function TrackerPage() {
       </div>
 
       <SyncBanners universities={shown} />
-      <ItemGroups
-        items={items}
-        groupBy={groupBy}
-        showUniversity={tab === 'all'}
-        onOpen={(item) => setOpenItemId(item.id)}
-      />
+      {items.length === 0 && selectedUntracked ? (
+        <div className="flex flex-col items-start gap-2">
+          <p className="text-sm text-neutral-500">
+            No courses are tracked for {selectedUntracked.name}.
+          </p>
+          <button
+            type="button"
+            onClick={() => void navigate('/universities')}
+            className={PRIMARY_BUTTON}
+          >
+            Choose courses
+          </button>
+        </div>
+      ) : (
+        <ItemGroups
+          items={items}
+          groupBy={groupBy}
+          showUniversity={tab === 'all'}
+          onOpen={(item) => setOpenItemId(item.id)}
+        />
+      )}
       <ItemDetailsModal item={openItem} onClose={() => setOpenItemId(null)} />
     </div>
   );

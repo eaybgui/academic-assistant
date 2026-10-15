@@ -31,7 +31,7 @@ function university(overrides: Partial<LmsUniversityDto> = {}): LmsUniversityDto
     id: 1,
     name: 'UV',
     platform: 'moodle',
-    baseUrl: 'https://aulavirtual.uv.es',
+    baseUrl: 'https://campus.demo.example',
     loginState: 'never',
     accountLabel: null,
     lastSync: { at: null, outcome: null, error: null },
@@ -73,7 +73,7 @@ async function signInThroughWizard() {
   mockedApi.addUniversity.mockResolvedValue(university({ loginState: 'never' }));
   mockedApi.lmsSignIn.mockResolvedValue(university({ loginState: 'ok', accountLabel: 'Ana Pérez' }));
   fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'UV' } });
-  fireEvent.change(screen.getByLabelText('Platform URL'), { target: { value: 'aulavirtual.uv.es' } });
+  fireEvent.change(screen.getByLabelText('Platform URL'), { target: { value: 'campus.demo.example' } });
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
   await screen.findByText('Connected as Ana Pérez');
@@ -87,18 +87,23 @@ describe('AddUniversityModal', () => {
     renderModal();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'UV' } });
     fireEvent.change(screen.getByLabelText('Platform'), { target: { value: 'moodle' } });
-    fireEvent.change(screen.getByLabelText('Platform URL'), { target: { value: 'aulavirtual.uv.es/my' } });
+    fireEvent.change(screen.getByLabelText('Platform URL'), { target: { value: 'campus.demo.example/my' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
-    expect(await screen.findByText('https://aulavirtual.uv.es')).toBeInTheDocument();
+    expect(await screen.findByText('https://campus.demo.example')).toBeInTheDocument();
     expect(mockedApi.addUniversity).toHaveBeenCalledWith({
       name: 'UV',
       platform: 'moodle',
-      baseUrl: 'aulavirtual.uv.es/my',
+      baseUrl: 'campus.demo.example/my',
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(await screen.findByText('Connected as Ana Pérez')).toBeInTheDocument();
+  });
+
+  it('suggests an example address in the URL field', () => {
+    renderModal();
+    expect(screen.getByLabelText('Platform URL')).toHaveAttribute('placeholder', 'https://campus.example.edu');
   });
 
   it('shows the probe error inline and does not save', async () => {
@@ -115,7 +120,7 @@ describe('AddUniversityModal', () => {
     mockedApi.lmsSignIn.mockRejectedValueOnce({ kind: 'auth', message: 'Sign-in cancelled' });
     renderModal();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'UV' } });
-    fireEvent.change(screen.getByLabelText('Platform URL'), { target: { value: 'aulavirtual.uv.es' } });
+    fireEvent.change(screen.getByLabelText('Platform URL'), { target: { value: 'campus.demo.example' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
     expect(await screen.findByText('Sign-in cancelled')).toBeInTheDocument();
