@@ -45,6 +45,11 @@ export function formatDate(iso: string): string {
   return DATE_FORMATTER.format(new Date(iso));
 }
 
+/** Formats an ISO timestamp as a date without the year, e.g. "5 Oct". */
+export function formatShortDate(iso: string): string {
+  return SHORT_DATE_FORMATTER.format(new Date(iso));
+}
+
 /** Formats an ISO timestamp as a date and time, e.g. "27 Oct 2026, 10:00". */
 export function formatDateTime(iso: string): string {
   return DATE_TIME_FORMATTER.format(new Date(iso));
