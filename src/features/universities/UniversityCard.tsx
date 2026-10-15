@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import ErrorMessage from '../../components/ErrorMessage';
 import ConfirmDialog from '../../components/forms/ConfirmDialog';
 import { PencilIcon, TrashIcon } from '../../components/forms/icons';
-import { formatRelativeDay, formatTime } from '../../components/results/format';
+import { formatLastSynced } from '../../components/results/format';
 import { api, toCommandError } from '../../lib/api/client';
 import type { CommandError, LmsUniversityDto } from '../../lib/api/types';
 import { useSync } from '../sync/useSync';
@@ -98,7 +98,7 @@ export default function UniversityCard({ university }: UniversityCardProps) {
           ) : null}
           {lastSync.at ? (
             <p className="text-sm text-neutral-500">
-              Last synced {formatRelativeDay(lastSync.at)} at {formatTime(lastSync.at)}
+              Last synced {formatLastSynced(lastSync.at)}
             </p>
           ) : null}
           {lastSync.outcome === 'failed' && lastSync.error ? (

@@ -17,6 +17,11 @@ export const STATUS_LABELS: Record<EffectiveStatus, string> = {
   past_event: 'Past',
 };
 
+/** Whether the user can tick an item as done: only deliverables still open on the platform, or ones already ticked. */
+export function canMarkDone(item: Pick<LmsItemDto, 'kind' | 'done' | 'status'>): boolean {
+  return item.kind !== 'event' && (item.done || item.status === 'pending' || item.status === 'overdue');
+}
+
 /** The course's short name, or its full name when it has none. */
 export function courseLabel(item: Pick<LmsItemDto, 'courseName' | 'courseShortName'>): string {
   return item.courseShortName ?? item.courseName;

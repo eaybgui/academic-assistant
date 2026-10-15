@@ -3,7 +3,7 @@ import { toCommandError } from '../../lib/api/client';
 import ErrorMessage from '../../components/ErrorMessage';
 import { formatDateTime } from '../../components/results/format';
 import StatusPill from './StatusPill';
-import { KIND_LABELS, changeText, courseLabel } from './labels';
+import { KIND_LABELS, canMarkDone, changeText, courseLabel } from './labels';
 import { useItemMutations } from './useItemMutations';
 
 export interface ItemRowProps {
@@ -20,7 +20,7 @@ export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) 
   return (
     <li className="rounded-lg border border-neutral-200 bg-white px-4 py-3">
       <div className="flex items-start gap-3">
-        {item.kind !== 'event' ? (
+        {canMarkDone(item) ? (
           <input
             type="checkbox"
             aria-label={`Mark ${item.title} as done`}
@@ -45,7 +45,7 @@ export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) 
               {item.title}
             </button>
             {item.note ? (
-              <span aria-label="Has a note" title="Has a note" className="text-xs text-neutral-500">
+              <span role="img" aria-label="Has a note" title="Has a note" className="text-xs text-neutral-500">
                 &#9998;
               </span>
             ) : null}

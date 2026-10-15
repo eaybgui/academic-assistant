@@ -172,6 +172,16 @@ describe('ItemDetailsModal', () => {
     expect(screen.getByRole('button', { name: 'Mark as not done' })).toBeInTheDocument();
   });
 
+  it('has no done toggle for items already graded on the platform', () => {
+    renderModal({ status: 'graded' });
+    expect(screen.queryByRole('button', { name: /Mark as/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps the toggle of a done item whose platform status is submitted', () => {
+    renderModal({ status: 'submitted', done: true });
+    expect(screen.getByRole('button', { name: 'Mark as not done' })).toBeInTheDocument();
+  });
+
   it('has no done toggle for events', () => {
     renderModal({ kind: 'event' });
     expect(screen.queryByRole('button', { name: /Mark as/ })).not.toBeInTheDocument();

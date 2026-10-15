@@ -10,7 +10,10 @@ const ACTION_BUTTON =
   'rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50';
 
 function needsSignIn(university: LmsUniversityDto): boolean {
-  return university.loginState === 'expired' || university.lastSync.outcome === 'login_required';
+  return (
+    university.loginState === 'expired' ||
+    (university.lastSync.outcome === 'login_required' && university.loginState !== 'ok')
+  );
 }
 
 function SignInBanner({ university }: { university: LmsUniversityDto }) {

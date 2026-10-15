@@ -8,7 +8,7 @@ import { formatDate, formatDateTime } from '../../components/results/format';
 import { toCommandError } from '../../lib/api/client';
 import type { LmsItemDto } from '../../lib/api/types';
 import StatusPill from './StatusPill';
-import { KIND_LABELS, changeText } from './labels';
+import { KIND_LABELS, canMarkDone, changeText } from './labels';
 import { useItemMutations } from './useItemMutations';
 
 export interface ItemDetailsModalProps {
@@ -90,7 +90,7 @@ function ItemDetails({ item }: { item: LmsItemDto }) {
         >
           {item.hidden ? 'Show again' : 'Hide'}
         </button>
-        {item.kind !== 'event' ? (
+        {canMarkDone(item) ? (
           <button
             type="button"
             disabled={setDone.isPending}
