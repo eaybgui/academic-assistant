@@ -33,7 +33,7 @@ Shows the deliverables, exams and course events of the courses you track.
 - **Tabs**: **All** plus one tab per university. The app remembers the tab you used last.
 - **Sync**: refreshes the selected university (or all of them on the All tab). The button shows
   the progress, for example `Universidad Demo: Fetching items`. Next to it, "Last synced" shows
-  when the data was last refreshed. You can navigate elsewhere while a sync runs.
+  when the data was last refreshed, for example "Last synced today at 10:30". You can navigate elsewhere while a sync runs.
 - **Group by**: **Time** (Overdue, Today, This week, Next week, Later, No date; weeks start on
   Monday) or **Status** (Pending, with overdue items first, Submitted and Graded). Finished items
   are collected in a collapsed **Completed** section (**Past events** when grouped by status).
@@ -43,12 +43,13 @@ Shows the deliverables, exams and course events of the courses you track.
   removed items are ones the platform no longer returns.
 - **Item row**: the university (on the All tab), the title, the course and kind (Assignment,
   Quiz, Test, Event or Other), a status pill, the grade when there is one, the due date and a
-  checkbox to mark it done (not shown for events). A pencil mark means the item has a note.
+  checkbox to mark it done (not shown for events, or for work the platform already shows as
+  submitted or graded unless you ticked it yourself). A pencil mark means the item has a note.
 - **Status**: **Pending**, **Overdue** (past due and not handed in), **Submitted** (the platform
   says so, or you marked it done), **Graded**, or **Past** (an event that has happened, or
   something with nothing to submit whose date has passed).
 - **Badges**: **New** marks an item that appeared since the last sync of its course (nothing is
-  badged during a course's first sync); **Date changed: 5 Oct -> 12 Oct** shows the previous and
+  badged during a course's first sync); **Date changed: 5 Oct → 12 Oct** shows the previous and
   the new date. Press the x to dismiss one badge, or **Dismiss all changes** in the summary after
   a sync.
 - **Details**: click a title to see the full dates, the grade, "Removed from the platform on ..."
@@ -78,7 +79,7 @@ last sync and, if it failed, the error.
 - **Edit courses**: the course list is refreshed from the platform (if that is not possible, for
   example because your session expired, the last known list is shown together with the error).
   Courses new to the app carry a **New** tag; courses the platform no longer shows say "Not visible
-  on the platform". Saving starts a sync of the university. A link "N new courses found" on the
+  on the platform". Saving starts a sync of the university. A link "N new courses found" ("1 new course found" for one) on the
   card opens the same window.
 - **Check connection**: verifies the saved sign-in and renews it quietly if it expired; if that is
   not possible the card shows "Session expired" and you press **Sign in**.
