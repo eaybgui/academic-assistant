@@ -7,10 +7,12 @@ Everything the app stores lives in Tauri's app data directory
 
 | Path | Content |
 |---|---|
-| `academic-assistant.db` (+ `-wal`, `-shm`) | SQLite database (accounts, catalog, sync state, runs, processed-message metadata, results, settings). Email bodies are never stored. |
+| `academic-assistant.db` (+ `-wal`, `-shm`) | SQLite database (LMS universities, courses and items, email accounts, email sync state, runs, processed-message metadata, results, settings). Email bodies are never stored. |
+| `lms-auth/` | Persistent browser profile shared by the university sign-in windows (identity-provider cookies). Created on the first sign-in; signing out does not clear it. |
 | `logs/academic-assistant.log.<YYYY-MM-DD>` | Daily rolling application log. |
 
-Secrets (IMAP passwords, Microsoft refresh tokens, the jev API key) are stored only in
+Secrets (IMAP passwords, Microsoft refresh tokens, the jev API key, and the Moodle token or
+Blackboard session cookies of each university) are stored only in
 the Windows Credential Manager, never in the database or the logs
 (`docs/infra/secure-storage.md`).
 
@@ -45,6 +47,11 @@ A failure in any step aborts startup: the `setup` hook returns the error and the
   `account processed` (run id, account id, stage `done` or `failed`) as each account
   ends; `check finished` (run id, status). A run whose execution task panics is logged at
   `error` ("check run ended abnormally") and marked failed.
+- LMS sync lifecycle at `info`: `lms sync started`; `university synced` (university id and stage
+  `done`, `failed` or `login_required`) as each university ends; `lms sync finished` (number of
+  universities). A sync whose execution task panics is logged at `error` ("lms sync ended
+  abnormally"). Sign-in windows log `lms sign-in window opened` (university id and mode) and
+  `lms sign-in window closed` (university id and `captured` / `not captured`).
 - Every failed command at `warn`, with the command name, the error `kind`, the
   user-facing `message` and, for internal errors, the internal `detail` (for example the
   SQLite error text). Command arguments are never logged. The Microsoft sign-in mismatch
@@ -53,7 +60,9 @@ A failure in any step aborts startup: the `setup` hook returns the error and the
 
 ### What is never logged
 
-Bodies, subjects, tokens, passwords and API keys. The only free text that can reach the
+Bodies, subjects, tokens, cookies, passwords and API keys; item titles, notes and grades; and
+the URLs visited in a sign-in window (the Moodle redirect contains the token and SSO URLs carry
+assertions). The only thing logged about a too-large Blackboard session is the cookie names. The only free text that can reach the
 log is an error message produced by the adapters, which are written to exclude secrets
 and message content. `CommandError`s returned to the frontend for storage or secret
 failures carry a generic message; the detail exists only in the log.

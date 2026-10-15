@@ -12,7 +12,7 @@ vite.config.ts               Vite + Vitest config (dev server on port 1420, Tail
 eslint.config.js             Flat ESLint config (typescript-eslint, react-hooks, react-refresh)
 vitest.setup.ts              Test environment setup (jest-dom matchers, <dialog> polyfill)
 src/
-  main.tsx                   App entry: QueryClientProvider + CheckRunProvider + HashRouter
+  main.tsx                   App entry: QueryClientProvider + CheckRunProvider + SyncProvider + HashRouter
   App.tsx                    Route table
   index.css                  Tailwind entry point (`@import "tailwindcss";`)
   components/
@@ -21,34 +21,39 @@ src/
     Modal.tsx                 Native <dialog>-based modal
     ErrorMessage.tsx           Inline CommandError renderer
     forms/                    Field, TextInput, Textarea, Select, Toggle, ConfirmDialog, icons
-    results/                  Result card, chips, labels, formatting helpers (shared by three screens)
+    results/                  Result chips, labels, formatting helpers (shared by several screens)
   features/
     check-run/                App-level "Check now" state (CheckRunProvider, useCheckRun)
-    dashboard/DashboardPage.tsx
-    results/ResultsPage.tsx
-    runs/RunsPage.tsx
-    accounts/AccountsPage.tsx
-    catalog/CatalogPage.tsx
+    sync/                     App-level LMS sync state (SyncProvider, useSync)
+    tracker/                  Dashboard (`/`): LMS items grouped by time or status, details, banners
+    universities/             Universities page, add wizard, course selection
+    announcements/            Announcements (`/announcements`): email results with the Check now header
+    results/                  Result row, filters modal (used by Announcements)
+    runs/RunsPage.tsx         Email runs
+    accounts/AccountsPage.tsx Email accounts
     settings/SettingsPage.tsx
   lib/api/
     types.ts                  TypeScript mirror of the DTOs in src-tauri/src/dto/
     client.ts                 `api` object: one method per Tauri command
-    events.ts                 `onRunProgress` / `onRunFinished` subscriptions
+    events.ts                 `onRunProgress` / `onRunFinished` / `onLmsSyncProgress` / `onLmsSyncFinished` subscriptions
     queryKeys.ts               React Query key factories
   lib/format.ts               `formatConnectionTestMessage` (shared by every "test connection" UI)
 ```
 
 The shared shell (`Layout`, `Modal`, `ErrorMessage`) and `src/lib/api/` are stable; screens should
 not need to change them. The screens are documented in
-[dashboard-results-runs.md](dashboard-results-runs.md) and
-[accounts-catalog-settings.md](accounts-catalog-settings.md).
+[tracker-universities.md](tracker-universities.md) (Dashboard, Universities, sync state),
+[dashboard-results-runs.md](dashboard-results-runs.md) (Announcements, Email runs, result
+components) and [accounts-catalog-settings.md](accounts-catalog-settings.md) (Email accounts and
+Settings).
 
 ## Modal (`src/components/Modal.tsx`)
 
 The `<dialog>` element itself is always mounted, but its body (title bar, children, footer) is
 rendered only while `open` is true. Callers that keep form state in the component that renders the
 `Modal` therefore also need a fresh mount per edited item: the pages pass `key={item?.id ?? 'new'}`
-to the form modals (`AccountFormModal`, `UniversityFormModal`, `CourseFormModal`) so their state is
+to the form modals (`AccountFormModal`, `RenameUniversityModal`, `AddUniversityModal`,
+`EditCoursesModal`; a counter is part of the key where the same item is reopened) so their state is
 re-initialized whenever a different item (or "add") is opened. On open, focus moves to the first
 focusable element of the body (falling back to the dialog itself). The dialog closes on Escape, the
 close button, or a backdrop click - the latter only when both `mousedown` and `mouseup` land on the
@@ -65,10 +70,12 @@ therefore centered.
 Each nav item shows an icon (`navIcons.tsx`, 20px outline SVGs, `aria-hidden`) and its label. A
 toggle button at the top ("Collapse sidebar" / "Expand sidebar", with `aria-expanded`) narrows the
 sidebar to icons only (`w-16`) and hides the app title. When collapsed, each link keeps its
-accessible name (the label is rendered `sr-only`) and a `title` tooltip, and the Results unseen
-badge becomes a small red dot on the icon with an `sr-only` "N unseen" text. The preference is
+accessible name (the label is rendered `sr-only`) and a `title` tooltip, and the Announcements
+unseen badge becomes a small red dot on the icon with an `sr-only` "N unseen" text. The preference is
 stored in `localStorage` under `academic-assistant.sidebar-collapsed`; reads and writes are wrapped
-in try/catch and fall back to expanded.
+in try/catch and fall back to expanded. The items are Dashboard, Announcements, Universities, Email
+accounts, Email runs and Settings; Announcements is disabled while no course is tracked (see
+[tracker-universities.md](tracker-universities.md)).
 
 ## Check-run state (`src/features/check-run/`)
 
@@ -77,10 +84,18 @@ in try/catch and fall back to expanded.
 `run:progress` and `run:finished` once on mount (cleaned up on unmount), so a run that finishes
 before `checkNow()` resolves is never missed, and every route reacts to a finished run. Finished run
 ids are kept in a ref and a `checkNow()` result for an already-finished id is ignored. It also
-watches the query cache for `['dashboard']` queries: it adopts a `runningRunId` reported by the
+watches the query cache for `['dashboard']` queries (the Announcements header and the sidebar badge): it adopts a `runningRunId` reported by the
 backend and clears the running state once the dashboard shows `runningRunId === null` and
 `lastRun.id >= ` the tracked id. On `run:finished` it invalidates the `['dashboard']`, `['results']`
 and `['runs']` query prefixes.
+
+## LMS sync state (`src/features/sync/`)
+
+`SyncProvider` is mounted once in `main.tsx` and `useSync()` returns `{ running, progress,
+lastResults, error, startSync, clearResults }`. It subscribes to `lms-sync:progress` and
+`lms-sync:finished` for the whole app lifetime and, on `lms-sync:finished`, invalidates the
+`['tracker']`, `['universities']` and `['courses']` prefixes. Details in
+[tracker-universities.md](tracker-universities.md).
 
 ## API client (`src/lib/api/client.ts`)
 
@@ -106,12 +121,19 @@ try {
 
 ## Events (`src/lib/api/events.ts`)
 
-Two Tauri events are emitted by the backend during a "Check now" run:
+Four Tauri events are emitted by the backend. Two during a "Check now" run:
 
 - `onRunProgress(cb)` subscribes to `run:progress` (`RunProgressEvent`: run/account ids and
   names, `stage`, `processed`/`total`).
 - `onRunFinished(cb)` subscribes to `run:finished` (`RunFinishedEvent`: run id and final
   `RunStatus`).
+
+And two during an LMS sync:
+
+- `onLmsSyncProgress(cb)` subscribes to `lms-sync:progress` (`LmsSyncProgressEvent`: university id
+  and name, `stage`).
+- `onLmsSyncFinished(cb)` subscribes to `lms-sync:finished` (`LmsSyncFinishedEvent`: one
+  `LmsSyncResultDto` per university).
 
 Both return `Promise<UnlistenFn>`. Call the resolved unlisten function on cleanup (typically in a
 `useEffect` teardown) to avoid leaking listeners across renders/navigations.
@@ -119,7 +141,8 @@ Both return `Promise<UnlistenFn>`. Call the resolved unlisten function on cleanu
 ## Query keys (`src/lib/api/queryKeys.ts`)
 
 `queryKeys` centralizes the React Query keys used across the app (`dashboard(sort)`,
-`results(query)`, `runs(limit)`, `accounts`, `catalog`, `settings`). Always use these factories
+`results(query)`, `runs(limit)`, `accounts`, `catalog`, `universities`, `settings`,
+`tracker(query)`, `courses(universityId)`). Always use these factories
 instead of writing array literals inline, so a query and its invalidations can never drift apart
 because of a typo.
 
@@ -170,4 +193,5 @@ produces `dist/`, which Tauri packages as `frontendDist`).
 
 ## Known limitations
 
-- `@tauri-apps/plugin-opener` is used only by `ResultActions` ("Open email", `https:` URLs only).
+- `@tauri-apps/plugin-opener` is used by `ResultActions` ("Open email") and `ItemDetailsModal`
+  ("Open in platform"); both open `https:` URLs only.
