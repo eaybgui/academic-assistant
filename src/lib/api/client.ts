@@ -5,6 +5,8 @@ import type {
   CommandError,
   ConnectionTestDto,
   DashboardDto,
+  LmsCourseDto,
+  LmsItemDto,
   LmsPlatform,
   LmsUniversityDto,
   LmsUniversityInput,
@@ -16,6 +18,8 @@ import type {
   RunDto,
   SettingsDto,
   SettingsInput,
+  TrackerDto,
+  TrackerQuery,
   UniversityDto,
 } from './types';
 
@@ -88,6 +92,31 @@ export const api = {
   lmsSignOut: (id: number) => invoke<LmsUniversityDto>('lms_sign_out', { id }),
 
   lmsCheckSession: (id: number) => invoke<LmsUniversityDto>('lms_check_session', { id }),
+
+  lmsFetchCourses: (id: number) => invoke<LmsCourseDto[]>('lms_fetch_courses', { id }),
+
+  getCourses: (universityId: number) => invoke<LmsCourseDto[]>('get_courses', { universityId }),
+
+  setTrackedCourses: (universityId: number, courseIds: number[]) =>
+    invoke<LmsCourseDto[]>('set_tracked_courses', { universityId, courseIds }),
+
+  lmsSync: (universityId: number | null) => invoke<void>('lms_sync', { universityId }),
+
+  getTracker: (query: TrackerQuery) => invoke<TrackerDto>('get_tracker', { query }),
+
+  setItemDone: (id: number, value: boolean) =>
+    invoke<LmsItemDto>('set_item_done', { id, value }),
+
+  setItemHidden: (id: number, value: boolean) =>
+    invoke<LmsItemDto>('set_item_hidden', { id, value }),
+
+  setItemNote: (id: number, note: string | null) =>
+    invoke<LmsItemDto>('set_item_note', { id, note }),
+
+  dismissItemChange: (id: number) => invoke<LmsItemDto>('dismiss_item_change', { id }),
+
+  dismissAllChanges: (universityId: number | null) =>
+    invoke<number>('dismiss_all_changes', { universityId }),
 
   getSettings: () => invoke<SettingsDto>('get_settings', {}),
 

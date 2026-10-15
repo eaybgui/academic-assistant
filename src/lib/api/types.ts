@@ -206,3 +206,81 @@ export interface LmsUniversityInput {
 export interface ProbeDto {
   baseUrl: string;
 }
+
+// LMS tracker contract (phase 2, milestones 2-3). Mirrors src-tauri/src/dto/lms.rs.
+
+export type ItemKind = 'assignment' | 'quiz' | 'test' | 'event' | 'other';
+export type EffectiveStatus = 'pending' | 'overdue' | 'submitted' | 'graded' | 'past_event';
+export type LmsSyncStage = 'courses' | 'items' | 'saving' | 'done' | 'failed' | 'login_required';
+
+export interface LmsCourseDto {
+  id: number;
+  universityId: number;
+  name: string;
+  shortName: string | null;
+  url: string | null;
+  tracked: boolean;
+  available: boolean;
+  isNew: boolean;
+}
+
+export interface GradeDto {
+  display: string;
+  score: number | null;
+  max: number | null;
+}
+
+export type ItemChangeDto = { kind: 'new' } | { kind: 'due_changed'; previousDueAt: string | null };
+
+export interface LmsItemDto {
+  id: number;
+  universityId: number;
+  universityName: string;
+  courseId: number;
+  courseName: string;
+  courseShortName: string | null;
+  externalId: string;
+  kind: ItemKind;
+  title: string;
+  dueAt: string | null;
+  url: string | null;
+  status: EffectiveStatus;
+  grade: GradeDto | null;
+  change: ItemChangeDto | null;
+  removedAt: string | null;
+  done: boolean;
+  hidden: boolean;
+  note: string | null;
+}
+
+export interface TrackerQuery {
+  universityId: number | null;
+  includeHidden: boolean;
+  includeRemoved: boolean;
+}
+
+export interface TrackerDto {
+  items: LmsItemDto[];
+  universities: LmsUniversityDto[];
+  syncRunning: boolean;
+}
+
+export interface LmsSyncResultDto {
+  universityId: number;
+  universityName: string;
+  outcome: SyncOutcome;
+  newItems: number;
+  dueChanged: number;
+  removed: number;
+  error: string | null;
+}
+
+export interface LmsSyncProgressEvent {
+  universityId: number;
+  universityName: string;
+  stage: LmsSyncStage;
+}
+
+export interface LmsSyncFinishedEvent {
+  results: LmsSyncResultDto[];
+}
