@@ -19,6 +19,8 @@ const DASHBOARD_RESULT_LIMIT: u32 = 100;
 /// Error summary of a run whose execution task ended abnormally (same text the
 /// startup recovery uses for runs interrupted by a crash).
 const INTERRUPTED_SUMMARY: &str = "Interrupted";
+/// Email analysis is secondary: it stays disabled until a course is tracked.
+const NO_TRACKED_COURSE: &str = "Track at least one course before checking email";
 
 #[tauri::command]
 pub async fn check_now(state: State<'_, AppState>) -> Result<RunId, CommandError> {
@@ -41,10 +43,13 @@ pub async fn get_run_history(
     logged("get_run_history", run_history(&state, limit))
 }
 
-/// Validates preconditions and creates the run row, then executes the run in the
-/// background. Progress and completion are reported through the run observer; a
+/// Validates preconditions (a tracked course first, then the runner's) and creates
+/// the run row, then executes the run in the background. Progress and completion are reported through the run observer; a
 /// supervisor task recovers the run if the execution task panics.
 fn start_check(state: &AppState) -> Result<RunId, CommandError> {
+    if state.catalog.catalog()?.courses.is_empty() {
+        return Err(CommandError::validation(NO_TRACKED_COURSE));
+    }
     let prepared = state.runner.prepare(RunTrigger::Manual)?;
     let run_id = prepared.run_id;
     tracing::info!(run_id, "check started");
@@ -126,15 +131,33 @@ mod tests {
     use super::*;
     use crate::error::CommandErrorKind;
     use crate::test_support::{
-        harness, harness_with, imap_draft, seed_result, FakeProviderBehavior, Harness,
+        harness, harness_with, imap_draft, seed_result, track_one_course, FakeProviderBehavior,
+        Harness,
     };
     use academic_core::domain::RunProgress;
     use chrono::Utc;
     use std::sync::Mutex;
 
     #[test]
+    fn check_now_without_a_tracked_course_is_a_validation_error() {
+        let h = harness();
+        h.state
+            .accounts
+            .insert(&imap_draft("IMAP"), Utc::now())
+            .unwrap();
+        let error = start_check(&h.state).unwrap_err();
+        assert_eq!(error.kind, CommandErrorKind::Validation);
+        assert_eq!(
+            error.message,
+            "Track at least one course before checking email"
+        );
+        assert_eq!(h.state.runs.latest().unwrap(), None);
+    }
+
+    #[test]
     fn check_now_without_accounts_is_a_validation_error() {
         let h = harness();
+        track_one_course(&h.state);
         let error = start_check(&h.state).unwrap_err();
         assert_eq!(error.kind, CommandErrorKind::Validation);
         assert_eq!(error.message, "There are no enabled accounts");
@@ -143,6 +166,7 @@ mod tests {
     #[test]
     fn check_now_reports_a_missing_ai_configuration() {
         let h = harness_with(FakeProviderBehavior::default(), Err("Add a key".into()));
+        track_one_course(&h.state);
         h.state
             .accounts
             .insert(&imap_draft("IMAP"), Utc::now())
@@ -155,6 +179,7 @@ mod tests {
     #[test]
     fn check_now_creates_the_run_and_returns_its_id() {
         let h = harness();
+        track_one_course(&h.state);
         h.state
             .accounts
             .insert(&imap_draft("IMAP"), Utc::now())
