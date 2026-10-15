@@ -5,14 +5,15 @@ import { queryKeys } from '../../lib/api/queryKeys';
 import type { ResultQuery, ResultSort } from '../../lib/api/types';
 import ErrorMessage from '../../components/ErrorMessage';
 import { useSetResultSeen } from '../../components/results/useSetResultSeen';
-import FiltersModal from './FiltersModal';
-import { countActiveFilters, type ResultFilters } from './filterUtils';
-import ResultRow from './ResultRow';
+import FiltersModal from '../results/FiltersModal';
+import { countActiveFilters, type ResultFilters } from '../results/filterUtils';
+import ResultRow from '../results/ResultRow';
+import AnnouncementsHeader from './AnnouncementsHeader';
 
 const PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 300;
 
-export default function ResultsPage() {
+export default function AnnouncementsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<ResultFilters>({});
@@ -73,8 +74,8 @@ export default function ResultsPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold text-neutral-900">Results</h1>
+    <div className="space-y-6">
+      <AnnouncementsHeader />
 
       <div className="flex items-center gap-3">
         <input

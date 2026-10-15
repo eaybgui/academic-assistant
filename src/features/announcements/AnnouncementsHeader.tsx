@@ -1,12 +1,9 @@
 import { useState } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
-import type { CommandError, ResultSort, RunDto } from '../../lib/api/types';
+import type { CommandError, RunDto } from '../../lib/api/types';
 import ErrorMessage from '../../components/ErrorMessage';
-import ResultCard from '../../components/results/ResultCard';
-import SortSelect from '../../components/results/SortSelect';
-import { useSetResultSeen } from '../../components/results/useSetResultSeen';
 import { formatRelativeDay, formatTime } from '../../components/results/format';
 import { useCheckRun } from '../check-run/useCheckRun';
 
@@ -17,16 +14,24 @@ function formatLastCheck(run: RunDto | null): string {
   return `Last check ${when} · ${status}`;
 }
 
-export default function DashboardPage() {
-  const [sort, setSort] = useState<ResultSort>('upcoming');
+function MetricTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white px-4 py-3">
+      <p className="text-2xl font-semibold text-neutral-900">{value}</p>
+      <p className="text-xs text-neutral-500">{label}</p>
+    </div>
+  );
+}
+
+/** Title, last check, "Check now" with progress, attention banners, counters and "Mark all as seen". */
+export default function AnnouncementsHeader() {
   const [isTriggering, setIsTriggering] = useState(false);
   const [markAllError, setMarkAllError] = useState<CommandError | null>(null);
   const queryClient = useQueryClient();
 
   const dashboardQuery = useQuery({
-    queryKey: queryKeys.dashboard(sort),
-    queryFn: () => api.getDashboard(sort),
-    placeholderData: keepPreviousData,
+    queryKey: queryKeys.dashboard('upcoming'),
+    queryFn: () => api.getDashboard('upcoming'),
   });
 
   const { running, progress, triggerCheck, error: checkError } = useCheckRun();
@@ -39,8 +44,6 @@ export default function DashboardPage() {
       setIsTriggering(false);
     }
   }
-
-  const seen = useSetResultSeen();
 
   const markAllSeenMutation = useMutation({
     mutationFn: () => api.markAllSeen(),
@@ -55,10 +58,10 @@ export default function DashboardPage() {
   const dashboard = dashboardQuery.data;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
+          <h1 className="text-2xl font-semibold text-neutral-900">Announcements</h1>
           <p className="mt-1 text-sm text-neutral-500">{formatLastCheck(dashboard?.lastRun ?? null)}</p>
         </div>
         <div className="text-right">
@@ -104,50 +107,17 @@ export default function DashboardPage() {
         <MetricTile label="Changes and notices" value={dashboard?.counts.changesAndNotices ?? 0} />
       </div>
 
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-neutral-900">New results</h2>
-          <div className="flex items-center gap-3">
-            <SortSelect value={sort} onChange={setSort} id="dashboard-sort" />
-            <button
-              type="button"
-              disabled={markAllSeenMutation.isPending}
-              onClick={() => markAllSeenMutation.mutate()}
-              className="text-sm font-medium text-neutral-600 hover:text-neutral-900 disabled:opacity-50"
-            >
-              Mark all as seen
-            </button>
-            <ErrorMessage error={markAllError} />
-          </div>
-        </div>
-
-        {dashboardQuery.isLoading ? (
-          <p className="text-sm text-neutral-500">Loading…</p>
-        ) : dashboard && dashboard.newResults.length === 0 ? (
-          <p className="text-sm text-neutral-500">No new results.</p>
-        ) : (
-          <div className="space-y-3">
-            {dashboard?.newResults.map((result) => (
-              <ResultCard
-                key={result.id}
-                result={result}
-                onSetSeen={(id, s) => seen.setSeen(id, s)}
-                pending={seen.isPending(result.id)}
-                error={seen.erroredId === result.id ? seen.error : null}
-              />
-            ))}
-          </div>
-        )}
+      <div className="flex items-center justify-end gap-3">
+        <ErrorMessage error={markAllError} />
+        <button
+          type="button"
+          disabled={markAllSeenMutation.isPending}
+          onClick={() => markAllSeenMutation.mutate()}
+          className="text-sm font-medium text-neutral-600 hover:text-neutral-900 disabled:opacity-50"
+        >
+          Mark all as seen
+        </button>
       </div>
-    </div>
-  );
-}
-
-function MetricTile({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-neutral-200 bg-white px-4 py-3">
-      <p className="text-2xl font-semibold text-neutral-900">{value}</p>
-      <p className="text-xs text-neutral-500">{label}</p>
     </div>
   );
 }
