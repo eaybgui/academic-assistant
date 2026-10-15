@@ -5,9 +5,9 @@ use std::sync::{Arc, Mutex};
 
 use academic_core::domain::{
     lms_credential_key, AIAnalysis, Account, AccountDraft, Category, FetchBatch, LmsIdentity,
-    LmsUniversity, MessageOutcome, ModelDescriptor, NewResult, Priority, ProcessedMessage,
-    ProviderConfig, RemoteCourse, RemoteCourseRef, RemoteItem, RunId, RunProgress, RunStatus,
-    RunTrigger, Settings, SyncCursor, SyncWindow,
+    LmsPlatform, LmsUniversity, MessageOutcome, ModelDescriptor, NewResult, Priority,
+    ProcessedMessage, ProviderConfig, RemoteCourse, RemoteCourseRef, RemoteItem, RunId,
+    RunProgress, RunStatus, RunTrigger, Settings, SyncCursor, SyncWindow,
 };
 use academic_core::ports::{
     Answer, AnswerSet, EmailProvider, EmailProviderFactory, LmsAuthenticator, LmsClient,
@@ -344,4 +344,33 @@ pub fn seed_result(state: &AppState, account_id: i64, subject: &str) -> i64 {
         },
     };
     state.results.save_analyzed(&message, &result).unwrap()
+}
+
+/// Inserts a university with one tracked course so the catalog is not empty.
+pub fn track_one_course(state: &AppState) {
+    let now = Utc::now();
+    let university = state
+        .universities
+        .insert_university(
+            "Universidad Demo",
+            LmsPlatform::Moodle,
+            "https://campus.demo.example",
+            now,
+        )
+        .unwrap();
+    let remote = RemoteCourse {
+        external_id: "_10_1".into(),
+        name: "Álgebra Lineal".into(),
+        short_name: None,
+        url: None,
+    };
+    state
+        .courses
+        .upsert_remote_courses(university.id, &[remote], now)
+        .unwrap();
+    let course_id = state.courses.list_courses(university.id).unwrap()[0].id;
+    state
+        .courses
+        .set_tracked_courses(university.id, &[course_id])
+        .unwrap();
 }
