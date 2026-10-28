@@ -144,11 +144,29 @@ describe('ItemRow', () => {
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 7 }));
   });
 
-  it('indicates a note and a removed item', () => {
-    renderRow({ note: 'Entregar el viernes', removedAt: '2026-10-10T08:00:00Z' });
-
+  it('indicates a note', () => {
+    renderRow({ note: 'Entregar el viernes' });
     expect(screen.getByRole('img', { name: 'Has a note' })).toBeInTheDocument();
-    expect(screen.getByText('Removed from platform')).toBeInTheDocument();
+  });
+
+  it('shows a "Removed from platform" chip for a removed item', () => {
+    renderRow({ removedAt: '2026-10-10T08:00:00Z' });
+    expect(screen.getByText('Removed from platform')).toHaveClass('rounded-full', 'bg-red-100', 'text-red-800');
+  });
+
+  it('shows no removed chip for an item still on the platform', () => {
+    renderRow();
+    expect(screen.queryByText('Removed from platform')).not.toBeInTheDocument();
+  });
+
+  it('shows a "Hidden" chip for a hidden item', () => {
+    renderRow({ hidden: true });
+    expect(screen.getByText('Hidden')).toHaveClass('rounded-full', 'bg-neutral-200', 'text-neutral-700');
+  });
+
+  it('shows no hidden chip for a visible item', () => {
+    renderRow();
+    expect(screen.queryByText('Hidden')).not.toBeInTheDocument();
   });
 
   it('shows a failed mutation inline', async () => {
