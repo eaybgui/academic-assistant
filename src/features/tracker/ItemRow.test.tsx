@@ -10,7 +10,7 @@ vi.mock('../../lib/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/api/client')>();
   return {
     ...actual,
-    api: { setItemDone: vi.fn(), dismissItemChange: vi.fn() },
+    api: { setItemDone: vi.fn(), dismissItemChange: vi.fn(), setItemHidden: vi.fn() },
   };
 });
 
@@ -162,6 +162,36 @@ describe('ItemRow', () => {
   it('shows a "Hidden" chip for a hidden item', () => {
     renderRow({ hidden: true });
     expect(screen.getByText('Hidden')).toHaveClass('rounded-full', 'bg-neutral-200', 'text-neutral-700');
+  });
+
+  it('shows the item again from the Hidden chip', async () => {
+    const user = userEvent.setup();
+    mockedApi.setItemHidden.mockResolvedValue(item());
+    renderRow({ hidden: true });
+
+    await user.click(screen.getByRole('button', { name: 'Show Hoja de problemas 1 again' }));
+
+    expect(mockedApi.setItemHidden).toHaveBeenCalledWith(7, false);
+  });
+
+  it('shows a failed unhide inline', async () => {
+    const user = userEvent.setup();
+    mockedApi.setItemHidden.mockRejectedValue({ kind: 'internal', message: 'Could not unhide' });
+    renderRow({ hidden: true });
+
+    await user.click(screen.getByRole('button', { name: 'Show Hoja de problemas 1 again' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not unhide');
+  });
+
+  it('has no unhide button for a visible item', () => {
+    renderRow();
+    expect(screen.queryByRole('button', { name: /again/ })).not.toBeInTheDocument();
+  });
+
+  it('has no button on the removed chip', () => {
+    renderRow({ removedAt: '2026-10-10T08:00:00Z' });
+    expect(screen.queryByRole('button', { name: /again/ })).not.toBeInTheDocument();
   });
 
   it('shows no hidden chip for a visible item', () => {

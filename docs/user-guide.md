@@ -42,7 +42,9 @@ Shows the deliverables, exams and course events of the courses you track.
   open except Completed / Past events).
 - **Show hidden** and **Show removed**: both off by default. Hidden items are ones you hid;
   removed items are ones the platform no longer returns. They are marked with a grey **Hidden**
-  or a red **Removed from platform** chip on the row.
+  or a red **Removed from platform** chip on the row. Press the x on the **Hidden** chip, or
+  **Show again** in the details, to unhide an item. **Removed from platform** clears by itself when
+  the item reappears on the platform.
 - **Item row**: the university (on the All tab), the title, the course and kind (Assignment,
   Quiz, Test, Event or Other), a status pill, the grade when there is one, the due date and a
   checkbox to mark it done (not shown for events, or for work the platform already shows as

@@ -252,7 +252,8 @@ migrated database.
    **Past** (not Overdue).
 7. **Done, hide, note.** Tick the done checkbox of an assignment: it moves to Completed / Submitted.
    Open an item's details, **Hide** it: it disappears, and reappears with **Show hidden** (and
-   **Show again** restores it). Save a note: a pencil mark appears on the row; saving an empty note
+   **Show again** restores it; so does the **×** on its grey **Hidden** chip, which has no
+   effect on the red **Removed from platform** chip, as that one has no button). Save a note: a pencil mark appears on the row; saving an empty note
    removes it. A note of more than 2000 characters shows an error and keeps your text.
 8. **Open in platform.** In the details, **Open in platform** opens the right page in your
    browser (for both platforms).

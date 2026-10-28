@@ -70,8 +70,8 @@ Pure functions, tested with a fixed `now`.
 - `ItemRow`: university chip (only on the All tab), title (opens the details), a note indicator,
   course short name (or full name) and kind, the status pill (`StatusPill`: Pending, Overdue,
   Submitted, Graded, Past), the grade text, the due date and time or "No date", the change badge
-  with a dismiss button ("New", or "Date changed: 5 Oct → 12 Oct"), the "Hidden" (grey) and
-  "Removed from platform" (red) chips, and
+  with a dismiss button ("New", or "Date changed: 5 Oct → 12 Oct"), the "Hidden" (grey, with a
+  "×" button that unhides the item) and "Removed from platform" (red, no button) chips, and
   the **done** checkbox (shown only for non-event items that are still pending or overdue on the
   platform, or that you already ticked, so a done item can always be unticked). Errors from the row's mutations show inline.
 - `ItemDetailsModal`: university, course and kind; status and grade; due date; change text;
