@@ -12,6 +12,8 @@ export interface ItemRowProps {
   onOpen: (item: LmsItemDto) => void;
 }
 
+const CHIP = 'rounded-full px-2 py-0.5 font-medium';
+
 /** One tracker item: title, course/kind, status, grade, due date, unseen-change badge and the done checkbox. */
 export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) {
   const { setDone, dismissChange } = useItemMutations();
@@ -58,7 +60,7 @@ export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) 
             {item.grade ? <span className="font-medium text-neutral-900">{item.grade.display}</span> : null}
             <span>{item.dueAt ? formatDateTime(item.dueAt) : 'No date'}</span>
             {item.change ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800">
+              <span className={`inline-flex items-center gap-1 ${CHIP} bg-amber-100 text-amber-800`}>
                 {changeText(item.change, item.dueAt)}
                 <button
                   type="button"
@@ -71,7 +73,10 @@ export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) 
                 </button>
               </span>
             ) : null}
-            {item.removedAt ? <span className="text-neutral-500">Removed from platform</span> : null}
+            {item.hidden ? <span className={`${CHIP} bg-neutral-200 text-neutral-700`}>Hidden</span> : null}
+            {item.removedAt ? (
+              <span className={`${CHIP} bg-red-100 text-red-800`}>Removed from platform</span>
+            ) : null}
           </div>
           <ErrorMessage error={failed ? toCommandError(failed.error) : null} />
         </div>

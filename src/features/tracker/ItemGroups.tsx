@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type { LmsItemDto } from '../../lib/api/types';
 import ItemRow from './ItemRow';
 import { groupByStatus, groupByTime, type GroupedItems } from './grouping';
@@ -39,21 +39,41 @@ export default function ItemGroups({ items, groupBy, showUniversity, onOpen }: I
   return (
     <div className="flex flex-col gap-6">
       {grouped.groups.map((group) => (
-        <section key={group.key} className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold text-neutral-900">
-            {group.label} <span className="font-normal text-neutral-500">{group.items.length}</span>
-          </h2>
+        <details key={group.key} open className="group flex flex-col gap-2">
+          <Summary>
+            <h2 className="text-sm font-semibold text-neutral-900">
+              {group.label} <span className="font-normal text-neutral-500">{group.items.length}</span>
+            </h2>
+          </Summary>
           {rows(group.items)}
-        </section>
+        </details>
       ))}
       {grouped.completed.length > 0 ? (
-        <details className="flex flex-col gap-2">
-          <summary className="cursor-pointer text-sm font-semibold text-neutral-900">
-            {completedLabel} ({grouped.completed.length})
-          </summary>
-          <div className="mt-2">{rows(grouped.completed)}</div>
+        <details className="group flex flex-col gap-2">
+          <Summary>
+            <span className="text-sm font-semibold text-neutral-900">
+              {completedLabel} ({grouped.completed.length})
+            </span>
+          </Summary>
+          {rows(grouped.completed)}
         </details>
       ) : null}
     </div>
+  );
+}
+
+/** Clickable section header with a chevron that turns when the section is open. */
+function Summary({ children }: { children: ReactNode }) {
+  return (
+    <summary className="mb-2 flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 12 12"
+        className="h-3 w-3 shrink-0 text-neutral-500 transition-transform group-open:rotate-90"
+      >
+        <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+      {children}
+    </summary>
   );
 }

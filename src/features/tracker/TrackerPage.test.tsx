@@ -174,9 +174,9 @@ describe('TrackerPage', () => {
       }),
     );
     renderPage();
-    const overdue = (await screen.findByRole('heading', { name: /Overdue/ })).closest('section')!;
+    const overdue = (await screen.findByRole('heading', { name: /Overdue/ })).closest('details')!;
     expect(within(overdue).getByText('Late essay')).toBeInTheDocument();
-    const later = screen.getByRole('heading', { name: /Later/ }).closest('section')!;
+    const later = screen.getByRole('heading', { name: /Later/ }).closest('details')!;
     expect(within(later).getByText('Final project')).toBeInTheDocument();
     expect(screen.getByText('Completed (1)')).toBeInTheDocument();
   });
