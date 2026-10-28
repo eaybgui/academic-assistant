@@ -16,8 +16,8 @@ const CHIP = 'rounded-full px-2 py-0.5 font-medium';
 
 /** One tracker item: title, course/kind, status, grade, due date, unseen-change badge and the done checkbox. */
 export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) {
-  const { setDone, dismissChange } = useItemMutations();
-  const failed = setDone.isError ? setDone : dismissChange.isError ? dismissChange : null;
+  const { setDone, setHidden, dismissChange } = useItemMutations();
+  const failed = [setDone, setHidden, dismissChange].find((mutation) => mutation.isError) ?? null;
 
   return (
     <li className="rounded-lg border border-neutral-200 bg-white px-4 py-3">
@@ -73,7 +73,21 @@ export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) 
                 </button>
               </span>
             ) : null}
-            {item.hidden ? <span className={`${CHIP} bg-neutral-200 text-neutral-700`}>Hidden</span> : null}
+            {item.hidden ? (
+              <span className={`inline-flex items-center gap-1 ${CHIP} bg-neutral-200 text-neutral-700`}>
+                Hidden
+                <button
+                  type="button"
+                  aria-label={`Show ${item.title} again`}
+                  title="Show again"
+                  disabled={setHidden.isPending}
+                  onClick={() => setHidden.mutate({ id: item.id, value: false })}
+                  className="hover:text-neutral-900"
+                >
+                  &times;
+                </button>
+              </span>
+            ) : null}
             {item.removedAt ? (
               <span className={`${CHIP} bg-red-100 text-red-800`}>Removed from platform</span>
             ) : null}
