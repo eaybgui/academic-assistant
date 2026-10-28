@@ -38,9 +38,11 @@ Shows the deliverables, exams and course events of the courses you track.
   Monday) or **Status** (Pending, with overdue items first, Submitted and Graded). Finished items
   are collected in a collapsed **Completed** section (**Past events** when grouped by status).
   Inside each group items are sorted by due date, undated ones last. The app remembers your
-  choice.
+  choice. Every section is a drop-down: click its title to collapse or expand it (all start
+  open except Completed / Past events).
 - **Show hidden** and **Show removed**: both off by default. Hidden items are ones you hid;
-  removed items are ones the platform no longer returns.
+  removed items are ones the platform no longer returns. They are marked with a grey **Hidden**
+  or a red **Removed from platform** chip on the row.
 - **Item row**: the university (on the All tab), the title, the course and kind (Assignment,
   Quiz, Test, Event or Other), a status pill, the grade when there is one, the due date and a
   checkbox to mark it done (not shown for events, or for work the platform already shows as

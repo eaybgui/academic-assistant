@@ -244,8 +244,9 @@ migrated database.
    each university tab shows only its own. **Group by Time** shows Overdue, Today, This week, Next
    week, Later and No date as applicable, with finished items in a collapsed **Completed**
    section; **Group by Status** shows Pending (overdue first), Submitted and Graded, with past
-   events collapsed. Reload the app: the tab and grouping are remembered. **Show hidden** and
-   **Show removed** are off by default.
+   events collapsed. Click a section title (for example Overdue): it collapses and expands. Reload the app: the tab and grouping are remembered. **Show hidden** and
+   **Show removed** are off by default; with them on, hidden items show a grey **Hidden** chip and
+   removed items a red **Removed from platform** chip.
 6. **Statuses and grades.** Submitted work shows **Submitted**, graded work shows **Graded** with
    the grade, work past its date and not handed in shows **Overdue**, and past course events show
    **Past** (not Overdue).
