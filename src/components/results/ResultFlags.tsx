@@ -5,7 +5,7 @@ export interface ResultFlagsProps {
 
 /**
  * The "Action required" / "Possible change" chips shown for a result. Renders nothing when
- * neither flag is set. Shared by `ResultCard` (dashboard) and `ResultRow` (results table).
+ * neither flag is set. Used by `ResultRow` (announcements results table).
  */
 export default function ResultFlags({ actionRequired, possibleChange }: ResultFlagsProps) {
   if (!actionRequired && !possibleChange) return null;

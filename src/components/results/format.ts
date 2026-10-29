@@ -45,6 +45,11 @@ export function formatDate(iso: string): string {
   return DATE_FORMATTER.format(new Date(iso));
 }
 
+/** Formats an ISO timestamp as a date without the year, e.g. "5 Oct". */
+export function formatShortDate(iso: string): string {
+  return SHORT_DATE_FORMATTER.format(new Date(iso));
+}
+
 /** Formats an ISO timestamp as a date and time, e.g. "27 Oct 2026, 10:00". */
 export function formatDateTime(iso: string): string {
   return DATE_TIME_FORMATTER.format(new Date(iso));
@@ -76,6 +81,11 @@ export function formatRelativeDay(iso: string): string {
   if (diffDays === 0) return 'today';
   if (diffDays === 1) return 'yesterday';
   return formatDate(iso);
+}
+
+/** Formats an ISO timestamp as relative day plus time, e.g. "today at 10:30" or "5 Oct 2026 at 10:30". */
+export function formatLastSynced(iso: string): string {
+  return `${formatRelativeDay(iso)} at ${formatTime(iso)}`;
 }
 
 /**

@@ -1,6 +1,6 @@
 # Academic Assistant — Technical specification
 
-This document describes the overall architecture. The detailed design of each phase lives in `docs/superpowers/specs/` (Phase 1: `2026-09-28-phase-1-email-analysis-design.md`).
+This document describes the overall architecture. The detailed design of each phase lives in `docs/superpowers/specs/` (Phase 1: `2026-09-28-phase-1-email-analysis-design.md`; Phase 2: `2026-10-04-phase-2-lms-tracker-design.md`, whose section 19 "As built" records where the implementation differs from the design).
 
 ## 1. Stack
 - Tauri 2.
@@ -17,19 +17,23 @@ The application is local-first, modular and extensible.
 ```text
 Tauri Desktop
 ├── React + TypeScript + Tailwind        (src/)
-│   ├── Dashboard
-│   ├── Results / Runs
-│   └── Accounts / Catalog / Settings
+│   ├── Dashboard (LMS tracker)
+│   ├── Universities
+│   ├── Announcements (email) / Email runs
+│   └── Email accounts / Settings
 │
 └── Rust (Cargo workspace)
     ├── crates/core      domain, ports (traits), filters, date candidates,
-    │                    analyzer, CheckRunner pipeline — no I/O
+    │                    analyzer, CheckRunner pipeline, LMS diff and
+    │                    LmsSyncRunner — no I/O
     ├── crates/infra     SQLite, IMAP, Microsoft Graph, jev, Ollama,
+    │                    Moodle and Blackboard clients,
     │                    Windows Credential Manager — implements core ports
-    └── src-tauri        composition root + thin Tauri commands/events
+    └── src-tauri        composition root + thin Tauri commands/events +
+                         LMS sign-in windows
 ```
 
-React never accesses email, SQLite or external providers directly. It communicates with Rust through Tauri commands and events.
+React never accesses email, learning platforms, SQLite or external providers directly. It communicates with Rust through Tauri commands and events.
 
 Dependency rule: `src-tauri → infra → core`. `core` never depends on `infra` or `src-tauri`; the compiler enforces it through crate boundaries.
 
@@ -42,7 +46,7 @@ React/TypeScript: presentation, forms, configuration, read state and command inv
 Domain model, ports, orchestration (pipeline), filters, date candidate extraction and AI question design. Pure Rust, testable with fakes.
 
 ### Infrastructure (`crates/infra`)
-Concrete implementations: SQLite repositories and migrations, IMAP, Microsoft Graph, jev, Ollama, secure storage.
+Concrete implementations: SQLite repositories and migrations, IMAP, Microsoft Graph, Moodle and Blackboard clients, jev, Ollama, secure storage.
 
 Upper layers depend on abstractions, never on concrete implementations.
 
@@ -61,11 +65,31 @@ Implementations:
 
 ```text
 EmailProvider
-├── ImapEmailProvider            (Phase 1)
-└── MicrosoftGraphEmailProvider  (Phase 1)
+├── ImapEmailProvider
+└── MicrosoftGraphEmailProvider
 ```
 
 Each provider converts its protocol into the common `Email` model. Providers are read-only: IMAP uses `BODY.PEEK[]`; Graph uses the `Mail.Read` scope.
+
+## 4b. Learning platforms (Phase 2)
+
+```rust
+#[async_trait]
+trait LmsClient: Send + Sync {
+    async fn verify(&self) -> Result<LmsIdentity, LmsError>;
+    async fn list_courses(&self) -> Result<Vec<RemoteCourse>, LmsError>;
+    async fn fetch_items(&self, courses: &[RemoteCourseRef], window: &SyncWindow)
+        -> Result<Vec<RemoteItem>, LmsError>;   // all or nothing
+}
+```
+
+```text
+LmsClient
+├── MoodleClient       Moodle mobile web services, with the user's mobile token
+└── BlackboardClient   Blackboard Learn public REST API, with the user's session cookies
+```
+
+Both are read-only (Moodle read functions, Blackboard `GET`) and run only when the user presses Sync. A `LmsClientFactory` builds a client from the credential stored in the secret store; an `LmsAuthenticator` renews a credential silently. The app opens the university's own sign-in page in an embedded window and captures only a scoped credential (a Moodle token obtained through the mobile launch redirect, or the Blackboard cookies of the platform host); the university password is never seen. `LmsSyncRunner` (core) syncs universities one after another, isolates failures per university and diffs what the platform returned against the stored items (new, due date changed, removed). Details: `docs/infra/lms.md`.
 
 ## 5. Normalized model
 
@@ -210,7 +234,8 @@ The schema is managed through versioned migrations embedded in the binary.
 
 ## 13. Data model (overview)
 
-- `universities`, `courses` — catalog used by the AI (future scraping will populate it).
+- `universities`, `courses` — the learning platforms the user follows and the courses discovered on them (Phase 2; the Phase 1 manual catalog is gone). The tracked, available courses are also the catalog the email analyzer uses.
+- `lms_items` — assignments, quizzes, tests and course events, with the user's local `done`/`hidden`/`note` fields.
 - `accounts` — account metadata and non-secret configuration.
 - `sync_states` — cursor and status per account and folder.
 - `processed_messages` — deduplication and processing outcome per message.
@@ -218,22 +243,26 @@ The schema is managed through versioned migrations embedded in the binary.
 - `runs`, `run_accounts` — run log with per-account detail.
 - `settings` — key/value application settings.
 
-The concrete Phase 1 schema is defined in the Phase 1 design document.
+The concrete schema is defined by the migrations in `crates/infra/migrations/` (`0001_init.sql` Phase 1, `0002_lms.sql` and `0003_lms_items.sql` Phase 2); see `docs/infra/database.md`.
 
 ## 14. Retention
 
-The full body of each email is never stored. The application keeps AI results, subject and sender, deduplication metadata, synchronization state, run history and (later) relations between results.
+The full body of each email is never stored. The application keeps AI results, subject and sender, deduplication metadata, synchronization state, run history and (later) relations between results. For learning platforms it keeps courses and items (title, due date, status, grade, link) so that changes can be detected between syncs; removed items are kept and flagged.
 
 ## 15. Credentials
 
 - OAuth2 when available (Microsoft 365: authorization code + PKCE with a loopback redirect).
-- Passwords, refresh tokens and API keys in Windows Credential Manager (`keyring` crate).
-- SQLite never stores secrets; credential entries are derived from ids (e.g. `academic-assistant/account/{id}`).
-- Logs and error messages never include credentials, tokens, API keys or email bodies.
+- Passwords, refresh tokens, API keys and learning-platform credentials (Moodle token, Blackboard session cookies) in Windows Credential Manager (`keyring` crate). The Credential Manager target of a key is `{key}.academic-assistant`.
+- SQLite never stores secrets; credential entries are derived from ids (e.g. `academic-assistant/account/{id}/password`, `academic-assistant/university/{id}/moodle-token`).
+- Learning-platform credentials are scoped (a mobile web-service token, or the cookies of the platform host) and verified against the platform before they are stored. The university password is never captured.
+- The sign-in window has no IPC access to the app. The URLs it visits are never logged.
+- Logs and error messages never include credentials, tokens, cookies, API keys, email bodies, item titles or notes.
 
 ## 16. Scheduler (later phase)
 
 Rust will manage manual runs, 1–2 daily runs, configurable times, background execution and reasonable recovery from errors. The Windows solution may use a tray process with autostart or a headless binary reusing the same crates, without depending on React being open.
+
+Phases 1 and 2 are manual: Check now (email) and Sync (learning platforms).
 
 ## 17. Notifications (later phase)
 
@@ -248,11 +277,11 @@ The implementation will use native Windows notifications.
 
 ## 18. React ↔ Rust
 
-Commands and events are defined in the phase design documents. Critical logic stays in Rust. DTOs use `camelCase` and are mirrored manually in `src/lib/api/types.ts`.
+Commands and events are defined in the phase design documents and listed in `docs/app/tauri-commands.md` (including the `run:*` and `lms-sync:*` events). Critical logic stays in Rust. DTOs use `camelCase` and are mirrored manually in `src/lib/api/types.ts`.
 
 ## 19. Configuration
 
-Persisted: accounts, enabled state, AI provider and its configuration, Microsoft client ID, blocked senders/domains, first-sync window. Later: schedules, notifications and future preferences.
+Persisted: accounts, enabled state, AI provider and its configuration, Microsoft client ID, blocked senders/domains, first-sync window, universities (platform, URL, login state) and the tracked courses. Later: schedules, notifications and future preferences.
 
 ## 20. Errors and observability
 
@@ -269,15 +298,14 @@ Duration, accounts, found/filtered/analyzed messages, results and errors are rec
 
 ## 21. Source extensibility
 
-Phase 1 implements email sources only. When new sources arrive (web scraping, Moodle, Blackboard, calendars), a new port will be added to `core` alongside `EmailProvider`, with its implementations in `infra`, reusing the analysis, storage and presentation layers. The exact abstraction will be designed with the first non-email source rather than anticipated now.
+Phase 1 implemented email sources. Phase 2 added the first non-email sources as a separate port, `LmsClient`, alongside `EmailProvider`, with its implementations in `infra` and its own sync runner and tables, rather than forcing platform items into the email `Email` type. Future sources follow the same pattern: a new port in `core`, adapters in `infra`, reusing the storage and presentation layers.
 
 ```text
-Future sources
-├── Email (IMAP, Microsoft Graph)
-├── Course web pages (scraping → course catalog)
-├── UVMoodleSource
-├── UAHBlackboardSource
-└── CalendarSource
+Sources
+├── Email (IMAP, Microsoft Graph)            Phase 1
+├── Learning platforms (Moodle, Blackboard)  Phase 2
+├── Google Calendar export                   planned
+└── Course web pages (scraping)              later
 ```
 
 ## 22. Strategy for future platforms
@@ -312,7 +340,10 @@ AI is used for classification and extraction. Browser agents remain a possible f
 ### Integration tests (`infra`)
 - SQLite migrations and repositories;
 - IMAP parsing from `.eml` fixtures;
-- Microsoft Graph, jev and Ollama against HTTP mocks (`wiremock`);
-- real providers in `#[ignore]` tests, run manually.
+- Microsoft Graph, jev, Ollama, Moodle and Blackboard against HTTP mocks (`wiremock`) with invented data;
+- real providers in `#[ignore]` tests, run manually (`lms_live` for the learning platforms).
+
+### Unit tests (`core`, LMS)
+- URL normalization, session check and renewal, effective status, item diff and `LmsSyncRunner` with fakes.
 
 All providers can be replaced with fakes.

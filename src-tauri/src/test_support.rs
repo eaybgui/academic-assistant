@@ -1,16 +1,19 @@
 //! Test fixtures: an [`AppState`] over an in-memory database, an in-memory secret
 //! store and fake provider/model adapters.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use academic_core::domain::{
-    AIAnalysis, Account, AccountDraft, Category, FetchBatch, MessageOutcome, ModelDescriptor,
-    NewResult, Priority, ProcessedMessage, ProviderConfig, RunId, RunProgress, RunStatus,
-    RunTrigger, Settings, SyncCursor,
+    lms_credential_key, AIAnalysis, Account, AccountDraft, Category, FetchBatch, LmsIdentity,
+    LmsPlatform, LmsUniversity, MessageOutcome, ModelDescriptor, NewResult, Priority,
+    ProcessedMessage, ProviderConfig, RemoteCourse, RemoteCourseRef, RemoteItem, RunId,
+    RunProgress, RunStatus, RunTrigger, Settings, SyncCursor, SyncWindow,
 };
 use academic_core::ports::{
-    Answer, AnswerSet, EmailProvider, EmailProviderFactory, ModelError, ModelProvider,
-    ProviderError, QuestionSet, RunObserver, StructuredModel, SystemClock,
+    Answer, AnswerSet, EmailProvider, EmailProviderFactory, LmsAuthenticator, LmsClient,
+    LmsClientFactory, LmsError, LmsSyncObserver, LmsSyncProgress, LmsSyncResult, ModelError,
+    ModelProvider, ProviderError, QuestionSet, RunObserver, SecretStore, StructuredModel,
+    SystemClock,
 };
 use academic_infra::db::Database;
 use academic_infra::secrets::InMemorySecretStore;
@@ -22,6 +25,7 @@ use crate::state::{AppState, Collaborators};
 pub struct Harness {
     pub state: AppState,
     pub secrets: Arc<InMemorySecretStore>,
+    pub lms_observer: Arc<RecordingLmsObserver>,
 }
 
 /// How a fake provider behaves. Function pointers keep the fakes `Send + Sync`
@@ -38,6 +42,85 @@ impl Default for FakeProviderBehavior {
             create: || Ok(()),
             test_connection: || Ok(()),
         }
+    }
+}
+
+/// Scripted LMS behavior for command tests.
+#[derive(Clone, Copy)]
+pub struct FakeLmsBehavior {
+    pub verify: fn() -> Result<LmsIdentity, LmsError>,
+    pub renew: fn() -> Result<(), LmsError>,
+    pub courses: fn() -> Result<Vec<RemoteCourse>, LmsError>,
+    pub items: fn() -> Result<Vec<RemoteItem>, LmsError>,
+}
+
+impl Default for FakeLmsBehavior {
+    fn default() -> Self {
+        Self {
+            verify: || {
+                Ok(LmsIdentity {
+                    user_id: "1".into(),
+                    display_name: "Ana Pérez".into(),
+                })
+            },
+            renew: || Err(LmsError::Auth("Sign-in required".into())),
+            courses: || Ok(vec![]),
+            items: || Ok(vec![]),
+        }
+    }
+}
+
+/// Like the real factory, `create` fails with `Auth` when no credential is stored.
+struct FakeLmsFactory {
+    behavior: FakeLmsBehavior,
+    secrets: Arc<dyn SecretStore>,
+}
+
+struct FakeLmsClient(FakeLmsBehavior);
+
+struct FakeLmsAuthenticator(FakeLmsBehavior);
+
+impl LmsClientFactory for FakeLmsFactory {
+    fn create(&self, university: &LmsUniversity) -> Result<Box<dyn LmsClient>, LmsError> {
+        let key = lms_credential_key(university.platform, university.id);
+        match self.secrets.get(&key) {
+            Ok(Some(_)) => Ok(Box::new(FakeLmsClient(self.behavior))),
+            _ => Err(LmsError::Auth("Sign in".into())),
+        }
+    }
+
+    fn create_with_credential(
+        &self,
+        _university: &LmsUniversity,
+        _credential: &str,
+    ) -> Result<Box<dyn LmsClient>, LmsError> {
+        Ok(Box::new(FakeLmsClient(self.behavior)))
+    }
+}
+
+#[async_trait]
+impl LmsClient for FakeLmsClient {
+    async fn verify(&self) -> Result<LmsIdentity, LmsError> {
+        (self.0.verify)()
+    }
+
+    async fn list_courses(&self) -> Result<Vec<RemoteCourse>, LmsError> {
+        (self.0.courses)()
+    }
+
+    async fn fetch_items(
+        &self,
+        _courses: &[RemoteCourseRef],
+        _window: &SyncWindow,
+    ) -> Result<Vec<RemoteItem>, LmsError> {
+        (self.0.items)()
+    }
+}
+
+#[async_trait]
+impl LmsAuthenticator for FakeLmsAuthenticator {
+    async fn renew_silently(&self, _university: &LmsUniversity) -> Result<(), LmsError> {
+        (self.0.renew)()
     }
 }
 
@@ -103,6 +186,23 @@ impl RunObserver for NoopObserver {
     fn finished(&self, _run_id: RunId, _status: RunStatus) {}
 }
 
+/// Records every LMS sync notification so tests can assert on them.
+#[derive(Default)]
+pub struct RecordingLmsObserver {
+    pub progress: Mutex<Vec<LmsSyncProgress>>,
+    pub finished: Mutex<Vec<Vec<LmsSyncResult>>>,
+}
+
+impl LmsSyncObserver for RecordingLmsObserver {
+    fn progress(&self, progress: &LmsSyncProgress) {
+        self.progress.lock().unwrap().push(progress.clone());
+    }
+
+    fn finished(&self, results: &[LmsSyncResult]) {
+        self.finished.lock().unwrap().push(results.to_vec());
+    }
+}
+
 /// Answers every asked question `yes`.
 pub fn answer_yes(questions: &QuestionSet) -> Result<AnswerSet, ModelError> {
     Ok(questions
@@ -126,11 +226,28 @@ pub fn harness() -> Harness {
     )
 }
 
+pub fn harness_with_lms(behavior: FakeLmsBehavior) -> Harness {
+    build_harness(
+        FakeProviderBehavior::default(),
+        Ok(Arc::new(FakeModel(answer_yes))),
+        behavior,
+    )
+}
+
 pub fn harness_with(
     provider: FakeProviderBehavior,
     model: Result<Arc<dyn StructuredModel>, String>,
 ) -> Harness {
+    build_harness(provider, model, FakeLmsBehavior::default())
+}
+
+fn build_harness(
+    provider: FakeProviderBehavior,
+    model: Result<Arc<dyn StructuredModel>, String>,
+    lms: FakeLmsBehavior,
+) -> Harness {
     let secrets = Arc::new(InMemorySecretStore::default());
+    let lms_observer = Arc::new(RecordingLmsObserver::default());
     let state = AppState::new(
         Arc::new(Database::open_in_memory().expect("in-memory database opens")),
         Collaborators {
@@ -140,9 +257,19 @@ pub fn harness_with(
             http: academic_infra::factory::http_client(),
             observer: Arc::new(NoopObserver),
             clock: Arc::new(SystemClock),
+            lms_factory: Arc::new(FakeLmsFactory {
+                behavior: lms,
+                secrets: secrets.clone(),
+            }),
+            lms_authenticator: Arc::new(FakeLmsAuthenticator(lms)),
+            lms_observer: lms_observer.clone(),
         },
     );
-    Harness { state, secrets }
+    Harness {
+        state,
+        secrets,
+        lms_observer,
+    }
 }
 
 pub fn imap_draft(name: &str) -> AccountDraft {
@@ -217,4 +344,33 @@ pub fn seed_result(state: &AppState, account_id: i64, subject: &str) -> i64 {
         },
     };
     state.results.save_analyzed(&message, &result).unwrap()
+}
+
+/// Inserts a university with one tracked course so the catalog is not empty.
+pub fn track_one_course(state: &AppState) {
+    let now = Utc::now();
+    let university = state
+        .universities
+        .insert_university(
+            "Universidad Demo",
+            LmsPlatform::Moodle,
+            "https://campus.demo.example",
+            now,
+        )
+        .unwrap();
+    let remote = RemoteCourse {
+        external_id: "_10_1".into(),
+        name: "Álgebra Lineal".into(),
+        short_name: None,
+        url: None,
+    };
+    state
+        .courses
+        .upsert_remote_courses(university.id, &[remote], now)
+        .unwrap();
+    let course_id = state.courses.list_courses(university.id).unwrap()[0].id;
+    state
+        .courses
+        .set_tracked_courses(university.id, &[course_id])
+        .unwrap();
 }

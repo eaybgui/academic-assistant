@@ -8,6 +8,7 @@ use std::sync::Arc;
 use academic_core::ports::{Clock, RunRepository, SecretStore, SystemClock};
 use academic_infra::db::Database;
 use academic_infra::factory::{http_client, DefaultEmailProviderFactory, DefaultModelProvider};
+use academic_infra::lms::factory::DefaultLmsClientFactory;
 use academic_infra::secrets::KeyringSecretStore;
 use tauri::{App, Manager};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -16,6 +17,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
 
+use crate::lms_auth::TauriLmsAuthenticator;
+use crate::lms_observer::TauriLmsSyncObserver;
 use crate::observer::TauriRunObserver;
 use crate::state::{AppState, Collaborators};
 
@@ -63,6 +66,12 @@ fn build_state(app: &App, data_dir: &Path) -> Result<AppState, Box<dyn Error>> {
         http.clone(),
     ));
     let models = Arc::new(DefaultModelProvider::new(secrets.clone(), http.clone()));
+    let lms_factory = Arc::new(DefaultLmsClientFactory::new(secrets.clone(), http.clone()));
+    let lms_authenticator = Arc::new(TauriLmsAuthenticator::new(
+        app.handle().clone(),
+        lms_factory.clone(),
+        secrets.clone(),
+    ));
 
     Ok(AppState::new(
         db,
@@ -73,6 +82,9 @@ fn build_state(app: &App, data_dir: &Path) -> Result<AppState, Box<dyn Error>> {
             http,
             observer: Arc::new(TauriRunObserver::new(app.handle().clone())),
             clock,
+            lms_factory,
+            lms_authenticator,
+            lms_observer: Arc::new(TauriLmsSyncObserver::new(app.handle().clone())),
         },
     ))
 }

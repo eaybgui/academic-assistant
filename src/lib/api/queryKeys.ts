@@ -1,4 +1,4 @@
-import type { ResultQuery, ResultSort } from './types';
+import type { ResultQuery, ResultSort, TrackerQuery } from './types';
 
 /**
  * Stable React Query keys for the API client. Keeping them in one place avoids
@@ -10,5 +10,8 @@ export const queryKeys = {
   runs: (limit: number) => ['runs', limit] as const,
   accounts: ['accounts'] as const,
   catalog: ['catalog'] as const,
+  universities: ['universities'] as const,
   settings: ['settings'] as const,
+  tracker: (query: TrackerQuery) => ['tracker', query] as const,
+  courses: (universityId: number) => ['courses', universityId] as const,
 };

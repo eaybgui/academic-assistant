@@ -3,11 +3,13 @@
 
 use std::sync::Arc;
 
+use academic_core::lms::{LmsRepositories, LmsSyncRunner};
 use academic_core::pipeline::{CheckRunner, Repositories};
 use academic_core::ports::{
-    AccountRepository, CatalogRepository, Clock, EmailProviderFactory, ModelProvider,
+    AccountRepository, CatalogRepository, Clock, CourseRepository, EmailProviderFactory,
+    LmsAuthenticator, LmsClientFactory, LmsItemRepository, LmsSyncObserver, ModelProvider,
     ResultRepository, RunObserver, RunRepository, SecretStore, SettingsRepository,
-    SyncStateRepository,
+    SyncStateRepository, UniversityRepository,
 };
 use academic_infra::db::Database;
 use chrono::NaiveDate;
@@ -22,12 +24,18 @@ pub struct Collaborators {
     pub http: reqwest::Client,
     pub observer: Arc<dyn RunObserver>,
     pub clock: Arc<dyn Clock>,
+    pub lms_factory: Arc<dyn LmsClientFactory>,
+    pub lms_authenticator: Arc<dyn LmsAuthenticator>,
+    pub lms_observer: Arc<dyn LmsSyncObserver>,
 }
 
 pub struct AppState {
     pub accounts: Arc<dyn AccountRepository>,
     pub catalog: Arc<dyn CatalogRepository>,
     pub sync: Arc<dyn SyncStateRepository>,
+    pub universities: Arc<dyn UniversityRepository>,
+    pub courses: Arc<dyn CourseRepository>,
+    pub items: Arc<dyn LmsItemRepository>,
     pub results: Arc<dyn ResultRepository>,
     pub runs: Arc<dyn RunRepository>,
     pub settings: Arc<dyn SettingsRepository>,
@@ -37,14 +45,18 @@ pub struct AppState {
     pub http: reqwest::Client,
     pub clock: Arc<dyn Clock>,
     pub observer: Arc<dyn RunObserver>,
+    pub lms_factory: Arc<dyn LmsClientFactory>,
+    pub lms_authenticator: Arc<dyn LmsAuthenticator>,
+    pub lms_observer: Arc<dyn LmsSyncObserver>,
     pub runner: Arc<CheckRunner>,
+    pub lms_sync: Arc<LmsSyncRunner>,
     /// Keeps the non-blocking log writer flushing for the lifetime of the app.
     _log_guard: Option<WorkerGuard>,
 }
 
 impl AppState {
     /// Wires the single `db` into every repository port and builds the
-    /// [`CheckRunner`] over the same adapters.
+    /// [`CheckRunner`] and [`LmsSyncRunner`] over the same adapters.
     pub fn new(db: Arc<Database>, collaborators: Collaborators) -> Self {
         let Collaborators {
             secrets,
@@ -53,6 +65,9 @@ impl AppState {
             http,
             observer,
             clock,
+            lms_factory,
+            lms_authenticator,
+            lms_observer,
         } = collaborators;
         let runner = Arc::new(CheckRunner::new(
             Repositories {
@@ -69,10 +84,24 @@ impl AppState {
             observer.clone(),
             clock.clone(),
         ));
+        let lms_sync = Arc::new(LmsSyncRunner::new(
+            LmsRepositories {
+                universities: db.clone(),
+                courses: db.clone(),
+                items: db.clone(),
+            },
+            lms_factory.clone(),
+            lms_authenticator.clone(),
+            lms_observer.clone(),
+            clock.clone(),
+        ));
         Self {
             accounts: db.clone(),
             catalog: db.clone(),
             sync: db.clone(),
+            universities: db.clone(),
+            courses: db.clone(),
+            items: db.clone(),
             results: db.clone(),
             runs: db.clone(),
             settings: db,
@@ -82,7 +111,11 @@ impl AppState {
             http,
             clock,
             observer,
+            lms_factory,
+            lms_authenticator,
+            lms_observer,
             runner,
+            lms_sync,
             _log_guard: None,
         }
     }

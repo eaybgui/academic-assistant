@@ -3,8 +3,10 @@ import {
   formatDate,
   formatDateTime,
   formatDuration,
+  formatLastSynced,
   formatRelativeDay,
   formatResultDate,
+  formatShortDate,
   formatTime,
   todayLocalIso,
 } from './format';
@@ -19,6 +21,12 @@ describe('formatDateTime', () => {
   it('includes both date and time', () => {
     expect(formatDateTime('2026-10-28T12:14:00Z')).toMatch(/28 Oct 2026/);
     expect(formatDateTime('2026-10-28T12:14:00Z')).toMatch(/\d{2}:\d{2}/);
+  });
+});
+
+describe('formatShortDate', () => {
+  it('formats an ISO timestamp as day and month only', () => {
+    expect(formatShortDate('2026-10-05T12:00:00Z')).toBe('5 Oct');
   });
 });
 
@@ -53,6 +61,20 @@ describe('formatRelativeDay', () => {
     const longAgo = new Date();
     longAgo.setDate(longAgo.getDate() - 10);
     expect(formatRelativeDay(longAgo.toISOString())).toBe(formatDate(longAgo.toISOString()));
+  });
+});
+
+describe('formatLastSynced', () => {
+  it('combines the relative day with the time', () => {
+    const iso = new Date().toISOString();
+    expect(formatLastSynced(iso)).toBe(`today at ${formatTime(iso)}`);
+  });
+
+  it('uses the date for older syncs', () => {
+    const longAgo = new Date();
+    longAgo.setDate(longAgo.getDate() - 10);
+    const iso = longAgo.toISOString();
+    expect(formatLastSynced(iso)).toBe(`${formatDate(iso)} at ${formatTime(iso)}`);
   });
 });
 

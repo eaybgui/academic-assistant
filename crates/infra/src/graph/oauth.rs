@@ -13,6 +13,8 @@ use url::Url;
 
 use academic_core::ports::ProviderError;
 
+use crate::http_util::encode_form;
+
 use super::loopback::LoopbackServer;
 use super::mapping::{map_oauth_error, map_token_error_body, map_transport_error};
 use super::{OAuthConfig, TokenSet, DEFAULT_REQUEST_TIMEOUT, SCOPES};
@@ -215,17 +217,6 @@ async fn exchange_code(
     })
 }
 
-/// Encodes `pairs` as an `application/x-www-form-urlencoded` body. Used instead of
-/// `reqwest`'s `form` feature, which is not enabled for this workspace (only `json`
-/// and `rustls` are); `url`'s encoder produces the same result.
-fn encode_form(pairs: &[(&str, &str)]) -> String {
-    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
-    for (key, value) in pairs {
-        serializer.append_pair(key, value);
-    }
-    serializer.finish()
-}
-
 #[derive(Debug, Deserialize)]
 struct TokenResponse {
     access_token: String,
@@ -288,12 +279,6 @@ mod tests {
         let a = new_pkce();
         let b = new_pkce();
         assert_ne!(a.verifier, b.verifier);
-    }
-
-    #[test]
-    fn encode_form_url_encodes_keys_and_values() {
-        let body = encode_form(&[("a", "1 2"), ("b", "x&y")]);
-        assert_eq!(body, "a=1+2&b=x%26y");
     }
 
     #[test]

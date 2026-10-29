@@ -1,10 +1,12 @@
 use chrono::{DateTime, NaiveDate, Utc};
 
 use crate::domain::{
-    Account, AccountDraft, AccountId, Catalog, Counters, Course, DashboardCounts, NewResult, Page,
-    ProcessedMessage, ResultQuery, RunAccountResult, RunId, RunRecord, RunStatus, RunTrigger,
-    Settings, StoredResult, SyncCursor, SyncState, University,
+    Account, AccountDraft, AccountId, Catalog, Counters, DashboardCounts, LmsCourse, LmsItem,
+    LmsPlatform, LmsUniversity, LoginState, NewResult, Page, ProcessedMessage, RemoteCourse,
+    ResultQuery, RunAccountResult, RunId, RunRecord, RunStatus, RunTrigger, Settings, StoredResult,
+    SyncCursor, SyncOutcome, SyncState, TrackedItem, TrackerQuery, UniversityId,
 };
+use crate::lms::SyncChanges;
 
 /// Error returned by a repository operation.
 #[derive(Debug, thiserror::Error)]
@@ -33,21 +35,10 @@ pub trait AccountRepository: Send + Sync {
     fn delete(&self, id: AccountId) -> RepoResult<()>;
 }
 
-/// Persistence for the university/course catalog.
+/// Read-only projection of universities and tracked courses, used by the email
+/// analyzer as its course catalog (spec §11).
 pub trait CatalogRepository: Send + Sync {
     fn catalog(&self) -> RepoResult<Catalog>;
-    fn add_university(&self, name: &str, now: DateTime<Utc>) -> RepoResult<University>;
-    fn rename_university(&self, id: i64, name: &str) -> RepoResult<University>;
-    fn delete_university(&self, id: i64) -> RepoResult<()>;
-    fn add_course(
-        &self,
-        university_id: i64,
-        name: &str,
-        aliases: &[String],
-        now: DateTime<Utc>,
-    ) -> RepoResult<Course>;
-    fn update_course(&self, id: i64, name: &str, aliases: &[String]) -> RepoResult<Course>;
-    fn delete_course(&self, id: i64) -> RepoResult<()>;
 }
 
 /// Persistence for per-account, per-folder sync cursors.
@@ -123,4 +114,81 @@ pub trait SettingsRepository: Send + Sync {
     /// Missing keys fall back to `Settings::default()` values.
     fn load(&self) -> RepoResult<Settings>;
     fn save(&self, settings: &Settings) -> RepoResult<()>;
+}
+
+/// Persistence for LMS universities.
+pub trait UniversityRepository: Send + Sync {
+    fn list_universities(&self) -> RepoResult<Vec<LmsUniversity>>;
+    fn get_university(&self, id: UniversityId) -> RepoResult<Option<LmsUniversity>>;
+    /// Duplicate name or base URL → `RepoError::Conflict`.
+    fn insert_university(
+        &self,
+        name: &str,
+        platform: LmsPlatform,
+        base_url: &str,
+        now: DateTime<Utc>,
+    ) -> RepoResult<LmsUniversity>;
+    fn rename_university(&self, id: UniversityId, name: &str) -> RepoResult<LmsUniversity>;
+    /// Cascades to its courses (and, from M3, items). Missing → `NotFound`.
+    fn delete_university(&self, id: UniversityId) -> RepoResult<()>;
+    fn set_login(
+        &self,
+        id: UniversityId,
+        state: LoginState,
+        account_label: Option<&str>,
+    ) -> RepoResult<LmsUniversity>;
+    fn record_sync(
+        &self,
+        id: UniversityId,
+        at: DateTime<Utc>,
+        outcome: SyncOutcome,
+        error: Option<&str>,
+    ) -> RepoResult<()>;
+}
+
+/// Persistence for courses discovered on LMS platforms.
+pub trait CourseRepository: Send + Sync {
+    /// Ordered by name.
+    fn list_courses(&self, university_id: UniversityId) -> RepoResult<Vec<LmsCourse>>;
+    /// In one transaction: inserts unknown courses (untracked, unreviewed, available),
+    /// updates name/short name/url of known ones, marks every returned course
+    /// available and every other course of the university unavailable.
+    /// Missing university → `NotFound`.
+    fn upsert_remote_courses(
+        &self,
+        university_id: UniversityId,
+        courses: &[RemoteCourse],
+        now: DateTime<Utc>,
+    ) -> RepoResult<()>;
+    /// Exactly `course_ids` become tracked; every course of the university becomes
+    /// reviewed. An id that is not a course of this university → `NotFound` and no
+    /// change. Returns the university's courses.
+    fn set_tracked_courses(
+        &self,
+        university_id: UniversityId,
+        course_ids: &[i64],
+    ) -> RepoResult<Vec<LmsCourse>>;
+}
+
+/// Persistence for LMS items (spec §7, §8).
+pub trait LmsItemRepository: Send + Sync {
+    fn list_items_for_university(&self, university_id: UniversityId) -> RepoResult<Vec<LmsItem>>;
+    /// One transaction: inserts (first_seen_at = updated_at = now), updates (platform fields,
+    /// course, change; removed_at cleared; updated_at = now), removals (removed_at = now),
+    /// and `items_synced_at = now` for `synced_course_ids`. Personal fields never change.
+    fn apply_sync(
+        &self,
+        university_id: UniversityId,
+        changes: &SyncChanges,
+        now: DateTime<Utc>,
+    ) -> RepoResult<()>;
+    /// Items of tracked, available courses, ordered by due date (undated last), then title.
+    fn query_items(&self, query: &TrackerQuery) -> RepoResult<Vec<TrackedItem>>;
+    fn get_item(&self, id: i64) -> RepoResult<Option<TrackedItem>>;
+    fn set_item_done(&self, id: i64, done: bool) -> RepoResult<TrackedItem>;
+    fn set_item_hidden(&self, id: i64, hidden: bool) -> RepoResult<TrackedItem>;
+    fn set_item_note(&self, id: i64, note: Option<&str>) -> RepoResult<TrackedItem>;
+    fn dismiss_item_change(&self, id: i64) -> RepoResult<TrackedItem>;
+    /// Clears every badge (of one university, or all). Returns rows changed.
+    fn dismiss_all_changes(&self, university_id: Option<UniversityId>) -> RepoResult<u64>;
 }

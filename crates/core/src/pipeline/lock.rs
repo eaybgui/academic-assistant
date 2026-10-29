@@ -13,10 +13,11 @@ struct LockState {
     run_id: Option<RunId>,
 }
 
-/// The single-run lock owned by [`super::CheckRunner`]. Cloning shares the same
-/// underlying state (cheap: an `Arc<Mutex<_>>` handle).
+/// The single-run lock. Each runner (`CheckRunner`, `LmsSyncRunner`) owns its own
+/// instance, one per runner. Cloning shares the same underlying state (cheap: an
+/// `Arc<Mutex<_>>` handle).
 #[derive(Clone, Default)]
-pub(super) struct RunLock {
+pub(crate) struct RunLock {
     state: Arc<Mutex<LockState>>,
 }
 
@@ -43,6 +44,11 @@ impl RunLock {
         })
     }
 
+    /// Whether a run is currently in progress (a guard is held).
+    pub fn is_busy(&self) -> bool {
+        lock(&self.state).busy
+    }
+
     /// The id of the run currently in progress, if any. `None` both when idle and
     /// during the brief window between reserving the lock and the run row being
     /// created (see [`RunLockGuard::set_run_id`]).
@@ -53,7 +59,7 @@ impl RunLock {
 
 /// RAII handle for a reserved [`RunLock`]. Releases the lock on drop, whether the
 /// holder finishes normally, returns early, or the future is dropped.
-pub(super) struct RunLockGuard {
+pub(crate) struct RunLockGuard {
     state: Arc<Mutex<LockState>>,
 }
 
@@ -91,6 +97,17 @@ mod tests {
         let lock = RunLock::new();
         let _first = lock.try_acquire().expect("first acquire succeeds");
         assert!(lock.try_acquire().is_none());
+    }
+
+    #[test]
+    fn is_busy_reflects_whether_a_guard_is_held() {
+        let lock = RunLock::new();
+        assert!(!lock.is_busy());
+        {
+            let _guard = lock.try_acquire().expect("acquire succeeds");
+            assert!(lock.is_busy());
+        }
+        assert!(!lock.is_busy());
     }
 
     #[test]

@@ -7,12 +7,14 @@
 
 mod accounts;
 mod catalog;
+mod lms;
 mod results;
 mod runs;
 mod settings;
 
 pub use accounts::*;
 pub use catalog::*;
+pub use lms::*;
 pub use results::*;
 pub use runs::*;
 pub use settings::*;

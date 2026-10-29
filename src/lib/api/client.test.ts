@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { api, toCommandError } from './client';
-import type { AccountInput, ResultQuery, SettingsInput } from './types';
+import type {
+  AccountInput,
+  LmsUniversityInput,
+  ResultQuery,
+  SettingsInput,
+  TrackerQuery,
+} from './types';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -99,14 +105,28 @@ describe('api client', () => {
     expect(mockedInvoke).toHaveBeenCalledWith('get_catalog', {});
   });
 
-  it('addUniversity(name) → add_university { name }', async () => {
-    await api.addUniversity('UV');
-    expect(mockedInvoke).toHaveBeenCalledWith('add_university', { name: 'UV' });
+  it('getUniversities() → get_universities {}', async () => {
+    await api.getUniversities();
+    expect(mockedInvoke).toHaveBeenCalledWith('get_universities', {});
   });
 
-  it('updateUniversity(id, name) → update_university { id, name }', async () => {
-    await api.updateUniversity(1, 'UV');
-    expect(mockedInvoke).toHaveBeenCalledWith('update_university', { id: 1, name: 'UV' });
+  it('lmsProbe(url, platform) → lms_probe { url, platform }', async () => {
+    await api.lmsProbe('aulavirtual.uv.es', 'moodle');
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_probe', {
+      url: 'aulavirtual.uv.es',
+      platform: 'moodle',
+    });
+  });
+
+  it('addUniversity(input) → add_university { input }', async () => {
+    const input: LmsUniversityInput = { name: 'UV', platform: 'moodle', baseUrl: 'aulavirtual.uv.es' };
+    await api.addUniversity(input);
+    expect(mockedInvoke).toHaveBeenCalledWith('add_university', { input });
+  });
+
+  it('renameUniversity(id, name) → rename_university { id, name }', async () => {
+    await api.renameUniversity(1, 'UV');
+    expect(mockedInvoke).toHaveBeenCalledWith('rename_university', { id: 1, name: 'UV' });
   });
 
   it('removeUniversity(id) → remove_university { id }', async () => {
@@ -114,27 +134,82 @@ describe('api client', () => {
     expect(mockedInvoke).toHaveBeenCalledWith('remove_university', { id: 1 });
   });
 
-  it('addCourse(universityId, name, aliases) → add_course { universityId, name, aliases }', async () => {
-    await api.addCourse(1, 'Algebra', ['ALG']);
-    expect(mockedInvoke).toHaveBeenCalledWith('add_course', {
-      universityId: 1,
-      name: 'Algebra',
-      aliases: ['ALG'],
+  it('lmsSignIn(id) → lms_sign_in { id }', async () => {
+    await api.lmsSignIn(1);
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_sign_in', { id: 1 });
+  });
+
+  it('lmsSignOut(id) → lms_sign_out { id }', async () => {
+    await api.lmsSignOut(1);
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_sign_out', { id: 1 });
+  });
+
+  it('lmsCheckSession(id) → lms_check_session { id }', async () => {
+    await api.lmsCheckSession(1);
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_check_session', { id: 1 });
+  });
+
+  it('lmsFetchCourses(id) → lms_fetch_courses { id }', async () => {
+    await api.lmsFetchCourses(1);
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_fetch_courses', { id: 1 });
+  });
+
+  it('getCourses(universityId) → get_courses { universityId }', async () => {
+    await api.getCourses(2);
+    expect(mockedInvoke).toHaveBeenCalledWith('get_courses', { universityId: 2 });
+  });
+
+  it('setTrackedCourses sends universityId and courseIds', async () => {
+    await api.setTrackedCourses(2, [5, 7]);
+    expect(mockedInvoke).toHaveBeenCalledWith('set_tracked_courses', {
+      universityId: 2,
+      courseIds: [5, 7],
     });
   });
 
-  it('updateCourse(id, name, aliases) → update_course { id, name, aliases }', async () => {
-    await api.updateCourse(3, 'Algebra II', []);
-    expect(mockedInvoke).toHaveBeenCalledWith('update_course', {
-      id: 3,
-      name: 'Algebra II',
-      aliases: [],
-    });
+  it('lmsSync(universityId) → lms_sync { universityId }, null syncs everything', async () => {
+    await api.lmsSync(3);
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_sync', { universityId: 3 });
+    await api.lmsSync(null);
+    expect(mockedInvoke).toHaveBeenCalledWith('lms_sync', { universityId: null });
   });
 
-  it('removeCourse(id) → remove_course { id }', async () => {
-    await api.removeCourse(3);
-    expect(mockedInvoke).toHaveBeenCalledWith('remove_course', { id: 3 });
+  it('getTracker wraps the query', async () => {
+    const query: TrackerQuery = { universityId: null, includeHidden: false, includeRemoved: false };
+    await api.getTracker(query);
+    expect(mockedInvoke).toHaveBeenCalledWith('get_tracker', { query });
+  });
+
+  it('setItemDone(id, value) → set_item_done { id, value }', async () => {
+    await api.setItemDone(9, true);
+    expect(mockedInvoke).toHaveBeenCalledWith('set_item_done', { id: 9, value: true });
+  });
+
+  it('setItemHidden(id, value) → set_item_hidden { id, value }', async () => {
+    await api.setItemHidden(9, false);
+    expect(mockedInvoke).toHaveBeenCalledWith('set_item_hidden', { id: 9, value: false });
+  });
+
+  it('setItemNote(id, note) → set_item_note { id, note }, null clears the note', async () => {
+    await api.setItemNote(9, 'Bring the lab report');
+    expect(mockedInvoke).toHaveBeenCalledWith('set_item_note', {
+      id: 9,
+      note: 'Bring the lab report',
+    });
+    await api.setItemNote(9, null);
+    expect(mockedInvoke).toHaveBeenCalledWith('set_item_note', { id: 9, note: null });
+  });
+
+  it('dismissItemChange(id) → dismiss_item_change { id }', async () => {
+    await api.dismissItemChange(9);
+    expect(mockedInvoke).toHaveBeenCalledWith('dismiss_item_change', { id: 9 });
+  });
+
+  it('dismissAllChanges(universityId) → dismiss_all_changes { universityId }', async () => {
+    await api.dismissAllChanges(4);
+    expect(mockedInvoke).toHaveBeenCalledWith('dismiss_all_changes', { universityId: 4 });
+    await api.dismissAllChanges(null);
+    expect(mockedInvoke).toHaveBeenCalledWith('dismiss_all_changes', { universityId: null });
   });
 
   it('getSettings() → get_settings {}', async () => {

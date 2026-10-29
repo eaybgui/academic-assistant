@@ -48,6 +48,13 @@ function renderPage() {
 }
 
 describe('AccountsPage', () => {
+  it('is titled like its navigation entry', async () => {
+    mockedApi.getAccounts.mockResolvedValue([imapAccount]);
+    mockedApi.getCatalog.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Email accounts' })).toBeInTheDocument();
+  });
+
   it('toggles enabled off via updateAccount', async () => {
     mockedApi.getAccounts.mockResolvedValue([imapAccount]);
     mockedApi.getCatalog.mockResolvedValue([]);

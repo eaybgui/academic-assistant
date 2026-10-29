@@ -14,7 +14,7 @@ export interface UseSetResultSeenResult {
 }
 
 /**
- * Shared "set result seen" mutation for the Dashboard's result cards and the Results table rows:
+ * "Set result seen" mutation for the announcements results table rows:
  * calls `setResultSeen`, invalidates the dashboard/results query prefixes on success, and exposes
  * per-row pending/error state so a failure shows up next to the row that triggered it.
  */

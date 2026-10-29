@@ -1,9 +1,12 @@
-# Accounts, University catalog and Settings screens
+# Email accounts and Settings screens
 
-Covers `src/features/accounts/**`, `src/features/catalog/**`, `src/features/settings/**` and the
-shared form primitives in `src/components/forms/**`. These screens configure the app (email
-accounts, the university/course catalog and global settings); they don't fetch results or trigger
-a "Check now" run (see [dashboard-results-runs.md](dashboard-results-runs.md) for that).
+Covers `src/features/accounts/**`, `src/features/settings/**` and the shared form primitives in
+`src/components/forms/**`. These screens configure the email side of the app (mailboxes and global
+settings); they don't fetch results or trigger a "Check now" run (see
+[dashboard-results-runs.md](dashboard-results-runs.md) for that). The manual university/course
+catalog screen no longer exists: universities and courses come from the learning platforms and are
+managed on the Universities page ([tracker-universities.md](tracker-universities.md)). The file
+name is kept for existing links.
 
 ## Shared form primitives (`src/components/forms/`)
 
@@ -12,8 +15,8 @@ a "Check now" run (see [dashboard-results-runs.md](dashboard-results-runs.md) fo
   every native prop (`Select` takes an `options: { value, label }[]` list instead of children).
 - `Toggle` — an accessible on/off switch (`role="switch"`, `aria-checked`) used for the account
   "Enabled" control.
-- `ConfirmDialog` — a `Modal` wrapper for destructive-action confirmations (delete an account, a
-  university or a course). Takes `error` (rendered inside the dialog, since the page behind an open
+- `ConfirmDialog` — a `Modal` wrapper for destructive-action confirmations (delete an account or a
+  university). Takes `error` (rendered inside the dialog, since the page behind an open
   modal is covered) and `pending` (disables both buttons; the confirm button reads "Deleting…").
   The confirm label is always "Delete".
 - `icons.tsx` — small inline SVG icons (`TrashIcon`, `PencilIcon`) used instead of emoji.
@@ -53,7 +56,7 @@ The screens also use the shared shell and API layer as they are (`Layout`, `Moda
   every open, so each open (a different account, "Add", or the same item after a cancel) starts
   with fresh state and unsaved edits are discarded.
 - `AccountsPage.tsx` — the list screen. Each row shows the provider, email, default university
-  name (resolved from `getCatalog`), folders and a last-sync line ("last sync `<time>` OK", the
+  name (resolved from `getCatalog`, which lists the configured LMS universities), folders and a last-sync line ("last sync `<time>` OK", the
   sync error in red, or "Sign-in required" in red for a Microsoft account with no stored refresh
   token; the sync time uses `formatDateTime`). Row actions: Test (shows the
   `ConnectionTestDto` result inline via the shared `formatConnectionTestMessage`), Edit,
@@ -63,21 +66,7 @@ The screens also use the shared shell and API layer as they are (`Layout`, `Moda
   copy "Deletes this account and all its results. Disable it instead to keep its history."; a
   failed delete shows its error inside the dialog). Mutations invalidate `queryKeys.accounts` and the
   dashboard query (`['dashboard']`, a prefix match covering every `sort` variant) so the sidebar's
-  unseen badge and dashboard attention banner stay in sync.
-
-## University catalog (`src/features/catalog/`)
-
-- `catalogForm.ts` — `parseAliases(raw)`: splits a comma-separated alias input into a trimmed,
-  non-empty array (used for both add and edit).
-- `UniversityFormModal.tsx` / `CourseFormModal.tsx` — add/edit modals for a university (name only)
-  and a course (name + aliases, scoped to a `universityId`). Both invalidate `queryKeys.catalog` on
-  success. Like the account form, their state is initialized once per mount; `CatalogPage` passes
-  `key={`${item?.id ?? 'new'}-${openCount}`}` with a separate open counter per modal (incremented on
-  every open), so each open starts with fresh state and cancelling discards unsaved edits.
-- `CatalogPage.tsx` — the "University catalog" screen: one card per university (name, "Edit" / "Add course" actions, a delete
-  icon) with its courses listed underneath ("Name · aliases: A, B", edit/delete icons per course).
-  Deleting either shows a `ConfirmDialog` first; a failed delete shows its error inside the dialog,
-  cleared when the dialog is opened again or cancelled.
+  unseen badge and the Announcements attention banners stay in sync.
 
 ## Settings (`src/features/settings/`)
 
@@ -113,15 +102,14 @@ Covered cases (see the `*.test.ts(x)` files next to each module):
   unchanged.
 - Delete requiring confirmation (the destructive call only fires after confirming).
 - The inline "Test" result rendering a failed `ConnectionTestDto.message`.
-- `parseAliases` and a course add call receiving the parsed alias array.
 - Settings save sending the parsed `blockedSenders` array.
 - Replacing the jev key: `setJevApiKey` is called with the typed value, and that value is never
   found anywhere in the rendered output afterwards, and unsaved edits to other fields survive the
   settings refetch that follows.
-- Cancelling an edit modal and reopening the same item shows the original values again (account,
-  university and course modals; `AccountsPage.test.tsx`, `CatalogPage.test.tsx`).
-- Edit mode of the account, university and course modals: fields are prefilled and Save sends the
-  edited payload (`updateAccount(id, …)` / `updateUniversity` / `updateCourse`).
+- Cancelling an edit modal and reopening the same item shows the original values again
+  (`AccountsPage.test.tsx`).
+- Edit mode of the account modal: fields are prefilled and Save sends the edited payload
+  (`updateAccount(id, …)`).
 - A second Save after creating a Microsoft account calls `updateAccount`, not `addAccount`.
 - A failed account delete renders its error inside the confirmation dialog.
 - "Test provider" rendering the error message from a failed `ConnectionTestDto`.

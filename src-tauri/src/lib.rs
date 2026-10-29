@@ -6,6 +6,8 @@ mod account_status;
 mod commands;
 mod dto;
 mod error;
+mod lms_auth;
+mod lms_observer;
 mod observer;
 mod setup;
 mod state;
@@ -13,13 +15,20 @@ mod state;
 mod test_support;
 mod validation;
 
-use commands::{accounts, catalog, results, runs, settings};
+use tauri::Manager;
+
+use commands::{accounts, catalog, results, runs, settings, tracker, universities};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| setup::initialize(app))
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                lms_auth::close_all_login_windows(window.app_handle());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             runs::check_now,
             runs::get_dashboard,
@@ -34,12 +43,24 @@ pub fn run() {
             accounts::test_account,
             accounts::connect_microsoft_account,
             catalog::get_catalog,
-            catalog::add_university,
-            catalog::update_university,
-            catalog::remove_university,
-            catalog::add_course,
-            catalog::update_course,
-            catalog::remove_course,
+            universities::lms_probe,
+            universities::get_universities,
+            universities::add_university,
+            universities::rename_university,
+            universities::remove_university,
+            universities::lms_sign_in,
+            universities::lms_sign_out,
+            universities::lms_check_session,
+            universities::lms_fetch_courses,
+            universities::get_courses,
+            universities::set_tracked_courses,
+            tracker::lms_sync,
+            tracker::get_tracker,
+            tracker::set_item_done,
+            tracker::set_item_hidden,
+            tracker::set_item_note,
+            tracker::dismiss_item_change,
+            tracker::dismiss_all_changes,
             settings::get_settings,
             settings::update_settings,
             settings::set_jev_api_key,

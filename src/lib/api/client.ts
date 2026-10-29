@@ -4,15 +4,22 @@ import type {
   AccountInput,
   CommandError,
   ConnectionTestDto,
-  CourseDto,
   DashboardDto,
+  LmsCourseDto,
+  LmsItemDto,
+  LmsPlatform,
+  LmsUniversityDto,
+  LmsUniversityInput,
   Page,
+  ProbeDto,
   ResultDto,
   ResultQuery,
   ResultSort,
   RunDto,
   SettingsDto,
   SettingsInput,
+  TrackerDto,
+  TrackerQuery,
   UniversityDto,
 } from './types';
 
@@ -67,20 +74,49 @@ export const api = {
 
   getCatalog: () => invoke<UniversityDto[]>('get_catalog', {}),
 
-  addUniversity: (name: string) => invoke<UniversityDto>('add_university', { name }),
+  getUniversities: () => invoke<LmsUniversityDto[]>('get_universities', {}),
 
-  updateUniversity: (id: number, name: string) =>
-    invoke<UniversityDto>('update_university', { id, name }),
+  lmsProbe: (url: string, platform: LmsPlatform) =>
+    invoke<ProbeDto>('lms_probe', { url, platform }),
+
+  addUniversity: (input: LmsUniversityInput) =>
+    invoke<LmsUniversityDto>('add_university', { input }),
+
+  renameUniversity: (id: number, name: string) =>
+    invoke<LmsUniversityDto>('rename_university', { id, name }),
 
   removeUniversity: (id: number) => invoke<void>('remove_university', { id }),
 
-  addCourse: (universityId: number, name: string, aliases: string[]) =>
-    invoke<CourseDto>('add_course', { universityId, name, aliases }),
+  lmsSignIn: (id: number) => invoke<LmsUniversityDto>('lms_sign_in', { id }),
 
-  updateCourse: (id: number, name: string, aliases: string[]) =>
-    invoke<CourseDto>('update_course', { id, name, aliases }),
+  lmsSignOut: (id: number) => invoke<LmsUniversityDto>('lms_sign_out', { id }),
 
-  removeCourse: (id: number) => invoke<void>('remove_course', { id }),
+  lmsCheckSession: (id: number) => invoke<LmsUniversityDto>('lms_check_session', { id }),
+
+  lmsFetchCourses: (id: number) => invoke<LmsCourseDto[]>('lms_fetch_courses', { id }),
+
+  getCourses: (universityId: number) => invoke<LmsCourseDto[]>('get_courses', { universityId }),
+
+  setTrackedCourses: (universityId: number, courseIds: number[]) =>
+    invoke<LmsCourseDto[]>('set_tracked_courses', { universityId, courseIds }),
+
+  lmsSync: (universityId: number | null) => invoke<void>('lms_sync', { universityId }),
+
+  getTracker: (query: TrackerQuery) => invoke<TrackerDto>('get_tracker', { query }),
+
+  setItemDone: (id: number, value: boolean) =>
+    invoke<LmsItemDto>('set_item_done', { id, value }),
+
+  setItemHidden: (id: number, value: boolean) =>
+    invoke<LmsItemDto>('set_item_hidden', { id, value }),
+
+  setItemNote: (id: number, note: string | null) =>
+    invoke<LmsItemDto>('set_item_note', { id, note }),
+
+  dismissItemChange: (id: number) => invoke<LmsItemDto>('dismiss_item_change', { id }),
+
+  dismissAllChanges: (universityId: number | null) =>
+    invoke<number>('dismiss_all_changes', { universityId }),
 
   getSettings: () => invoke<SettingsDto>('get_settings', {}),
 

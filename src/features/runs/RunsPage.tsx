@@ -20,7 +20,7 @@ export default function RunsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold text-neutral-900">Runs</h1>
+      <h1 className="text-2xl font-semibold text-neutral-900">Email runs</h1>
 
       {runsQuery.isError ? <ErrorMessage error={toCommandError(runsQuery.error)} /> : null}
 

@@ -1,4 +1,4 @@
-/** Small inline SVG icons shared by the accounts, catalog and settings screens. */
+/** Small inline SVG icons shared by the accounts, universities and settings screens. */
 
 export function TrashIcon() {
   return (

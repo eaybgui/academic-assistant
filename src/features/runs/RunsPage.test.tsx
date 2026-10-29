@@ -57,6 +57,11 @@ beforeEach(() => {
 });
 
 describe('RunsPage', () => {
+  it('is titled like its navigation entry', async () => {
+    renderPage();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Email runs' })).toBeInTheDocument();
+  });
+
   it('renders the run history with status and counters', async () => {
     renderPage();
 

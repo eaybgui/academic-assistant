@@ -8,6 +8,10 @@ use std::sync::Mutex;
 use academic_core::domain::SECRET_SERVICE;
 use academic_core::ports::{SecretError, SecretStore};
 
+/// Largest secret the Windows Credential Manager accepts: its
+/// `CRED_MAX_CREDENTIAL_BLOB_SIZE`, in bytes.
+pub const MAX_SECRET_BYTES: usize = 2560;
+
 /// Secret store backed by the OS credential store. On Windows this is the Credential
 /// Manager: each key is stored as one generic credential with service `SECRET_SERVICE`
 /// and target/user set to the key itself.
