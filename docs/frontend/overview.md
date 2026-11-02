@@ -13,7 +13,7 @@ eslint.config.js             Flat ESLint config (typescript-eslint, react-hooks,
 vitest.setup.ts              Test environment setup (jest-dom matchers, <dialog> polyfill)
 src/
   main.tsx                   App entry: QueryClientProvider + CheckRunProvider + SyncProvider + HashRouter
-  App.tsx                    Route table
+  App.tsx                    Route table (`/`, `/calendar`, `/announcements`, `/universities`, `/accounts`, `/runs`, `/settings`)
   index.css                  Tailwind entry point (`@import "tailwindcss";`)
   components/
     Layout.tsx                Collapsible sidebar navigation + content outlet
@@ -25,7 +25,8 @@ src/
   features/
     check-run/                App-level "Check now" state (CheckRunProvider, useCheckRun)
     sync/                     App-level LMS sync state (SyncProvider, useSync)
-    tracker/                  Dashboard (`/`): LMS items grouped by time or status, details, banners
+    tracker/                  Dashboard (`/`): LMS items and personal tasks grouped by time or status, details, banners
+    calendar/                 Calendar (`/calendar`): month grid with a dot per entry, selected-day list, add a personal task
     universities/             Universities page, add wizard, course selection
     announcements/            Announcements (`/announcements`): email results with the Check now header
     results/                  Result row, filters modal (used by Announcements)
@@ -42,7 +43,8 @@ src/
 
 The shared shell (`Layout`, `Modal`, `ErrorMessage`) and `src/lib/api/` are stable; screens should
 not need to change them. The screens are documented in
-[tracker-universities.md](tracker-universities.md) (Dashboard, Universities, sync state),
+[tracker-universities.md](tracker-universities.md) (Dashboard, Calendar and personal tasks,
+Universities, sync state),
 [dashboard-results-runs.md](dashboard-results-runs.md) (Announcements, Email runs, result
 components) and [accounts-catalog-settings.md](accounts-catalog-settings.md) (Email accounts and
 Settings).
@@ -57,7 +59,9 @@ to the form modals (`AccountFormModal`, `RenameUniversityModal`, `AddUniversityM
 re-initialized whenever a different item (or "add") is opened. On open, focus moves to the first
 focusable element of the body (falling back to the dialog itself). The dialog closes on Escape, the
 close button, or a backdrop click - the latter only when both `mousedown` and `mouseup` land on the
-backdrop, so dragging out of a text field does not dismiss it.
+backdrop, so dragging out of a text field does not dismiss it. Escape does not bubble past the
+dialog that handled it, so a modal nested in another (the delete confirmation inside the personal
+task details) closes alone and leaves its parent open.
 
 The dialog carries `m-auto`: Tailwind's preflight sets `margin: 0` on every element, which cancels
 the browser's `margin: auto` that centers a modal `<dialog>`. It is also capped at
@@ -73,8 +77,8 @@ sidebar to icons only (`w-16`) and hides the app title. When collapsed, each lin
 accessible name (the label is rendered `sr-only`) and a `title` tooltip, and the Announcements
 unseen badge becomes a small red dot on the icon with an `sr-only` "N unseen" text. The preference is
 stored in `localStorage` under `academic-assistant.sidebar-collapsed`; reads and writes are wrapped
-in try/catch and fall back to expanded. The items are Dashboard, Announcements, Universities, Email
-accounts, Email runs and Settings; Announcements is disabled while no course is tracked (see
+in try/catch and fall back to expanded. The items are Dashboard (`/`), Calendar (`/calendar`),
+Announcements, Universities, Email accounts, Email runs and Settings; Announcements is disabled while no course is tracked (see
 [tracker-universities.md](tracker-universities.md)).
 
 ## Check-run state (`src/features/check-run/`)
@@ -142,7 +146,8 @@ Both return `Promise<UnlistenFn>`. Call the resolved unlisten function on cleanu
 
 `queryKeys` centralizes the React Query keys used across the app (`dashboard(sort)`,
 `results(query)`, `runs(limit)`, `accounts`, `catalog`, `universities`, `settings`,
-`tracker(query)`, `courses(universityId)`). Always use these factories
+`tracker(query)`, `courses(universityId)`; the personal task mutations invalidate the `['tracker']`
+prefix). Always use these factories
 instead of writing array literals inline, so a query and its invalidations can never drift apart
 because of a typo.
 

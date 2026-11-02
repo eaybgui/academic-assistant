@@ -3,9 +3,10 @@
 This guide describes what you can do in Academic Assistant and what happens to your data. If
 you have not installed or configured anything yet, start with [setup.md](setup.md).
 
-Academic Assistant has two parts. The **Dashboard** tracks your deliverables, exams and course
-dates from your universities' learning platforms (Moodle and Blackboard). **Announcements**
-analyzes university email with an AI provider and is optional.
+Academic Assistant has three parts. The **Dashboard** tracks your deliverables, exams and course
+dates from your universities' learning platforms (Moodle and Blackboard), together with your own
+tasks. The **Calendar** shows all of it by day. **Announcements** analyzes university email with
+an AI provider and is optional.
 
 ## First-time checklist
 
@@ -22,7 +23,7 @@ analyzes university email with an AI provider and is optional.
 ## The screens
 
 The left sidebar (collapse it to icons with the arrow button at its top; the app remembers your
-choice) links to Dashboard, Announcements (with a badge showing the number of unseen results),
+choice) links to Dashboard, Calendar, Announcements (with a badge showing the number of unseen results),
 Universities, Email accounts, Email runs and Settings. Announcements is greyed out, with the hint
 "Add a university and track courses first", until at least one course is tracked.
 
@@ -35,8 +36,9 @@ Shows the deliverables, exams and course events of the courses you track.
   the progress, for example `Universidad Demo: Fetching items`. Next to it, "Last synced" shows
   when the data was last refreshed, for example "Last synced today at 10:30". You can navigate elsewhere while a sync runs.
 - **Group by**: **Time** (Overdue, Today, This week, Next week, Later, No date; weeks start on
-  Monday) or **Status** (Pending, with overdue items first, Submitted and Graded). Finished items
-  are collected in a collapsed **Completed** section (**Past events** when grouped by status).
+  Monday) or **Status** (Pending, with overdue items first, Submitted, Graded and Done). Finished
+  items are collected in a collapsed **Completed** section (**Past events** when grouped by
+  status).
   Inside each group items are sorted by due date, undated ones last. The app remembers your
   choice. Every section is a drop-down: click its title to collapse or expand it (all start
   open except Completed / Past events).
@@ -64,8 +66,47 @@ Shows the deliverables, exams and course events of the courses you track.
   expired (after signing in, that university syncs again); after each sync a summary such as
   "Sync finished: 3 new, 1 date changed, 1 removed", with any university that failed listed with
   its error.
+- **Add task**: on the **All** tab, the button next to **Sync** creates a personal task (see
+  below). Your personal tasks appear on the All tab only, not on a university's tab.
 - With no university the Dashboard offers **Add your first university**; with universities but no
-  tracked course it offers **Choose courses**.
+  tracked course it offers **Choose courses**. In both cases the Dashboard shows no personal
+  tasks and no **Add task**; use the Calendar, which always works.
+
+#### Personal tasks
+
+A personal task is something you plan yourself, such as "Go to the doctor" or "Wash the car". It
+has a title, a day (no time, and it does not repeat) and an optional note of up to 2000
+characters.
+
+- **Add** one from the Dashboard (**Add task**: a title, a day that starts as today, and an
+  optional note) or from the Calendar (type a title under the selected day and press **Add**).
+  The title is required and can have up to 200 characters.
+- **Row**: shows a checkbox to mark it done, the title, a pencil mark when it has a note, the word
+  "Personal" in place of a course, a status (**Pending**, **Overdue** or **Done**) and the day.
+  A task for today is Pending all day long; a task for an earlier day that is not done is
+  Overdue. Done tasks move to the collapsed **Completed** section (or the **Done** group when
+  grouped by status).
+- **Edit**: click the title to change the title, the day or the note and press **Save**. In the
+  same window, **Mark as done** / **Mark as not done** and **Delete** (you are asked to confirm,
+  and a deleted task cannot be recovered).
+- Personal tasks are stored only on your PC and a sync never touches them.
+
+### Calendar
+
+A month view of everything that has a day: the items of all your universities and your personal
+tasks, all at once. It opens on the current month with today selected.
+
+- **Header**: **‹** and **›** move one month back and forth (across the year), and **Today**
+  returns to the current month and selects today. Weeks start on Monday.
+- **Dots**: each day shows one dot per entry. Red is overdue, blue pending, green submitted or
+  graded, grey a past event, violet a personal task (faded when done). Hover a dot to see its
+  title. When a day has more than 6 entries, the first 6 dots are shown and then "+N". Hidden and
+  removed items, and items without a date, are not shown.
+- **Selected day**: click a day to select it (days of the neighbouring months can be selected
+  too). Underneath, the list shows everything on that day, with the same checkbox and details as
+  on the Dashboard, and a box "Add a task for this day" with an **Add** button.
+- The Calendar works even when you have not added a university: you can use it only for personal
+  tasks.
 
 ### Universities
 
@@ -223,7 +264,7 @@ answers with something unusable is marked failed and skipped; the rest continue.
 
 - **Stored on your PC** (SQLite): your universities (name, platform, address, sign-in state),
   courses and tracked items (title, due date, status, grade, link, and your own done/hidden/note
-  settings), email accounts (without secrets), settings, run history, message identifiers and a
+  settings), your personal tasks (title, day, note, done), email accounts (without secrets), settings, run history, message identifiers and a
   content hash for deduplication, and for each relevant message its subject, sender, category,
   priority, dates, flags, chosen course and university, and the model used. **Email bodies are
   never stored.**

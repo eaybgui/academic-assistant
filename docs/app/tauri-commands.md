@@ -16,17 +16,17 @@ tracker). The one piece of platform glue it owns is the LMS sign-in window (`lms
 | `observer.rs` | `TauriRunObserver`: emits `run:progress` / `run:finished`. |
 | `lms_observer.rs` | `TauriLmsSyncObserver`: emits `lms-sync:progress` / `lms-sync:finished`. Logs only university ids, stages and counts. |
 | `lms_auth/` | Embedded sign-in windows: credential capture (`capture.rs` pure helpers, `window.rs` window driver) and `TauriLmsAuthenticator` (silent renewal). See [../infra/lms.md](../infra/lms.md). |
-| `dto/` | Input/output DTOs (camelCase JSON) and conversions from the domain types (`accounts`, `catalog`, `lms`, `results`, `runs`, `settings`). |
+| `dto/` | Input/output DTOs (camelCase JSON) and conversions from the domain types (`accounts`, `catalog`, `lms`, `results`, `runs`, `settings`). The personal task DTOs live in `lms`. |
 | `error.rs` | `CommandError` and the `From` conversions from repository/run/provider/secret errors. |
 | `validation.rs` | Trimming and validation of every command input. |
 | `account_status.rs` | Credentials-configured flag, last-sync aggregate and dashboard attention list. |
-| `commands/{runs,results,accounts,catalog,settings,universities,tracker}.rs` | The commands themselves. `universities` holds the sign-in, session and course commands; `tracker` holds sync, the tracker list and the personal item fields. |
+| `commands/{runs,results,accounts,catalog,settings,universities,tracker,personal}.rs` | The commands themselves. `universities` holds the sign-in, session and course commands; `tracker` holds sync, the tracker list and the personal item fields; `personal` holds the personal task commands. |
 | `test_support.rs` | (tests only) `AppState` over an in-memory database with fake adapters. |
 
 ## Composition (`AppState`)
 
 `AppState::new(db, Collaborators)` receives the single `Arc<Database>` (it implements
-all ten repository ports) and clones it into every repository field, into the
+all eleven repository ports) and clones it into every repository field, into the
 `Repositories` bundle of the `CheckRunner` and into the `LmsRepositories` bundle of the
 `LmsSyncRunner`. `Collaborators` carries the secret store, the email provider factory, the model
 provider, the shared `reqwest::Client`, the run observer, the clock, and the LMS client factory,
@@ -96,16 +96,36 @@ Tauri maps them to the snake_case Rust parameters.
 | `get_courses` | `universityId` | `LmsCourseDto[]` | The stored courses, without contacting the platform. |
 | `set_tracked_courses` | `universityId`, `courseIds` | `LmsCourseDto[]` | Exactly these courses become tracked and every course of the university becomes reviewed, in one transaction; an id that does not belong to the university is `not_found` and nothing changes. |
 | `lms_sync` | `universityId` (number or `null` for all) | nothing | Takes the sync lock and selects the signed-in universities, then runs the sync in the background (supervised, see below). `conflict` if a sync is running, `validation` "Sign in to a university first" if there is nothing to sync. Progress and results arrive as `lms-sync:*` events. Logs `lms sync started`. |
-| `get_tracker` | `query` (`universityId`, `includeHidden`, `includeRemoved`) | `TrackerDto` | Items of tracked, available courses (hidden and removed ones only when asked), ordered by due date (undated last), with the effective status computed now, plus the universities and whether a sync is running. |
+| `get_tracker` | `query` (`universityId`, `includeHidden`, `includeRemoved`) | `TrackerDto` | Items of tracked, available courses (hidden and removed ones only when asked), ordered by due date (undated last), with the effective status computed now, plus the universities, whether a sync is running and `personalTasks`: every personal task, ordered by day then id, whatever the query (university, hidden, removed). |
 | `set_item_done` / `set_item_hidden` | `id`, `value` | `LmsItemDto` | Personal flags; never overwritten by a sync. Unknown id is `not_found`. |
 | `set_item_note` | `id`, `note` (string or `null`) | `LmsItemDto` | Trimmed; blank becomes none; more than 2000 characters is `validation` "Notes can have at most 2000 characters". |
 | `dismiss_item_change` | `id` | `LmsItemDto` | Clears the "new" / "date changed" badge. |
 | `dismiss_all_changes` | `universityId` (number or `null`) | rows updated | Clears every badge of the university, or of all. |
+| `create_personal_task` | `input` (`title`, `date`, `note`) | `PersonalTaskDto` | Validates the input (below) and inserts a task that is not done. |
+| `update_personal_task` | `id`, `input` | `PersonalTaskDto` | Same validation; replaces title, day and note and keeps `done`. Unknown id is `not_found`. |
+| `set_personal_task_done` | `id`, `value` | `PersonalTaskDto` | Unknown id is `not_found`. |
+| `delete_personal_task` | `id` | nothing | Unknown id is `not_found`. |
 | `get_settings` | none | `SettingsDto` | `jevApiKeyConfigured` reflects the secret store; the key is never returned. |
 | `update_settings` | `input` | `SettingsDto` | URLs must be `http(s)://`, model names non-empty, blocked senders trimmed, blank client id becomes `null`. |
 | `set_jev_api_key` | `key` | nothing | Trimmed, non-empty. |
 | `clear_jev_api_key` | none | nothing | Idempotent. |
 | `test_ai_provider` | none | `ConnectionTestDto` | Builds the configured model, asks one Noul question (`greeting`: "This text is a greeting.") on state `"Hello"`; ok when an answer for it is returned. |
+
+### Personal task input
+
+`validation::personal_task` turns a `PersonalTaskInput` (`{ title, date, note }`, all strings; `note`
+may be `null`) into a draft, checking in this order:
+
+1. **Title**: trimmed and required (`validation` "Enter a title", so a whitespace-only title is
+   rejected here, not in the browser); more than 200 characters (counted as characters, not bytes)
+   is "Titles can have at most 200 characters".
+2. **Day**: must parse as `%Y-%m-%d` (`validation` "Enter a valid day"; "2026-02-30" and
+   "05/11/2026" are refused). It is kept as a calendar date (`NaiveDate`) and never converted to an
+   instant.
+3. **Note**: the same `item_note` rule as platform items: trimmed, blank becomes none, more than
+   2000 characters is "Notes can have at most 2000 characters".
+
+Nothing in these commands writes `lms_items`, and none logs a title or a note.
 
 ### Dashboard attention
 
@@ -175,7 +195,9 @@ LMS DTOs (`dto/lms.rs`): `LmsUniversityDto` (`id`, `name`, `platform`, `baseUrl`
 `LmsCourseDto` (`id`, `universityId`, `name`, `shortName`, `url`, `tracked`, `available`, `isNew`
 = not yet reviewed), `LmsItemDto` (ids, `universityName`, `courseName`, `courseShortName`,
 `externalId`, `kind`, `title`, `dueAt`, `url`, `status`, `grade { display, score, max }`, `change`,
-`removedAt`, `done`, `hidden`, `note`) and `TrackerDto` (`items`, `universities`, `syncRunning`).
+`removedAt`, `done`, `hidden`, `note`), `PersonalTaskDto` (`id`, `title`, `date`, `note`, `done`; `date`
+is a `YYYY-MM-DD` string) with `PersonalTaskInput` (`title`, `date`, `note`), and `TrackerDto` (`items`,
+`universities`, `personalTasks`, `syncRunning`).
 `change` is tagged with `kind`: `{ "kind": "new" }` or
 `{ "kind": "due_changed", "previousDueAt": ... }`. `status` is one of `pending`, `overdue`,
 `submitted`, `graded`, `past_event`. The stored credential (token or cookies) never appears in

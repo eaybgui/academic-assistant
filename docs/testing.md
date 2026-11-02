@@ -60,11 +60,13 @@ cargo test -p academic-core --lib normalize       # a subset by name filter
 ## Infra (`crates/infra`)
 
 - **Database** (`db_accounts`, `db_catalog`, `db_migrations`, `db_processed`, `db_results`,
-  `db_runs`, `db_settings`, `db_sync`, `db_lms`, `db_items`): repositories against
+  `db_runs`, `db_settings`, `db_sync`, `db_lms`, `db_items`, `db_personal`): repositories against
   `Database::open_in_memory()`, including sort semantics, unicode search, cascade deletes,
   migration idempotence and the upgrade of a Phase 1 database by migration 2 (results and
   accounts survive, their university and course links become empty), the university, course and
-  item repositories (tracked/available filtering, transactional course selection and sync). The shared
+  item repositories (tracked/available filtering, transactional course selection and sync), the personal
+  task repository (create, update, done, delete, ordering by day then id, accented titles, `NotFound`)
+  and migration 4 applied on top of an existing database. The shared
   helpers in `tests/support/mod.rs` are pulled in with `#[path = "support/mod.rs"] mod support;`.
 - **IMAP** (`imap_parse`, `imap_cursor`): message parsing from `.eml` fixtures and UID batch
   planning, both without a server. Fixtures in `crates/infra/tests/fixtures/eml/` are fictional
@@ -100,7 +102,10 @@ backend is needed. They cover the API client (exact command names and argument o
 check-run and sync providers, the layout (sidebar, disabled Announcements link) and modal, result
 row rendering and actions, formatting helpers, and each screen's behavior: the tracker dashboard
 (states, tabs, persistence, time and status grouping around week boundaries, item rows, details and
-note editor, banners), the Universities page (add wizard, course selection, Edit courses with its
+note editor, banners), personal tasks and the Calendar (grouping on day boundaries, the month grid
+including a month that starts on a Sunday and February, dot colours and tooltips, the "+N" overflow,
+adding from the day list and from the dashboard, personal tasks only on the All tab, edit, done and
+delete with confirmation), the Universities page (add wizard, course selection, Edit courses with its
 fallback, card actions), Announcements (header, filters and sort), account form validation and
 payloads, and settings including the write-only jev key.
 
@@ -290,6 +295,68 @@ migrated database.
 
 When this checklist passes, `phase-2-lms-tracker` is merged into `main`. Run the live tests and
 the capture tool (above) only if a platform behaves unexpectedly.
+
+## Calendar and personal tasks acceptance checklist (manual)
+
+For the user, in the running app (`npm run tauri dev`). The examples are invented: use the titles
+below or any others. Record date, result and observations for each line. The release adds only a
+table (migration 4), so the existing data stays as it was; copying `academic-assistant.db` before
+the first run is still a good habit.
+
+1. **Calendar opens.** The sidebar lists **Calendar** right after **Dashboard**. Opening it shows
+   the current month with today outlined and selected, and under the grid the day list headed with
+   today's long date (for example "Tuesday 10 November"). Weeks start on Monday.
+2. **Add from the calendar day list.** Select a day later than today. In "Add a task for this day"
+   type `Go to the doctor` and press **Add**: the box empties, the row appears in the list with
+   "Personal" and a **Pending** pill, and that day gets a violet dot. Pressing **Add** with an empty
+   box, or with only spaces, shows "Enter a title" under the box and adds nothing. A title of 201
+   characters shows "Titles can have at most 200 characters" and keeps the text.
+3. **Add from the dashboard.** On the Dashboard, **All** tab, press **Add task**: the form has
+   Title, Day (today by default) and Note. Add `Wash the car` for today and save: it appears in
+   the **Today** group (status **Pending**) and as a violet dot on today's calendar cell. With only
+   spaces as the title, **Save** shows "Enter a title" inside the form and the form stays open
+   with what you typed. Switch to a university tab: **Add task** is not offered there.
+4. **Today is pending, yesterday is overdue.** Add `Call the bank` for today: it is **Pending**,
+   never **Overdue**, at any hour of the day. Add `Return the library book` for yesterday: it is
+   **Overdue** and sits in the **Overdue** group. On the calendar, yesterday's dot is violet (the
+   Overdue status only colours platform items red).
+5. **Edit title, day and note.** Open `Go to the doctor` (click its title on the dashboard or in the
+   day list). Change the title to `Go to the dentist`, the day to the next day and add the note
+   `Room 4`; **Save**. The row shows the new title and a pencil mark, and the dot moves to the new
+   day. Edit again with an accented title such as `Álgebra: revisión` and check it comes back
+   unchanged. A note over 2000 characters shows "Notes can have at most 2000 characters" and keeps
+   your text.
+6. **Mark done from the row and from the calendar.** Tick the checkbox of `Wash the car` on the
+   Dashboard: it moves to the collapsed **Completed** section (**Done** group when grouped by
+   status), its pill reads **Done** and its calendar dot turns a faded violet. On the Calendar,
+   select that day and untick the checkbox in the day list: it is **Pending** again on the
+   Dashboard. In the details, **Mark as done** / **Mark as not done** do the same.
+7. **Delete: cancel and confirm.** Open a task and press **Delete**: "Delete task?" appears.
+   **Cancel** (and also the Escape key) closes only that question: the details stay open and the
+   task is still there. Press **Delete** again and confirm: the details close, the task is gone
+   from the Dashboard and the Calendar, and the details do not reopen.
+8. **Dot colours and tooltips.** With platform items synced, find one of each kind on the
+   calendar: red overdue, blue pending, green submitted or graded, grey past event; personal tasks
+   are violet and faded when done. The legend under the grid shows the same five colours. Hover a
+   dot: its full title appears, including for a very long title. An item due late in the evening
+   (for example 23:30 local time) sits on that local day. Items that are hidden or removed, or
+   that have no due date, are not on the calendar.
+9. **A crowded day.** On one day add eight tasks (`Task 1` to `Task 8`). The cell shows six dots
+   and "+2"; the list under the grid still shows all eight.
+10. **Month navigation across the year.** Press **›** repeatedly past December: the heading goes
+    from "December 2026" to "January 2027" (and ‹ goes back across the year). November 2026 shows
+    6 weeks starting on Monday 26 October; February 2027 shows exactly 4 weeks. The selected day
+    stays selected while you change months. Click a muted day of a neighbouring month: it becomes
+    selected without changing the month. **Today** returns to the current month and selects today.
+11. **Personal tasks only on the All tab.** The Dashboard **All** tab lists the personal tasks (each
+    with "Personal" in place of a course); every university tab lists only platform items.
+12. **The calendar works with no university.** With no university added (a fresh install or a
+    copy of the data with none; do not delete your real ones for this), the Dashboard shows "Track
+    your deliverables" with no personal tasks and no **Add task**, while the Calendar still opens and
+    lets you add, edit, tick off and delete tasks.
+13. **Syncing and restarting.** Press **Sync**, then close and reopen the app: every personal task
+    is as you left it, and nothing was added to or removed from the list by the sync.
+14. **Logs.** Open `%APPDATA%\dev.eaybar.academic-assistant\logs`: no task titles or notes.
 
 ## Phase 2 · M1 sign-in gate (manual, real accounts; historical)
 

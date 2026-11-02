@@ -1,13 +1,14 @@
-# Dashboard (tracker), Universities and sync state
+# Dashboard (tracker), Calendar, Universities and sync state
 
-The Phase 2 screens built on the API client from `src/lib/api/` (see [overview.md](overview.md)):
-the tracker **Dashboard** (`/`), the **Universities** page (`/universities`) with its add wizard and
+The Phase 2 and 3 screens built on the API client from `src/lib/api/` (see [overview.md](overview.md)):
+the tracker **Dashboard** (`/`), the **Calendar** (`/calendar`) with the user's personal tasks, the
+**Universities** page (`/universities`) with its add wizard and
 course selection, and the app-level sync state. The backend side is documented in
 [../infra/lms.md](../infra/lms.md); the commands in
 [../app/tauri-commands.md](../app/tauri-commands.md). Email lives in a
 separate section, Announcements ([dashboard-results-runs.md](dashboard-results-runs.md)).
 
-Examples are invented (`Universidad Demo`, `Álgebra Lineal`).
+Examples are invented (`Universidad Demo`, `Álgebra Lineal`, "Go to the doctor").
 
 ## Sync state (`src/features/sync/`)
 
@@ -41,32 +42,50 @@ previous data while a new query loads. What it renders depends on the data:
 - Otherwise the dashboard:
   - Header with **Sync** (the selected university, or all on the "All" tab; shows progress while
     running) and "Last synced <day> at <time>" (the latest sync of the universities in view). A failed
-    `startSync` is shown inline.
+    `startSync` is shown inline. On the **All** tab only, an **Add task** button next to Sync opens
+    the personal task form (see "Personal tasks" below).
   - Tabs: **All** plus one per university. Tab and grouping are stored in `localStorage`
     (`academic-assistant.tracker-tab`, `academic-assistant.tracker-group`) through
     `usePersistentState`, with every access in try/catch and a validated fallback. A stored tab
     whose university no longer exists falls back to All.
   - **Group by: Time | Status**.
   - **Show hidden** and **Show removed** checkboxes (off by default; they change the query).
-  - `SyncBanners`, then `ItemGroups`, then the details modal.
+  - `SyncBanners`, then `ItemGroups`, then the details modal (`EntryDetailsModal`) and the
+    **Add task** modal.
+
+The list works on **entries** (`entries.ts`), a discriminated union: `{ kind: 'platform', key,
+item }` or `{ kind: 'personal', key, task }`, with keys `platform-<id>` and `personal-<id>`.
+`TrackerPage` builds them from `TrackerDto.items` and, **only on the All tab**,
+`TrackerDto.personalTasks`; a university tab lists platform items only. `entries.ts` also holds the
+shared helpers `entryStatus`, `entryTitle`, `entryDay`, `isEntryCompleted`, `localDayOf` and the
+sort `compareEntries` (a personal task sorts as local midnight of its day, so it precedes that
+day's deadlines). The two empty states above (no universities, no tracked course) are unchanged
+and show neither personal tasks nor **Add task**; use the Calendar there.
 
 ### Grouping (`grouping.ts`)
 
 Pure functions, tested with a fixed `now`.
 
 - **Time** (local time, weeks start on Monday): Overdue, Today, This week, Next week, Later, No
-  date. Items with no date go to No date; overdue items to Overdue regardless of date. Completed
-  items (submitted, graded, past event) leave these groups and appear in a collapsed
-  **Completed (n)** section. `ItemGroups` renders every group as a `<details>` drop-down (open by
+  date. Items with no date go to No date; overdue items to Overdue regardless of date. A personal
+  task is placed by comparing its calendar day with local dates, never as an instant. Completed
+  entries (submitted, graded, past event, done personal task) leave these groups and appear in a
+  collapsed **Completed (n)** section. `ItemGroups` renders every group as a `<details>` drop-down (open by
   default, state not persisted; the h2 heading sits inside the `<summary>`), so any section can be
   collapsed.
-- **Status**: Pending (overdue first), Submitted, Graded; past events in a collapsed **Past events
-  (n)** section.
-- Inside each group, items are sorted by due date ascending, undated last, then by title with a
-  locale-aware collator, then id.
+- **Status**: Pending (overdue first, personal tasks included), Submitted, Graded, **Done** (done
+  personal tasks, a visible group after Graded); past events in a collapsed **Past events (n)**
+  section, which stays platform-only.
+- `groupByTime(entries, now)` and `groupByStatus(entries, now)` both take `now`, and "today" is
+  its local date, so the tests pin the day boundaries.
+- Inside each group, entries are sorted by date ascending, undated last, then by title with a
+  locale-aware collator, then key.
 
 ### Rows and details
 
+- `EntryRow` renders an entry with `ItemRow` (platform) or `PersonalTaskRow` (personal). Both use
+  the class names in `rowStyles.ts` and the pencil mark in `NoteIndicator.tsx`, so the two look
+  alike.
 - `ItemRow`: university chip (only on the All tab), title (opens the details), a note indicator,
   course short name (or full name) and kind, the status pill (`StatusPill`: Pending, Overdue,
   Submitted, Graded, Past), the grade text, the due date and time or "No date", the change badge
@@ -82,6 +101,64 @@ Pure functions, tested with a fixed `now`.
   **Mark as done** / **Mark as not done** (same rule as the row checkbox).
 - `useItemMutations` wraps `set_item_done`, `set_item_hidden`, `set_item_note` and
   `dismiss_item_change`; each invalidates the `['tracker']` prefix.
+- `EntryDetailsModal` opens `ItemDetailsModal` for a platform entry and `PersonalTaskModal` for a
+  personal one. `useOpenEntry` remembers the open entry by key and returns the live entry, so
+  edits show while it is open; once fresh data no longer contains the key (the task was deleted)
+  the key is forgotten and the details never reopen.
+
+### Personal tasks (`PersonalTaskRow`, `PersonalTaskModal`)
+
+A personal task is a one-off to-do for one day (title, day `YYYY-MM-DD`, optional note) that the
+user creates. It lives in its own table (`personal_tasks`), never in `lms_items`, so a sync cannot
+touch it. It has no hidden state and no badges.
+
+- `PersonalTaskRow`: the **done** checkbox (`set_personal_task_done`), the title (opens the
+  editor), a note indicator, "Personal" in place of course and kind, a status pill (Pending,
+  Overdue or Done) and the day. A task dated today is **Pending** at any hour; an undone task
+  dated before today is **Overdue** (`personalStatus(task, today)` compares the day text with the
+  local `todayLocalIso()`).
+- `PersonalTaskModal` has two modes, with a form that remounts per task (`key`):
+  - **Add task** (`task = null`): Title, Day (a date input, today by default) and Note; **Save**
+    calls `create_personal_task`. (The calendar adds through its own day box instead.)
+  - **Edit task**: the same fields prefilled, **Save**, **Mark as done** / **Mark as not done**
+    and **Delete**. **Delete** opens a `ConfirmDialog` ("Delete task?"); Cancel keeps the task,
+    Confirm calls `delete_personal_task` and closes the details.
+  - A rejected command (for example a whitespace-only title: "Enter a title") is shown inline
+    with `toCommandError` and `ErrorMessage`, and the form keeps what was typed.
+- `usePersonalTaskMutations` wraps the four commands; each invalidates the `['tracker']` prefix, so
+  the dashboard and the calendar refresh together.
+
+## Calendar (`src/features/calendar/`)
+
+`CalendarPage` (route `/calendar`, sidebar item after Dashboard) shows every dated entry of every
+university plus the personal tasks, without tabs.
+
+- **Data**: the same query as the dashboard's All tab,
+  `getTracker({ universityId: null, includeHidden: false, includeRemoved: false })`, so both screens
+  share one cache entry. Hidden and removed platform items are not shown, nor are items without a
+  due date. A platform item sits on the **local** calendar day of its `dueAt` (an item due at
+  23:30 local time stays on that day whatever the UTC date); an overdue item only on its due day.
+  The page works with no university at all (personal tasks only).
+- **Header**: **‹** (Previous month), the month and year, **›** (Next month) and **Today**. Months
+  roll over the year (› from December 2026 shows January 2027). **Today** shows the current month
+  and selects today. The page opens on the current month with today selected.
+- **Grid** (`CalendarGrid`, `monthGrid.ts`): Monday to Sunday, 4 to 6 weeks (`monthGrid(year,
+  month)`: November 2026 starts on a Sunday, so it shows 6 weeks from Monday 26 October; February
+  2027 starts on a Monday and shows exactly 4). Days of neighbouring months are muted, today is
+  outlined and the selected day is highlighted. Each day is a button named after its long date,
+  with one dot per entry in the order of `compareEntries`.
+- **Dots** (`dotTone`): red overdue, blue pending, green submitted or graded, grey past event,
+  violet personal (faded violet when done). Overdue applies to platform items only: a personal
+  task stays violet and shows "Overdue" in its row. Hovering a dot shows the entry's full title
+  (`title` and `aria-label`). A day shows at most `MAX_DOTS` = 6 dots, then "+N" for the rest;
+  the day list still shows every entry. A legend under the grid names the colours.
+- **Day list** (`DayList`): the heading of the selected day (for example "Tuesday 10 November"),
+  its rows (the same `EntryRow` as the dashboard, with the done checkbox; "Nothing on this day."
+  when empty) and an "Add a task for this day" box with **Add**, which creates a personal task
+  for that day and clears the box. A rejected command shows inline and keeps the text. Clicking a
+  row opens the same `EntryDetailsModal` as the dashboard.
+- **Selection**: moving to another month keeps the selected day (the list keeps showing it), and
+  clicking a muted day of a neighbouring month selects it without changing the viewed month.
 
 ### Banners (`SyncBanners.tsx`)
 
