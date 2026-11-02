@@ -5,10 +5,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import TrackerPage from './TrackerPage';
 import type { SyncState } from '../sync/useSync';
-import type { LmsItemDto, LmsUniversityDto, TrackerDto } from '../../lib/api/types';
+import { todayLocalIso } from '../../components/results/format';
+import type {
+  LmsItemDto,
+  LmsUniversityDto,
+  PersonalTaskDto,
+  TrackerDto,
+} from '../../lib/api/types';
 
-const { getTracker, lmsSignIn, dismissAllChanges, sync } = vi.hoisted(() => ({
+const { getTracker, deletePersonalTask, lmsSignIn, dismissAllChanges, sync } = vi.hoisted(() => ({
   getTracker: vi.fn(),
+  deletePersonalTask: vi.fn(),
   lmsSignIn: vi.fn(),
   dismissAllChanges: vi.fn(),
   sync: {} as { state: SyncState },
@@ -20,6 +27,7 @@ vi.mock('../../lib/api/client', async (importOriginal) => {
     ...actual,
     api: {
       getTracker,
+      deletePersonalTask,
       lmsSignIn,
       dismissAllChanges,
       setItemDone: vi.fn(),
@@ -75,6 +83,14 @@ function item(overrides: Partial<LmsItemDto> = {}): LmsItemDto {
     ...overrides,
   };
 }
+
+const DOCTOR: PersonalTaskDto = {
+  id: 5,
+  title: 'Go to the doctor',
+  date: '2099-01-15',
+  note: null,
+  done: false,
+};
 
 function daysFromNow(days: number): string {
   return new Date(Date.now() + days * 86_400_000).toISOString();
@@ -138,6 +154,7 @@ describe('TrackerPage', () => {
         'Add your university to see assignments, exams and course events in one place.',
       ),
     ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add task' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Add your first university' }));
     expect(await screen.findByText('Universities route')).toBeInTheDocument();
   });
@@ -462,6 +479,65 @@ describe('TrackerPage', () => {
     getTracker.mockResolvedValue(tracker({ items: [{ ...shown, hidden: true }] }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Show hidden' }));
     expect(await screen.findByRole('button', { name: 'Final project' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('lists personal tasks on the All tab only', async () => {
+    getTracker.mockResolvedValue(tracker({ personalTasks: [DOCTOR] }));
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Go to the doctor' })).toBeInTheDocument();
+    expect(screen.getByText('Personal')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'UAH' }));
+    await waitFor(() => expect(getTracker).toHaveBeenLastCalledWith(expect.objectContaining({ universityId: 2 })));
+    expect(screen.queryByRole('button', { name: 'Go to the doctor' })).not.toBeInTheDocument();
+  });
+
+  it('lists a dashboard that only has personal tasks instead of the empty hint', async () => {
+    getTracker.mockResolvedValue(tracker({ personalTasks: [DOCTOR] }));
+    renderPage();
+    await screen.findByRole('button', { name: 'Go to the doctor' });
+    expect(screen.queryByText(/Nothing to show/)).not.toBeInTheDocument();
+  });
+
+  it('offers "Add task" on the All tab only', async () => {
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Add task' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'UAH' }));
+    expect(screen.queryByRole('button', { name: 'Add task' })).not.toBeInTheDocument();
+  });
+
+  it('opens the add dialog with today as the day', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add task' });
+    expect(within(dialog).getByLabelText('Day')).toHaveValue(todayLocalIso());
+  });
+
+  it('opens the editor when a personal task is clicked', async () => {
+    getTracker.mockResolvedValue(tracker({ personalTasks: [DOCTOR] }));
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Go to the doctor' }));
+    expect(await screen.findByRole('dialog', { name: 'Edit task' })).toBeInTheDocument();
+  });
+
+  it('closes the editor after deleting the task and does not reopen it', async () => {
+    getTracker.mockResolvedValue(tracker({ personalTasks: [DOCTOR] }));
+    deletePersonalTask.mockResolvedValue(undefined);
+    renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: 'Go to the doctor' }));
+    const editor = await screen.findByRole('dialog', { name: 'Edit task' });
+
+    getTracker.mockResolvedValue(tracker({ personalTasks: [] }));
+    await userEvent.click(within(editor).getByRole('button', { name: 'Delete' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Delete task?' });
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Go to the doctor' })).not.toBeInTheDocument(),
+    );
+    expect(deletePersonalTask).toHaveBeenCalledWith(5);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
