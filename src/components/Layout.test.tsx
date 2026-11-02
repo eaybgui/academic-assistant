@@ -12,7 +12,7 @@ vi.mock('../lib/api/client', () => ({
 }));
 
 const STORAGE_KEY = 'academic-assistant.sidebar-collapsed';
-const NAV_LABELS = ['Dashboard', 'Announcements', 'Universities', 'Email accounts', 'Email runs', 'Settings'];
+const NAV_LABELS = ['Dashboard', 'Calendar', 'Announcements', 'Universities', 'Email accounts', 'Email runs', 'Settings'];
 const DISABLED_TITLE = 'Add a university and track courses first';
 
 function universityFixture(tracked: number): LmsUniversityDto {
@@ -48,7 +48,7 @@ beforeEach(() => {
 });
 
 describe('Layout', () => {
-  it('renders the six navigation links', () => {
+  it('renders the seven navigation links', () => {
     renderLayout();
 
     for (const label of NAV_LABELS) {
