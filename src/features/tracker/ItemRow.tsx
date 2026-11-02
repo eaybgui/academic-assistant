@@ -2,8 +2,17 @@ import type { LmsItemDto } from '../../lib/api/types';
 import { toCommandError } from '../../lib/api/client';
 import ErrorMessage from '../../components/ErrorMessage';
 import { formatDateTime } from '../../components/results/format';
+import NoteIndicator from './NoteIndicator';
 import StatusPill from './StatusPill';
 import { KIND_LABELS, canMarkDone, changeText, courseLabel } from './labels';
+import {
+  CHECKBOX_CLASS,
+  META_ROW_CLASS,
+  ROW_CLASS,
+  SUBTITLE_CLASS,
+  TITLE_BUTTON_CLASS,
+  TITLE_ROW_CLASS,
+} from './rowStyles';
 import { useItemMutations } from './useItemMutations';
 
 export interface ItemRowProps {
@@ -20,7 +29,7 @@ export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) 
   const failed = [setDone, setHidden, dismissChange].find((mutation) => mutation.isError) ?? null;
 
   return (
-    <li className="rounded-lg border border-neutral-200 bg-white px-4 py-3">
+    <li className={ROW_CLASS}>
       <div className="flex items-start gap-3">
         {canMarkDone(item) ? (
           <input
@@ -29,11 +38,11 @@ export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) 
             checked={item.done}
             disabled={setDone.isPending}
             onChange={(e) => setDone.mutate({ id: item.id, value: e.target.checked })}
-            className="mt-1 h-4 w-4"
+            className={CHECKBOX_CLASS}
           />
         ) : null}
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className={TITLE_ROW_CLASS}>
             {showUniversity ? (
               <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-600">
                 {item.universityName}
@@ -42,20 +51,16 @@ export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) 
             <button
               type="button"
               onClick={() => onOpen(item)}
-              className="truncate text-left text-sm font-semibold text-neutral-900 hover:underline"
+              className={TITLE_BUTTON_CLASS}
             >
               {item.title}
             </button>
-            {item.note ? (
-              <span role="img" aria-label="Has a note" title="Has a note" className="text-xs text-neutral-500">
-                &#9998;
-              </span>
-            ) : null}
+            {item.note ? <NoteIndicator /> : null}
           </div>
-          <p className="mt-0.5 text-xs text-neutral-500">
+          <p className={SUBTITLE_CLASS}>
             {courseLabel(item)} · {KIND_LABELS[item.kind]}
           </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-neutral-600">
+          <div className={META_ROW_CLASS}>
             <StatusPill status={item.status} />
             {item.grade ? <span className="font-medium text-neutral-900">{item.grade.display}</span> : null}
             <span>{item.dueAt ? formatDateTime(item.dueAt) : 'No date'}</span>
