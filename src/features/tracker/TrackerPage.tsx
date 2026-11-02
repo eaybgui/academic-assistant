@@ -7,6 +7,7 @@ import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
 import type { LmsUniversityDto, TrackerQuery } from '../../lib/api/types';
 import { useSync } from '../sync/useSync';
+import { platformEntry } from './entries';
 import ItemDetailsModal from './ItemDetailsModal';
 import ItemGroups, { type GroupBy } from './ItemGroups';
 import SyncBanners from './SyncBanners';
@@ -220,10 +221,12 @@ export default function TrackerPage() {
         </div>
       ) : (
         <ItemGroups
-          items={items}
+          entries={items.map(platformEntry)}
           groupBy={groupBy}
           showUniversity={tab === 'all'}
-          onOpen={(item) => setOpenItemId(item.id)}
+          onOpen={(entry) => {
+            if (entry.kind === 'platform') setOpenItemId(entry.item.id);
+          }}
         />
       )}
       <ItemDetailsModal item={openItem} onClose={() => setOpenItemId(null)} />
