@@ -25,6 +25,17 @@ const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat('en-GB', {
   month: 'short',
 });
 
+const LONG_DAY_FORMATTER = new Intl.DateTimeFormat('en-GB', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+});
+
+const MONTH_YEAR_FORMATTER = new Intl.DateTimeFormat('en-GB', {
+  month: 'long',
+  year: 'numeric',
+});
+
 /** Pads a local date component (month or day) to two digits. */
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -42,6 +53,19 @@ export function toLocalIsoDay(date: Date): string {
  */
 export function todayLocalIso(): string {
   return toLocalIsoDay(new Date());
+}
+
+/** Formats a calendar day (`YYYY-MM-DD`) as e.g. "Tuesday 10 November". */
+export function formatLongDay(isoDay: string): string {
+  const [year, month, day] = isoDay.split('-').map(Number);
+  const parts = LONG_DAY_FORMATTER.formatToParts(new Date(year, month - 1, day));
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${part('weekday')} ${part('day')} ${part('month')}`;
+}
+
+/** Formats a zero-based month of a year as e.g. "November 2026". */
+export function formatMonthYear(year: number, month: number): string {
+  return MONTH_YEAR_FORMATTER.format(new Date(year, month, 1));
 }
 
 /** Formats an ISO timestamp as a date, e.g. "27 Oct 2026". */
