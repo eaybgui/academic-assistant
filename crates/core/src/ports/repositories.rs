@@ -2,9 +2,10 @@ use chrono::{DateTime, NaiveDate, Utc};
 
 use crate::domain::{
     Account, AccountDraft, AccountId, Catalog, Counters, DashboardCounts, LmsCourse, LmsItem,
-    LmsPlatform, LmsUniversity, LoginState, NewResult, Page, ProcessedMessage, RemoteCourse,
-    ResultQuery, RunAccountResult, RunId, RunRecord, RunStatus, RunTrigger, Settings, StoredResult,
-    SyncCursor, SyncOutcome, SyncState, TrackedItem, TrackerQuery, UniversityId,
+    LmsPlatform, LmsUniversity, LoginState, NewResult, Page, PersonalTask, PersonalTaskDraft,
+    ProcessedMessage, RemoteCourse, ResultQuery, RunAccountResult, RunId, RunRecord, RunStatus,
+    RunTrigger, Settings, StoredResult, SyncCursor, SyncOutcome, SyncState, TrackedItem,
+    TrackerQuery, UniversityId,
 };
 use crate::lms::SyncChanges;
 
@@ -191,4 +192,32 @@ pub trait LmsItemRepository: Send + Sync {
     fn dismiss_item_change(&self, id: i64) -> RepoResult<TrackedItem>;
     /// Clears every badge (of one university, or all). Returns rows changed.
     fn dismiss_all_changes(&self, university_id: Option<UniversityId>) -> RepoResult<u64>;
+}
+
+/// Persistence for the user's own tasks (calendar, spec §4).
+pub trait PersonalTaskRepository: Send + Sync {
+    /// Every personal task, ordered by date, then id.
+    fn list_personal_tasks(&self) -> RepoResult<Vec<PersonalTask>>;
+    /// created_at = updated_at = now; done = false.
+    fn insert_personal_task(
+        &self,
+        draft: &PersonalTaskDraft,
+        now: DateTime<Utc>,
+    ) -> RepoResult<PersonalTask>;
+    /// Replaces title, date and note; keeps done. Missing id → `NotFound`.
+    fn update_personal_task(
+        &self,
+        id: i64,
+        draft: &PersonalTaskDraft,
+        now: DateTime<Utc>,
+    ) -> RepoResult<PersonalTask>;
+    /// Missing id → `NotFound`.
+    fn set_personal_task_done(
+        &self,
+        id: i64,
+        done: bool,
+        now: DateTime<Utc>,
+    ) -> RepoResult<PersonalTask>;
+    /// Missing id → `NotFound`.
+    fn delete_personal_task(&self, id: i64) -> RepoResult<()>;
 }
