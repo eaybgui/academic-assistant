@@ -84,6 +84,7 @@ function tracker(overrides: Partial<TrackerDto> = {}): TrackerDto {
   return {
     items: [],
     universities: [UV, UAH],
+    personalTasks: [],
     syncRunning: false,
     ...overrides,
   };

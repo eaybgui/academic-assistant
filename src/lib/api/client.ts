@@ -11,6 +11,8 @@ import type {
   LmsUniversityDto,
   LmsUniversityInput,
   Page,
+  PersonalTaskDto,
+  PersonalTaskInput,
   ProbeDto,
   ResultDto,
   ResultQuery,
@@ -117,6 +119,17 @@ export const api = {
 
   dismissAllChanges: (universityId: number | null) =>
     invoke<number>('dismiss_all_changes', { universityId }),
+
+  createPersonalTask: (input: PersonalTaskInput) =>
+    invoke<PersonalTaskDto>('create_personal_task', { input }),
+
+  updatePersonalTask: (id: number, input: PersonalTaskInput) =>
+    invoke<PersonalTaskDto>('update_personal_task', { id, input }),
+
+  setPersonalTaskDone: (id: number, value: boolean) =>
+    invoke<PersonalTaskDto>('set_personal_task_done', { id, value }),
+
+  deletePersonalTask: (id: number) => invoke<void>('delete_personal_task', { id }),
 
   getSettings: () => invoke<SettingsDto>('get_settings', {}),
 
