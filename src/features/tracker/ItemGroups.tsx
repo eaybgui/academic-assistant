@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
 import type { LmsItemDto } from '../../lib/api/types';
+import { platformEntry, type TrackerEntry } from './entries';
 import ItemRow from './ItemRow';
 import { groupByStatus, groupByTime, type GroupedItems } from './grouping';
 
@@ -15,7 +16,11 @@ export interface ItemGroupsProps {
 /** Items grouped by time or status, with the finished ones in a collapsed section at the end. */
 export default function ItemGroups({ items, groupBy, showUniversity, onOpen }: ItemGroupsProps) {
   const grouped = useMemo<GroupedItems<string>>(
-    () => (groupBy === 'time' ? groupByTime(items, new Date()) : groupByStatus(items)),
+    () => {
+      const entries = items.map(platformEntry);
+      const now = new Date();
+      return groupBy === 'time' ? groupByTime(entries, now) : groupByStatus(entries, now);
+    },
     [items, groupBy],
   );
   const completedLabel = groupBy === 'time' ? 'Completed' : 'Past events';
@@ -28,11 +33,13 @@ export default function ItemGroups({ items, groupBy, showUniversity, onOpen }: I
     );
   }
 
-  const rows = (list: LmsItemDto[]) => (
+  const rows = (list: TrackerEntry[]) => (
     <ul className="flex flex-col gap-2">
-      {list.map((item) => (
-        <ItemRow key={item.id} item={item} showUniversity={showUniversity} onOpen={onOpen} />
-      ))}
+      {list.map((entry) =>
+        entry.kind === 'platform' ? (
+          <ItemRow key={entry.key} item={entry.item} showUniversity={showUniversity} onOpen={onOpen} />
+        ) : null,
+      )}
     </ul>
   );
 

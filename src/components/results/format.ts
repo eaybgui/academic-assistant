@@ -30,14 +30,18 @@ function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
 
+/** A date's local calendar day as `YYYY-MM-DD` (never the UTC day). */
+export function toLocalIsoDay(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
 /**
  * Today's date in the viewer's local timezone, as `YYYY-MM-DD`. Used to compare against a
  * result's `date` (also `YYYY-MM-DD`, no timezone) so "today" reflects the local calendar day
  * rather than UTC's.
  */
 export function todayLocalIso(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  return toLocalIsoDay(new Date());
 }
 
 /** Formats an ISO timestamp as a date, e.g. "27 Oct 2026". */
