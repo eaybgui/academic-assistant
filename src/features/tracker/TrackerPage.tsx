@@ -1,16 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import ErrorMessage from '../../components/ErrorMessage';
-import { formatLastSynced } from '../../components/results/format';
+import { formatLastSynced, todayLocalIso } from '../../components/results/format';
 import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
 import type { LmsUniversityDto, TrackerQuery } from '../../lib/api/types';
 import { useSync } from '../sync/useSync';
-import { platformEntry } from './entries';
-import ItemDetailsModal from './ItemDetailsModal';
+import EntryDetailsModal from './EntryDetailsModal';
+import { personalEntry, platformEntry, type TrackerEntry } from './entries';
 import ItemGroups, { type GroupBy } from './ItemGroups';
+import PersonalTaskModal from './PersonalTaskModal';
 import SyncBanners from './SyncBanners';
+import { useOpenEntry } from './useOpenEntry';
 import { usePersistentState } from './usePersistentState';
 
 const TAB_KEY = 'academic-assistant.tracker-tab';
@@ -24,6 +26,9 @@ const GROUP_LABELS: Record<GroupBy, string> = {
 const CARD = 'rounded-lg border border-neutral-200 bg-white p-6';
 const PRIMARY_BUTTON =
   'rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50';
+
+const SECONDARY_BUTTON =
+  'rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50';
 
 function isTabValue(value: string): value is string {
   return value === 'all' || /^\d+$/.test(value);
@@ -46,7 +51,7 @@ export default function TrackerPage() {
   const [groupBy, setGroupBy] = usePersistentState<GroupBy>(GROUP_KEY, 'time', GROUP_OPTIONS);
   const [includeHidden, setIncludeHidden] = useState(false);
   const [includeRemoved, setIncludeRemoved] = useState(false);
-  const [openItemId, setOpenItemId] = useState<number | null>(null);
+  const [addingTask, setAddingTask] = useState(false);
 
   const query: TrackerQuery = {
     universityId: tab === 'all' ? null : Number(tab),
@@ -65,18 +70,21 @@ export default function TrackerPage() {
     if (tabMissing) setTab('all');
   }, [tabMissing, setTab]);
 
-  // Forget the open item once fresh data no longer has it, so it can't pop open again if it returns.
-  const openItemGone =
-    openItemId !== null &&
-    data !== undefined &&
-    !isPlaceholderData &&
-    !data.items.some((i) => i.id === openItemId);
-  if (openItemGone) setOpenItemId(null);
+  // Personal tasks belong to no university, so they only appear on the All tab.
+  const entries = useMemo<TrackerEntry[] | undefined>(
+    () =>
+      data && [
+        ...data.items.map(platformEntry),
+        ...(tab === 'all' ? data.personalTasks.map(personalEntry) : []),
+      ],
+    [data, tab],
+  );
+  const { openEntry, open, close } = useOpenEntry(entries, isPlaceholderData);
 
   if (error && !data) return <ErrorMessage error={toCommandError(error)} />;
-  if (!data) return <p className="text-sm text-neutral-500">Loading…</p>;
+  if (!data || !entries) return <p className="text-sm text-neutral-500">Loading…</p>;
 
-  const { items, universities, syncRunning } = data;
+  const { universities, syncRunning } = data;
 
   if (universities.length === 0) {
     return (
@@ -116,7 +124,6 @@ export default function TrackerPage() {
   const selectedUntracked = tab !== 'all' && shown[0]?.courses.tracked === 0 ? shown[0] : null;
   const lastSyncAt = latestSyncAt(shown);
   const syncBusy = running || syncRunning;
-  const openItem = items.find((i) => i.id === openItemId) ?? null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -128,6 +135,11 @@ export default function TrackerPage() {
               <span className="text-xs text-neutral-500">
                 Last synced {formatLastSynced(lastSyncAt)}
               </span>
+            ) : null}
+            {tab === 'all' ? (
+              <button type="button" onClick={() => setAddingTask(true)} className={SECONDARY_BUTTON}>
+                Add task
+              </button>
             ) : null}
             <button
               type="button"
@@ -206,7 +218,7 @@ export default function TrackerPage() {
       </div>
 
       <SyncBanners universities={shown} />
-      {items.length === 0 && selectedUntracked ? (
+      {entries.length === 0 && selectedUntracked ? (
         <div className="flex flex-col items-start gap-2">
           <p className="text-sm text-neutral-500">
             No courses are tracked for {selectedUntracked.name}.
@@ -221,15 +233,19 @@ export default function TrackerPage() {
         </div>
       ) : (
         <ItemGroups
-          entries={items.map(platformEntry)}
+          entries={entries}
           groupBy={groupBy}
           showUniversity={tab === 'all'}
-          onOpen={(entry) => {
-            if (entry.kind === 'platform') setOpenItemId(entry.item.id);
-          }}
+          onOpen={open}
         />
       )}
-      <ItemDetailsModal item={openItem} onClose={() => setOpenItemId(null)} />
+      <EntryDetailsModal entry={openEntry} onClose={close} />
+      <PersonalTaskModal
+        open={addingTask}
+        task={null}
+        initialDate={todayLocalIso()}
+        onClose={() => setAddingTask(false)}
+      />
     </div>
   );
 }
