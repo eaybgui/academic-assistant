@@ -3,14 +3,18 @@
 //! Messages are user-facing: sentence case, no trailing period. Every function
 //! returns the trimmed/normalized value that the commands then hand to the domain.
 
-use academic_core::domain::{AccountDraft, ProviderConfig, ResultQuery, Settings};
+use academic_core::domain::{
+    AccountDraft, PersonalTaskDraft, ProviderConfig, ResultQuery, Settings,
+};
 use academic_infra::graph::oauth;
+use chrono::NaiveDate;
 
-use crate::dto::{AccountInput, ProviderInput, ResultQueryInput, SettingsInput};
+use crate::dto::{AccountInput, PersonalTaskInput, ProviderInput, ResultQueryInput, SettingsInput};
 use crate::error::CommandError;
 
 pub const MAX_PAGE_SIZE: i64 = 200;
 const MAX_NOTE_CHARS: usize = 2000;
+const MAX_TITLE_CHARS: usize = 200;
 const MIN_PAGE_SIZE: i64 = 1;
 
 /// An [`AccountInput`] that passed validation: the domain draft plus the IMAP
@@ -107,6 +111,23 @@ pub fn item_note(value: Option<String>) -> Result<Option<String>, CommandError> 
         ));
     }
     Ok((!trimmed.is_empty()).then(|| trimmed.to_string()))
+}
+
+/// Trims a personal task and checks its title, day and note.
+pub fn personal_task(input: PersonalTaskInput) -> Result<PersonalTaskDraft, CommandError> {
+    let title = required_text(&input.title, "Enter a title")?;
+    if title.chars().count() > MAX_TITLE_CHARS {
+        return Err(CommandError::validation(
+            "Titles can have at most 200 characters",
+        ));
+    }
+    let date = NaiveDate::parse_from_str(&input.date, "%Y-%m-%d")
+        .map_err(|_| CommandError::validation("Enter a valid day"))?;
+    Ok(PersonalTaskDraft {
+        title,
+        date,
+        note: item_note(input.note)?,
+    })
 }
 
 /// Trims every entry and drops blanks (aliases, blocked senders).
