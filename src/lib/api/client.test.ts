@@ -4,6 +4,7 @@ import { api, toCommandError } from './client';
 import type {
   AccountInput,
   LmsUniversityInput,
+  PersonalTaskInput,
   ResultQuery,
   SettingsInput,
   TrackerQuery,
@@ -210,6 +211,32 @@ describe('api client', () => {
     expect(mockedInvoke).toHaveBeenCalledWith('dismiss_all_changes', { universityId: 4 });
     await api.dismissAllChanges(null);
     expect(mockedInvoke).toHaveBeenCalledWith('dismiss_all_changes', { universityId: null });
+  });
+
+  it('createPersonalTask(input) → create_personal_task { input }', async () => {
+    const input: PersonalTaskInput = { title: 'Go to the doctor', date: '2026-11-05', note: null };
+    await api.createPersonalTask(input);
+    expect(mockedInvoke).toHaveBeenCalledWith('create_personal_task', { input });
+  });
+
+  it('updatePersonalTask(id, input) → update_personal_task { id, input }', async () => {
+    const input: PersonalTaskInput = {
+      title: 'Entregar informe',
+      date: '2026-11-06',
+      note: 'Llevar copia',
+    };
+    await api.updatePersonalTask(3, input);
+    expect(mockedInvoke).toHaveBeenCalledWith('update_personal_task', { id: 3, input });
+  });
+
+  it('setPersonalTaskDone(id, value) → set_personal_task_done { id, value }', async () => {
+    await api.setPersonalTaskDone(3, true);
+    expect(mockedInvoke).toHaveBeenCalledWith('set_personal_task_done', { id: 3, value: true });
+  });
+
+  it('deletePersonalTask(id) → delete_personal_task { id }', async () => {
+    await api.deletePersonalTask(3);
+    expect(mockedInvoke).toHaveBeenCalledWith('delete_personal_task', { id: 3 });
   });
 
   it('getSettings() → get_settings {}', async () => {
