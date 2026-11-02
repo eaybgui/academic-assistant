@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PersonalTaskModal from './PersonalTaskModal';
@@ -132,6 +132,20 @@ describe('PersonalTaskModal in edit mode', () => {
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog', { name: 'Delete task?' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Title')).toHaveValue('Go to the doctor');
+  });
+
+  it('keeps the editor open with its fields when Escape dismisses the delete confirmation', async () => {
+    const { onClose } = renderModal(TASK);
+
+    await userEvent.type(screen.getByLabelText('Title'), ' (edited)');
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Delete task?' }), { key: 'Escape' });
+
+    expect(screen.queryByRole('dialog', { name: 'Delete task?' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Edit task' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Title')).toHaveValue('Go to the doctor (edited)');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(mockedApi.deletePersonalTask).not.toHaveBeenCalled();
   });
 
   it('deletes the task and closes when the deletion is confirmed', async () => {
