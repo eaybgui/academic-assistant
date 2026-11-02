@@ -4,6 +4,7 @@
 
 pub mod accounts;
 pub mod catalog;
+pub mod personal;
 pub mod results;
 pub mod runs;
 pub mod settings;

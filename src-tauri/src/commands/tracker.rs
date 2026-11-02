@@ -9,7 +9,7 @@ use tauri::State;
 
 use super::logged;
 use super::universities::universities;
-use crate::dto::{LmsItemDto, TrackerDto, TrackerQueryInput};
+use crate::dto::{LmsItemDto, PersonalTaskDto, TrackerDto, TrackerQueryInput};
 use crate::error::CommandError;
 use crate::state::AppState;
 use crate::validation;
@@ -108,6 +108,12 @@ fn tracker(state: &AppState, query: TrackerQueryInput) -> Result<TrackerDto, Com
             .map(|item| LmsItemDto::new(item, now))
             .collect(),
         universities: universities(state)?,
+        personal_tasks: state
+            .personal_tasks
+            .list_personal_tasks()?
+            .iter()
+            .map(PersonalTaskDto::from)
+            .collect(),
         sync_running: state.lms_sync.is_running(),
     })
 }
@@ -147,11 +153,11 @@ mod tests {
     use crate::test_support::{harness, harness_with_lms, FakeLmsBehavior, Harness};
     use academic_core::domain::{
         lms_credential_key, EffectiveStatus, ItemChange, ItemKind, LmsPlatform, LoginState,
-        PlatformStatus, RemoteCourse, RemoteItem, SyncOutcome,
+        PersonalTaskDraft, PlatformStatus, RemoteCourse, RemoteItem, SyncOutcome,
     };
     use academic_core::lms::{NewItem, SyncChanges};
     use academic_core::ports::{LmsError, SecretStore};
-    use chrono::{DateTime, Duration, Utc};
+    use chrono::{DateTime, Duration, NaiveDate, Utc};
     use serde_json::json;
     use std::time::Duration as StdDuration;
 
@@ -293,6 +299,7 @@ mod tests {
         let json = serde_json::to_value(tracker(&h.state, query()).unwrap()).unwrap();
         assert_eq!(json["syncRunning"], false);
         assert_eq!(json["universities"].as_array().unwrap().len(), 1);
+        assert_eq!(json["personalTasks"], json!([]));
         let items = json["items"].as_array().unwrap();
         assert_eq!(items.len(), 3);
 
@@ -315,6 +322,33 @@ mod tests {
         assert_eq!(undated["change"], json!(null));
         assert_eq!(undated["hidden"], false);
         assert_eq!(undated["note"], json!(null));
+    }
+
+    #[test]
+    fn tracker_includes_personal_tasks_for_every_tab() {
+        let h = harness();
+        let no_universities = tracker(&h.state, query()).unwrap();
+        assert!(no_universities.personal_tasks.is_empty());
+
+        let draft = PersonalTaskDraft {
+            title: "Go to the doctor".into(),
+            date: NaiveDate::from_ymd_opt(2026, 11, 5).unwrap(),
+            note: None,
+        };
+        h.state
+            .personal_tasks
+            .insert_personal_task(&draft, Utc::now())
+            .unwrap();
+        assert_eq!(tracker(&h.state, query()).unwrap().personal_tasks.len(), 1);
+
+        let (university_id, _) = seed_university(&h);
+        for university_id in [None, Some(university_id), Some(university_id + 1)] {
+            let scoped = TrackerQueryInput {
+                university_id,
+                ..query()
+            };
+            assert_eq!(tracker(&h.state, scoped).unwrap().personal_tasks.len(), 1);
+        }
     }
 
     #[test]

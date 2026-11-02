@@ -8,8 +8,8 @@ use academic_core::pipeline::{CheckRunner, Repositories};
 use academic_core::ports::{
     AccountRepository, CatalogRepository, Clock, CourseRepository, EmailProviderFactory,
     LmsAuthenticator, LmsClientFactory, LmsItemRepository, LmsSyncObserver, ModelProvider,
-    ResultRepository, RunObserver, RunRepository, SecretStore, SettingsRepository,
-    SyncStateRepository, UniversityRepository,
+    PersonalTaskRepository, ResultRepository, RunObserver, RunRepository, SecretStore,
+    SettingsRepository, SyncStateRepository, UniversityRepository,
 };
 use academic_infra::db::Database;
 use chrono::NaiveDate;
@@ -36,6 +36,7 @@ pub struct AppState {
     pub universities: Arc<dyn UniversityRepository>,
     pub courses: Arc<dyn CourseRepository>,
     pub items: Arc<dyn LmsItemRepository>,
+    pub personal_tasks: Arc<dyn PersonalTaskRepository>,
     pub results: Arc<dyn ResultRepository>,
     pub runs: Arc<dyn RunRepository>,
     pub settings: Arc<dyn SettingsRepository>,
@@ -102,6 +103,7 @@ impl AppState {
             universities: db.clone(),
             courses: db.clone(),
             items: db.clone(),
+            personal_tasks: db.clone(),
             results: db.clone(),
             runs: db.clone(),
             settings: db,

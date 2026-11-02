@@ -17,7 +17,7 @@ mod validation;
 
 use tauri::Manager;
 
-use commands::{accounts, catalog, results, runs, settings, tracker, universities};
+use commands::{accounts, catalog, personal, results, runs, settings, tracker, universities};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -61,6 +61,10 @@ pub fn run() {
             tracker::set_item_note,
             tracker::dismiss_item_change,
             tracker::dismiss_all_changes,
+            personal::create_personal_task,
+            personal::update_personal_task,
+            personal::set_personal_task_done,
+            personal::delete_personal_task,
             settings::get_settings,
             settings::update_settings,
             settings::set_jev_api_key,
