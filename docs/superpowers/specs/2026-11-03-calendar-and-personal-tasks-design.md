@@ -148,3 +148,31 @@ The following are the builder's choice:
   - Personal tasks appear only in the All tab.
   - The details panel edit and delete flows.
 - **Acceptance:** a short manual checklist in `docs/testing.md` for the user.
+
+## 11. As built
+
+The feature was built as specified in sections 1 to 10, on branch `phase-3-calendar` in eight tasks. This section records where the result differs from, or adds to, what the spec says. Examples use invented data only.
+
+### Differences from the spec
+
+- **Two extra shared modules.** The spec forbids a second copy of the row look, and the platform and personal rows needed the same markup details. `src/features/tracker/rowStyles.ts` holds the class names both rows use, and `src/features/tracker/NoteIndicator.tsx` holds the pencil mark for "has a note". Neither changes behaviour.
+- **`Modal`: Escape no longer bubbles to an outer dialog.** The delete confirmation (`ConfirmDialog`, which is a `Modal`) opens inside the personal task details. With the old behaviour Escape closed both. `Modal` now calls `stopPropagation()` on Escape, so a nested dialog closes alone and the details stay open. This changes a shared component for every modal, but only for a dialog nested inside another, which did not exist before.
+- **`groupByStatus` takes `now`.** The spec only fixes `groupByTime(entries, now)`. `groupByStatus(entries, now)` also takes `now`, because a personal task is overdue only by comparing its day with the local date, so "today" must be injectable for the tests. Both derive today with `toLocalIsoDay(now)`.
+- **Month navigation keeps the selected day.** Pressing ‹ or › changes the viewed month only; the selected day and its list stay as they were, even when that day is no longer in the grid. **Today** is the one control that moves both.
+- **Clicking a day outside the viewed month selects it** (the list below follows) **without changing the viewed month.** The spec only says clicking a day selects it.
+- **Whitespace-only titles are validated by the backend.** The title field has the HTML `required` attribute, which accepts spaces, so "Enter a title" for a title of spaces comes from `validation::personal_task` and is shown inline by `ErrorMessage` with the form (or the day box) keeping its text. The day box on the calendar has no `required` at all, so an empty title takes the same path.
+- **The calendar's per-day order** is `compareEntries` (a personal task counts as local midnight of its day, so it precedes that day's deadlines), which the spec leaves to the builder.
+- **Personal tasks keep a violet dot when overdue.** The spec's colour list gives red to "overdue" items; as built only platform items turn red, and an overdue personal task shows the **Overdue** pill in its row but a violet dot.
+
+### Not implemented
+
+- **Full title tooltip on a truncated row.** Section 9 says a long title is truncated in the row and "the tooltip shows it in full". The calendar dots show the full title on hover (`title` and `aria-label`), and the details show it in full, but the row's title button truncates the text without a `title` attribute. Neither `ItemRow` nor `PersonalTaskRow` has this tooltip.
+
+### Confirmed as specified
+
+- Storage: migration `0004_personal_tasks.sql`, table `personal_tasks`, index on `date`; `PersonalTaskRepository` port in `crates/core`, SQLite implementation in `crates/infra/src/db/personal.rs`; nothing writes `lms_items`.
+- Commands `create_personal_task`, `update_personal_task`, `set_personal_task_done`, `delete_personal_task`; `TrackerDto.personalTasks` carries every personal task for every query.
+- Validation order in the command layer: title (required, at most 200 characters), day (`%Y-%m-%d`), note (`item_note`, at most 2000).
+- Routes and navigation: `/calendar` and a **Calendar** item after Dashboard.
+- Calendar data: the dashboard's All-tab query with the same key; personal task mutations invalidate the `['tracker']` prefix.
+- Documentation: `docs/frontend/tracker-universities.md`, `docs/user-guide.md`, `docs/app/tauri-commands.md`, `docs/infra/database.md`, `docs/frontend/overview.md`, and the manual checklist "Calendar and personal tasks acceptance checklist" in `docs/testing.md`.

@@ -4,8 +4,8 @@ This module implements the application's SQLite persistence: connection setup,
 migrations, and one `impl <Trait> for Database` per repository trait defined in
 `academic_core::ports`: the email side (`AccountRepository`, `CatalogRepository`,
 `SyncStateRepository`, `ProcessedMessageRepository`, `ResultRepository`,
-`RunRepository`, `SettingsRepository`) and the LMS side (`UniversityRepository`,
-`CourseRepository`, `LmsItemRepository`).
+`RunRepository`, `SettingsRepository`), the LMS side (`UniversityRepository`,
+`CourseRepository`, `LmsItemRepository`) and the user's own tasks (`PersonalTaskRepository`).
 
 ## Public API
 
@@ -39,6 +39,7 @@ impl Database {
 | `universities.rs` | `impl UniversityRepository for Database` |
 | `courses.rs` | `impl CourseRepository for Database` |
 | `items.rs` | `impl LmsItemRepository for Database` |
+| `personal.rs` | `impl PersonalTaskRepository for Database` |
 | `sync.rs` | `impl SyncStateRepository for Database` |
 | `processed.rs` | `impl ProcessedMessageRepository for Database` |
 | `results.rs` | `impl ResultRepository for Database` |
@@ -64,6 +65,7 @@ are new versions.
 | 1 | `0001_init.sql` | The Phase 1 schema: `universities`, `courses` (the manual catalog), `accounts`, `sync_states`, `runs`, `run_accounts`, `processed_messages`, `ai_results`, `result_dates`, `settings` |
 | 2 | `0002_lms.sql` | Phase 2: the manual catalog is discarded and `universities` / `courses` are recreated for learning platforms |
 | 3 | `0003_lms_items.sql` | Phase 2: `lms_items` and its index |
+| 4 | `0004_personal_tasks.sql` | Phase 3: `personal_tasks` and its index on `date` |
 
 Migration 2 first deletes every row of `courses` and `universities`. The existing foreign keys
 then set `ai_results.university_id`, `ai_results.course_id` and
@@ -179,6 +181,34 @@ guarded by `CHECK` constraints.
 - `set_item_done`, `set_item_hidden`, `set_item_note`, `dismiss_item_change` and
   `dismiss_all_changes` change one personal or badge field and return the re-read row.
 
+### `PersonalTaskRepository` and `personal_tasks` (Phase 3)
+
+Defined by migration 4. The table holds the tasks the user creates for a calendar day; it is
+separate from `lms_items`, which a sync owns, so a sync can never touch, mark removed or dismiss a
+personal task.
+
+| Column | Meaning |
+|---|---|
+| `id` | `INTEGER PRIMARY KEY`; a task's identity (kept when it is edited) |
+| `title` | `TEXT NOT NULL` |
+| `date` | `TEXT NOT NULL`, a local calendar day `YYYY-MM-DD`. It is never an instant and is never converted through UTC |
+| `note` | `TEXT`, `NULL` when there is none |
+| `done` | `INTEGER NOT NULL DEFAULT 0` |
+| `created_at`, `updated_at` | RFC 3339 UTC text |
+
+`idx_personal_tasks_date` indexes `date`. There are no foreign keys: a task belongs to no
+university.
+
+- `list_personal_tasks` returns every task ordered by `date`, then `id`.
+- `insert_personal_task` stores a task that is not done with `created_at = updated_at = now` and
+  returns the stored row.
+- `update_personal_task` replaces title, day and note, keeps `done` and sets `updated_at`.
+- `set_personal_task_done` changes only `done` and `updated_at`.
+- `delete_personal_task` removes the row.
+- A missing id is `NotFound` for the update, done and delete operations.
+- The command layer validates the input (title, day, note) before any of these run; see
+  [../app/tauri-commands.md](../app/tauri-commands.md).
+
 ### `CatalogRepository`
 
 Read-only. `catalog()` returns every university and the **tracked, available** courses, with the
@@ -241,7 +271,7 @@ only, matching no per-category bucket.
 
 Integration tests live in `crates/infra/tests/db_*.rs`, one file per repository
 area (`db_accounts.rs`, `db_catalog.rs`, `db_sync.rs`, `db_processed.rs`,
-`db_results.rs`, `db_runs.rs`, `db_settings.rs`, `db_migrations.rs`, `db_lms.rs`, `db_items.rs`),
+`db_results.rs`, `db_runs.rs`, `db_settings.rs`, `db_migrations.rs`, `db_lms.rs`, `db_items.rs`, `db_personal.rs`),
 each using
 `Database::open_in_memory()`. `crates/infra/tests/support/mod.rs` holds shared
 fixtures (building an `AccountDraft`, inserting a throwaway account/run, building a
@@ -261,6 +291,7 @@ cargo test -p academic-infra
 - `Database` does not create missing parent directories for the path passed to
   `open`; the caller (the Tauri composition root, see `docs/app/logging-and-data.md`) is expected to ensure the app
   data directory exists first.
-- Migrations only move forward. Migration 2 discards the Phase 1 manual catalog; there is no
+- Migrations only move forward. Migration 4 only adds a table, so a Phase 2 database upgrades
+  without losing anything. Migration 2 discards the Phase 1 manual catalog; there is no
   downgrade path and the Phase 1 build cannot open a migrated database (back up
   `academic-assistant.db` before first running Phase 2 on real data).
