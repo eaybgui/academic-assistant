@@ -54,7 +54,7 @@ on.
 
 Re-exported flat from `crate::domain`; internally split by topic into
 `account.rs`, `email.rs`, `analysis.rs`, `catalog.rs`, `lms.rs`, `run.rs`, `results.rs`,
-`settings.rs`, `secrets.rs`.
+`personal.rs`, `settings.rs`, `secrets.rs`.
 
 ### `ParseEnumError`
 
@@ -179,6 +179,16 @@ The analyzer's read-only projection of the LMS data (there is no manual catalog 
   returns before it is stored.
 - **`TrackedItem`** — an item with its university and course names; **`TrackerQuery`** —
   `{ university_id, include_hidden, include_removed }`.
+
+### Personal tasks (`personal.rs`)
+
+Tasks the user creates for a calendar day, independent of any university or platform item.
+
+- **`PersonalTask`** — `{ id, title, date, note, done, created_at, updated_at }`. `date` is a
+  `NaiveDate`: a local calendar day, never an instant. `note` is optional. Timestamps are UTC.
+- **`PersonalTaskDraft`** — `{ title, date, note }`: the user-editable fields. Validation (title
+  required and at most 200 characters, a valid day, note rules) is done in the command layer, not
+  here.
 
 ### Runs (`run.rs`)
 
@@ -370,6 +380,11 @@ re-exported flat from `crate::ports`.
 - **`LmsItemRepository`** — `list_items_for_university` (for diffing), `apply_sync` (one
   transaction), `query_items(&TrackerQuery)`, `get_item`, `set_item_done`, `set_item_hidden`,
   `set_item_note`, `dismiss_item_change` and `dismiss_all_changes`.
+- **`PersonalTaskRepository`** — `list_personal_tasks` (every task, ordered by date, then id),
+  `insert_personal_task(draft, now)` (`created_at` = `updated_at` = `now`, `done` false),
+  `update_personal_task(id, draft, now)` (replaces title, date and note; keeps `done`),
+  `set_personal_task_done(id, done, now)` and `delete_personal_task(id)`. Update, set-done and
+  delete return `NotFound` when the id does not exist.
 - **`SyncStateRepository`** — read one/all `SyncState`(s) for an account; record
   success (advances the cursor) or failure (records the error) per account+folder.
 - **`ProcessedMessageRepository`** — `exists` (by provider message id, for cheap
@@ -387,7 +402,7 @@ re-exported flat from `crate::ports`.
 - **`SettingsRepository`** — `load` (missing keys fall back to `Settings::default()`
   values) / `save`.
 
-All ten traits are implemented by a single `academic_infra::db::Database`,
+All eleven traits are implemented by a single `academic_infra::db::Database`,
 backed by one SQLite connection guarded by a mutex.
 
 ### Runtime (`runtime.rs`)

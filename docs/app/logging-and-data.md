@@ -7,7 +7,7 @@ Everything the app stores lives in Tauri's app data directory
 
 | Path | Content |
 |---|---|
-| `academic-assistant.db` (+ `-wal`, `-shm`) | SQLite database (LMS universities, courses and items, email accounts, email sync state, runs, processed-message metadata, results, settings). Email bodies are never stored. |
+| `academic-assistant.db` (+ `-wal`, `-shm`) | SQLite database (LMS universities, courses and items, personal tasks, email accounts, email sync state, runs, processed-message metadata, results, settings). Email bodies are never stored. |
 | `lms-auth/` | Persistent browser profile shared by the university sign-in windows (identity-provider cookies). Created on the first sign-in; signing out does not clear it. |
 | `logs/academic-assistant.log.<YYYY-MM-DD>` | Daily rolling application log. |
 
@@ -60,7 +60,7 @@ A failure in any step aborts startup: the `setup` hook returns the error and the
 
 ### What is never logged
 
-Bodies, subjects, tokens, cookies, passwords and API keys; item titles, notes and grades; and
+Bodies, subjects, tokens, cookies, passwords and API keys; item titles, notes and grades; personal task titles and notes; and
 the URLs visited in a sign-in window (the Moodle redirect contains the token and SSO URLs carry
 assertions). The only thing logged about a too-large Blackboard session is the cookie names. The only free text that can reach the
 log is an error message produced by the adapters, which are written to exclude secrets
