@@ -32,6 +32,15 @@ function renderRow(overrides: Partial<PersonalTaskDto> = {}, onOpen = vi.fn()) {
 }
 
 describe('PersonalTaskRow', () => {
+  it('gives the title button the full title as a tooltip', () => {
+    renderRow({ title: 'Go to the doctor and ask for a reference letter' });
+
+    expect(screen.getByRole('button', { name: /^Go to the doctor/ })).toHaveAttribute(
+      'title',
+      'Go to the doctor and ask for a reference letter',
+    );
+  });
+
   it('shows the title, "Personal", the day and the overdue pill for a past undone task', () => {
     renderRow();
 

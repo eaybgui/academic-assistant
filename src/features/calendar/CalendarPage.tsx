@@ -97,7 +97,7 @@ export default function CalendarPage() {
         today={today}
         onSelect={setSelected}
       />
-      <DayList day={selected} entries={byDay.get(selected) ?? []} onOpen={open} />
+      <DayList key={selected} day={selected} entries={byDay.get(selected) ?? []} onOpen={open} />
       <EntryDetailsModal entry={openEntry} onClose={close} />
     </div>
   );

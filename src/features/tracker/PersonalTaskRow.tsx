@@ -37,7 +37,12 @@ export default function PersonalTaskRow({ entry, onOpen }: PersonalTaskRowProps)
         />
         <div className="min-w-0 flex-1">
           <div className={TITLE_ROW_CLASS}>
-            <button type="button" onClick={() => onOpen(entry)} className={TITLE_BUTTON_CLASS}>
+            <button
+              type="button"
+              onClick={() => onOpen(entry)}
+              title={task.title}
+              className={TITLE_BUTTON_CLASS}
+            >
               {task.title}
             </button>
             {task.note ? <NoteIndicator /> : null}

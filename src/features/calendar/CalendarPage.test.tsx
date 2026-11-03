@@ -152,6 +152,21 @@ describe('CalendarPage', () => {
     expect(input).toHaveValue('   ');
   });
 
+  it('drops the add error and the typed text when another day is selected', async () => {
+    createPersonalTask.mockRejectedValue({ kind: 'validation', message: 'Enter a title' });
+    const user = userEvent.setup();
+    renderPage();
+    const input = await screen.findByRole('textbox', { name: 'Add a task for this day' });
+    await user.type(input, '   ');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter a title');
+
+    await user.click(await dayButton(OTHER_DAY));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Add a task for this day' })).toHaveValue('');
+  });
+
   it('renders personal tasks with no universities instead of the first-run card', async () => {
     getTracker.mockResolvedValue(tracker([personalTask()]));
     renderPage();
