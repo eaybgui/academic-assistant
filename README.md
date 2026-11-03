@@ -13,7 +13,7 @@ analysis is done by an interchangeable structured AI provider: **jev** (by TypeS
 needs an API key) or **Ollama** (local, nothing leaves your PC). The choice is explicit and lives
 in Settings.
 
-## Status: Phase 2 (LMS tracker)
+## Status: Phase 3 (LMS tracker, calendar and personal tasks)
 
 ### In scope
 
@@ -29,6 +29,11 @@ in Settings.
 - **Dashboard**: an "All" tab plus one per university, grouped by time (Overdue, Today, This week,
   Next week, Later, No date) or by status; mark items done, hide them, add notes, open them in the
   platform. Personal state is stored locally and never overwritten by a sync.
+- **Calendar**: a month view (weeks start on Monday) of every dated item and of your own
+  **personal tasks**, with a coloured dot per entry and the selected day listed underneath.
+  Personal tasks are tasks you create for a calendar day (title, day, optional note); they can be
+  edited, marked done and deleted, they also appear on the dashboard, and they are stored only on
+  your PC.
 - **Announcements** (email analysis from Phase 1): multiple IMAP and Microsoft 365 accounts,
   manual **Check now**, deterministic filters, AI classification of subject and body only, results
   history with new/seen status, run history and logs. It stays disabled until at least one course
@@ -38,7 +43,7 @@ in Settings.
 ### Out of scope (later phases)
 
 Google Calendar export, scheduled/background sync and Windows notifications, platform
-announcements, Moodle activity types other than assignments and quizzes, a month calendar view,
+announcements, Moodle activity types other than assignments and quizzes,
 linking related emails and computing changes between them, attachments and the final visual
 design.
 

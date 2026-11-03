@@ -1,6 +1,6 @@
 # Calendar and personal tasks: design
 
-Date: 2026-11-03 · Status: draft for approval · Builds on Phase 2 (LMS tracker, `v0.1.0`).
+Date: 2026-11-03 · Status: approved; implemented (see §11) · Builds on Phase 2 (LMS tracker, `v0.1.0`).
 
 ## 1. Intent
 
@@ -163,10 +163,6 @@ The feature was built as specified in sections 1 to 10, on branch `phase-3-calen
 - **Whitespace-only titles are validated by the backend.** The title field has the HTML `required` attribute, which accepts spaces, so "Enter a title" for a title of spaces comes from `validation::personal_task` and is shown inline by `ErrorMessage` with the form (or the day box) keeping its text. The day box on the calendar has no `required` at all, so an empty title takes the same path.
 - **The calendar's per-day order** is `compareEntries` (a personal task counts as local midnight of its day, so it precedes that day's deadlines), which the spec leaves to the builder.
 - **Personal tasks keep a violet dot when overdue.** The spec's colour list gives red to "overdue" items; as built only platform items turn red, and an overdue personal task shows the **Overdue** pill in its row but a violet dot.
-
-### Not implemented
-
-- **Full title tooltip on a truncated row.** Section 9 says a long title is truncated in the row and "the tooltip shows it in full". The calendar dots show the full title on hover (`title` and `aria-label`), and the details show it in full, but the row's title button truncates the text without a `title` attribute. Neither `ItemRow` nor `PersonalTaskRow` has this tooltip.
 
 ### Confirmed as specified
 

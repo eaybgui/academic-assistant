@@ -51,6 +51,7 @@ export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) 
             <button
               type="button"
               onClick={() => onOpen(item)}
+              title={item.title}
               className={TITLE_BUTTON_CLASS}
             >
               {item.title}

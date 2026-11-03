@@ -53,6 +53,15 @@ function renderRow(overrides: Partial<LmsItemDto> = {}, props: { showUniversity?
 }
 
 describe('ItemRow', () => {
+  it('gives the title button the full title as a tooltip', () => {
+    renderRow({ title: 'Hoja de problemas 1: una entrega con un título muy largo' });
+
+    expect(screen.getByRole('button', { name: /^Hoja de problemas 1:/ })).toHaveAttribute(
+      'title',
+      'Hoja de problemas 1: una entrega con un título muy largo',
+    );
+  });
+
   it('shows the title, course short name, kind, status and grade', () => {
     renderRow({ status: 'overdue', grade: { display: '8.5 / 10', score: 8.5, max: 10 } });
 
