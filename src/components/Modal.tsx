@@ -59,6 +59,8 @@ export default function Modal({ open, title, onClose, children, footer }: ModalP
   function handleKeyDown(event: KeyboardEvent<HTMLDialogElement>) {
     if (event.key === 'Escape') {
       event.preventDefault();
+      // A modal nested inside another (e.g. a confirm dialog) must not also close its parent.
+      event.stopPropagation();
       dialogRef.current?.close();
     }
   }

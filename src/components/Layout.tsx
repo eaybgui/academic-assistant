@@ -5,6 +5,7 @@ import { api } from '../lib/api/client';
 import { queryKeys } from '../lib/api/queryKeys';
 import {
   AccountsIcon,
+  CalendarIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   DashboardIcon,
@@ -25,6 +26,7 @@ interface NavItemConfig {
 
 const NAV_ITEMS: readonly NavItemConfig[] = [
   { to: '/', label: 'Dashboard', end: true, Icon: DashboardIcon },
+  { to: '/calendar', label: 'Calendar', end: false, Icon: CalendarIcon },
   { to: ANNOUNCEMENTS_PATH, label: 'Announcements', end: false, Icon: ResultsIcon },
   { to: '/universities', label: 'Universities', end: false, Icon: UniversityIcon },
   { to: '/accounts', label: 'Email accounts', end: false, Icon: AccountsIcon },
@@ -177,7 +179,7 @@ export default function Layout({ children }: LayoutProps) {
           ))}
         </ul>
       </nav>
-      <main className="flex-1 px-8 py-6">{children}</main>
+      <main className="min-w-0 flex-1 px-8 py-6">{children}</main>
     </div>
   );
 }

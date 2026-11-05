@@ -32,9 +32,10 @@ The dependency rule is `src-tauri -> infra -> core`. `core` never depends on `in
 
 The ports (traits) that connect the layers are: `EmailProvider` and `EmailProviderFactory`,
 `LmsClient`, `LmsClientFactory` and `LmsAuthenticator`, `StructuredModel` and `ModelProvider`,
-`SecretStore`, ten repository traits (`AccountRepository`, `CatalogRepository`,
+`SecretStore`, eleven repository traits (`AccountRepository`, `CatalogRepository`,
 `SyncStateRepository`, `ProcessedMessageRepository`, `ResultRepository`, `RunRepository`,
-`SettingsRepository`, `UniversityRepository`, `CourseRepository`, `LmsItemRepository`), `Clock`,
+`SettingsRepository`, `UniversityRepository`, `CourseRepository`, `LmsItemRepository`,
+`PersonalTaskRepository`), `Clock`,
 `RunObserver` and `LmsSyncObserver`. See [core/domain-and-ports.md](core/domain-and-ports.md).
 
 ## Data flow of a "Sync" (LMS tracker)
@@ -154,7 +155,7 @@ Key rules of the flow (details in [core/pipeline.md](core/pipeline.md)):
 
 SQLite, one file (`academic-assistant.db`, in the app data directory), WAL mode, foreign keys on, schema in
 `crates/infra/migrations/` (`0001_init.sql` for email, `0002_lms.sql` and `0003_lms_items.sql` for
-the LMS tracker). Timestamps are RFC 3339 UTC text; result dates are
+the LMS tracker, `0004_personal_tasks.sql` for personal tasks). Timestamps are RFC 3339 UTC text; result dates are
 local `YYYY-MM-DD` / `HH:MM`. Details in [infra/database.md](infra/database.md).
 
 | Table | Purpose |
@@ -162,6 +163,7 @@ local `YYYY-MM-DD` / `HH:MM`. Details in [infra/database.md](infra/database.md).
 | `universities` | The learning platforms the user follows: name, platform (`moodle` / `blackboard`), base URL, login state, account label and last sync. No credential is stored here |
 | `courses` | Courses discovered on a platform: external id, name, short name, URL and the `tracked` / `available` / `reviewed` flags. Cascade from their university. The tracked, available ones are also the course catalog of the email analyzer |
 | `lms_items` | Assignments, quizzes, tests and course events with status, grade, change badge, `removed_at` and the user's local done / hidden / note. Cascade from their university and course |
+| `personal_tasks` | Tasks the user creates for a calendar day: title, `date` (a local `YYYY-MM-DD`, never an instant), optional note and the done flag. Not tied to any university and never mixed into `lms_items` |
 | `accounts` | Configured mailboxes: provider type (`provider_type`), provider JSON config (`config`, no secrets, no type tag), folders, default university, first-sync window, enabled flag. Ids are never reused (`AUTOINCREMENT`), so the secret keys derived from an account id can never be inherited by a later account |
 | `sync_states` | Per account and folder: cursor, last run/success, status (`never`/`ok`/`error`), last error |
 | `runs` | One row per check: status, timing, summed counters, error summary |

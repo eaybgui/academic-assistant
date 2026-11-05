@@ -259,9 +259,25 @@ export interface TrackerQuery {
   includeRemoved: boolean;
 }
 
+export interface PersonalTaskDto {
+  id: number;
+  title: string;
+  /** Calendar day `YYYY-MM-DD`; never a UTC instant. */
+  date: string;
+  note: string | null;
+  done: boolean;
+}
+
+export interface PersonalTaskInput {
+  title: string;
+  date: string;
+  note: string | null;
+}
+
 export interface TrackerDto {
   items: LmsItemDto[];
   universities: LmsUniversityDto[];
+  personalTasks: PersonalTaskDto[];
   syncRunning: boolean;
 }
 

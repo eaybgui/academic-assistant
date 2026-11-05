@@ -3,11 +3,15 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ItemGroups, { type GroupBy } from './ItemGroups';
-import type { LmsItemDto } from '../../lib/api/types';
+import { personalEntry, platformEntry } from './entries';
+import type { LmsItemDto, PersonalTaskDto } from '../../lib/api/types';
 
 vi.mock('../../lib/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/api/client')>();
-  return { ...actual, api: { setItemDone: vi.fn(), dismissItemChange: vi.fn() } };
+  return {
+    ...actual,
+    api: { setItemDone: vi.fn(), dismissItemChange: vi.fn(), setPersonalTaskDone: vi.fn() },
+  };
 });
 
 function item(id: number, overrides: Partial<LmsItemDto> = {}): LmsItemDto {
@@ -36,10 +40,11 @@ function item(id: number, overrides: Partial<LmsItemDto> = {}): LmsItemDto {
 
 const ITEMS = [item(1), item(2, { status: 'submitted' }), item(3, { status: 'graded' })];
 
-function tree(items: LmsItemDto[], groupBy: GroupBy) {
+function tree(items: LmsItemDto[], groupBy: GroupBy, tasks: PersonalTaskDto[] = []) {
+  const entries = [...items.map(platformEntry), ...tasks.map(personalEntry)];
   return (
     <QueryClientProvider client={new QueryClient()}>
-      <ItemGroups items={items} groupBy={groupBy} showUniversity={false} onOpen={vi.fn()} />
+      <ItemGroups entries={entries} groupBy={groupBy} showUniversity={false} onOpen={vi.fn()} />
     </QueryClientProvider>
   );
 }
@@ -86,5 +91,14 @@ describe('ItemGroups sections', () => {
 
     expect(detailsOf('Pending 2').open).toBe(false);
     expect(detailsOf('Submitted 1').open).toBe(true);
+  });
+
+  it('renders a personal task through its own row', () => {
+    const task: PersonalTaskDto = { id: 9, title: 'Go to the doctor', date: '2020-01-01', note: null, done: false };
+    render(tree([item(1)], 'status', [task]));
+
+    expect(screen.getByText('Personal')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Go to the doctor' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hoja 1' })).toBeInTheDocument();
   });
 });

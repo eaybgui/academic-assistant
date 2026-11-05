@@ -4,10 +4,13 @@ import {
   formatDateTime,
   formatDuration,
   formatLastSynced,
+  formatLongDay,
+  formatMonthYear,
   formatRelativeDay,
   formatResultDate,
   formatShortDate,
   formatTime,
+  toLocalIsoDay,
   todayLocalIso,
 } from './format';
 
@@ -100,5 +103,23 @@ describe('todayLocalIso', () => {
     ).padStart(2, '0')}`;
     expect(todayLocalIso()).toBe(expected);
     expect(todayLocalIso()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe('toLocalIsoDay', () => {
+  it('formats a local date as YYYY-MM-DD with zero padding', () => {
+    expect(toLocalIsoDay(new Date(2026, 0, 9))).toBe('2026-01-09');
+  });
+});
+
+describe('formatLongDay', () => {
+  it('formats a calendar day as weekday, day and month', () => {
+    expect(formatLongDay('2026-11-10')).toBe('Tuesday 10 November');
+  });
+});
+
+describe('formatMonthYear', () => {
+  it('formats a zero-based month and year', () => {
+    expect(formatMonthYear(2026, 10)).toBe('November 2026');
   });
 });

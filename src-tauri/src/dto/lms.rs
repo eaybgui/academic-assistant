@@ -2,10 +2,10 @@
 
 use academic_core::domain::{
     effective_status, EffectiveStatus, Grade, ItemChange, ItemKind, LmsCourse, LmsPlatform,
-    LmsUniversity, LoginState, SyncOutcome, TrackedItem, TrackerQuery,
+    LmsUniversity, LoginState, PersonalTask, SyncOutcome, TrackedItem, TrackerQuery,
 };
 use academic_core::ports::LmsSyncResult;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -177,11 +177,44 @@ impl LmsItemDto {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersonalTaskDto {
+    pub id: i64,
+    pub title: String,
+    /// A local calendar day, serialized as `YYYY-MM-DD`.
+    pub date: NaiveDate,
+    pub note: Option<String>,
+    pub done: bool,
+}
+
+impl From<&PersonalTask> for PersonalTaskDto {
+    fn from(task: &PersonalTask) -> Self {
+        Self {
+            id: task.id,
+            title: task.title.clone(),
+            date: task.date,
+            note: task.note.clone(),
+            done: task.done,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersonalTaskInput {
+    pub title: String,
+    /// `YYYY-MM-DD`; parsed by [`crate::validation::personal_task`].
+    pub date: String,
+    pub note: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackerDto {
     pub items: Vec<LmsItemDto>,
     pub universities: Vec<LmsUniversityDto>,
+    pub personal_tasks: Vec<PersonalTaskDto>,
     pub sync_running: bool,
 }
 

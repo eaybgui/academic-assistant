@@ -1,5 +1,6 @@
 import { formatShortDate } from '../../components/results/format';
-import type { EffectiveStatus, ItemChangeDto, ItemKind, LmsItemDto } from '../../lib/api/types';
+import type { ItemChangeDto, ItemKind, LmsItemDto } from '../../lib/api/types';
+import type { EntryStatus } from './entries';
 
 export const KIND_LABELS: Record<ItemKind, string> = {
   assignment: 'Assignment',
@@ -9,12 +10,13 @@ export const KIND_LABELS: Record<ItemKind, string> = {
   other: 'Other',
 };
 
-export const STATUS_LABELS: Record<EffectiveStatus, string> = {
+export const STATUS_LABELS: Record<EntryStatus, string> = {
   pending: 'Pending',
   overdue: 'Overdue',
   submitted: 'Submitted',
   graded: 'Graded',
   past_event: 'Past',
+  done: 'Done',
 };
 
 /** Whether the user can tick an item as done: only deliverables still open on the platform, or ones already ticked. */
