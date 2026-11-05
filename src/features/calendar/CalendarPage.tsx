@@ -62,7 +62,7 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-neutral-900">Calendar</h1>
         <div className="flex items-center gap-2">

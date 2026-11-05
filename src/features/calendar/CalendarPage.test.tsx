@@ -71,6 +71,15 @@ describe('CalendarPage', () => {
     expect(screen.getByText('Nothing on this day.')).toBeInTheDocument();
   });
 
+  it('fills the window width and sizes day cells with the viewport height', async () => {
+    const { container } = renderPage();
+
+    const today = await dayButton(TODAY);
+    expect(container.firstElementChild).not.toHaveClass('max-w-3xl');
+    expect(today).not.toHaveClass('h-16');
+    expect(today).toHaveClass('h-[clamp(3.5rem,11vh,8rem)]');
+  });
+
   it('shows 6 dots and "+2" for a crowded day and lists every entry', async () => {
     const tasks = Array.from({ length: 8 }, (_, index) =>
       personalTask({ id: index + 1, title: `Task ${index + 1}`, date: OTHER_DAY }),

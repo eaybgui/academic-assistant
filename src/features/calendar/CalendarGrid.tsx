@@ -61,12 +61,12 @@ function DayCell({ day, entries, selected, today, onSelect }: DayCellProps) {
       aria-pressed={selected}
       aria-current={isToday ? 'date' : undefined}
       onClick={() => onSelect(day.date)}
-      className={`flex h-16 flex-col items-start gap-1 rounded border p-1.5 text-left hover:bg-neutral-50 ${border} ${
+      className={`flex h-[clamp(3.5rem,11vh,8rem)] min-w-0 flex-col items-start gap-1 overflow-hidden rounded border p-1.5 text-left hover:bg-neutral-50 ${border} ${
         selected ? 'bg-neutral-100' : 'bg-white'
       } ${day.inMonth ? 'text-neutral-900' : 'text-neutral-400'}`}
     >
       <span className={`text-xs ${isToday ? 'font-semibold' : ''}`}>{Number(day.date.slice(8))}</span>
-      <span className="flex flex-wrap items-center gap-0.5">
+      <span className="flex min-w-0 flex-wrap items-center gap-0.5">
         {entries.slice(0, MAX_DOTS).map((entry) => (
           <Dot key={entry.key} tone={dotTone(entry, today)} title={entryTitle(entry)} />
         ))}
@@ -82,7 +82,7 @@ export default function CalendarGrid({ weeks, entriesByDay, selected, today, onS
     <div className="flex flex-col gap-2">
       <div className="grid grid-cols-7 gap-1">
         {WEEKDAYS.map((weekday) => (
-          <span key={weekday} className="px-1.5 text-xs font-medium text-neutral-500">
+          <span key={weekday} className="min-w-0 truncate px-1.5 text-xs font-medium text-neutral-500">
             {weekday}
           </span>
         ))}
