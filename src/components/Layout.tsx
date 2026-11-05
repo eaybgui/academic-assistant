@@ -179,7 +179,7 @@ export default function Layout({ children }: LayoutProps) {
           ))}
         </ul>
       </nav>
-      <main className="flex-1 px-8 py-6">{children}</main>
+      <main className="min-w-0 flex-1 px-8 py-6">{children}</main>
     </div>
   );
 }
