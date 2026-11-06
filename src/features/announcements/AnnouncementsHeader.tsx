@@ -6,6 +6,7 @@ import type { CommandError, RunDto } from '../../lib/api/types';
 import ErrorMessage from '../../components/ErrorMessage';
 import { formatRelativeDay, formatTime } from '../../components/results/format';
 import { useCheckRun } from '../check-run/useCheckRun';
+import { CARD_ROW, PAGE_TITLE, PRIMARY_BUTTON, TEXT_MUTED_XS, TEXT_SECONDARY } from '../../components/styles';
 
 function formatLastCheck(run: RunDto | null): string {
   if (!run) return 'No checks yet.';
@@ -16,9 +17,9 @@ function formatLastCheck(run: RunDto | null): string {
 
 function MetricTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white px-4 py-3">
+    <div className={CARD_ROW}>
       <p className="text-2xl font-semibold text-neutral-900">{value}</p>
-      <p className="text-xs text-neutral-500">{label}</p>
+      <p className={TEXT_MUTED_XS}>{label}</p>
     </div>
   );
 }
@@ -61,12 +62,12 @@ export default function AnnouncementsHeader() {
     <div className="space-y-4">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Announcements</h1>
+          <h1 className={PAGE_TITLE}>Announcements</h1>
           <p className="mt-1 text-sm text-neutral-500">{formatLastCheck(dashboard?.lastRun ?? null)}</p>
         </div>
         <div className="text-right">
           {running ? (
-            <p role="status" className="text-sm text-neutral-600">
+            <p role="status" className={TEXT_SECONDARY}>
               {progress ?? 'Checking…'}
             </p>
           ) : (
@@ -74,7 +75,7 @@ export default function AnnouncementsHeader() {
               type="button"
               disabled={isTriggering}
               onClick={() => void handleCheckNow()}
-              className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+              className={PRIMARY_BUTTON}
             >
               Check now
             </button>

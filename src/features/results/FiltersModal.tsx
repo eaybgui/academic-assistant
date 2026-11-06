@@ -4,6 +4,7 @@ import SortSelect from '../../components/results/SortSelect';
 import { CATEGORY_LABELS } from '../../components/results/labels';
 import type { AccountDto, Category, ResultSort, UniversityDto } from '../../lib/api/types';
 import type { ResultFilters } from './filterUtils';
+import { PRIMARY_BUTTON_BASE } from '../../components/styles';
 
 export interface FiltersModalProps {
   open: boolean;
@@ -15,6 +16,8 @@ export interface FiltersModalProps {
   onApply: (filters: ResultFilters, sort: ResultSort) => void;
 }
 
+const FORM_LABEL = 'mb-1 block text-sm font-medium text-neutral-700';
+const FILTER_SELECT = 'w-full rounded border border-neutral-300 px-2 py-1.5 text-sm';
 const CATEGORY_OPTIONS: Category[] = ['notice', 'task', 'exam', 'event', 'change', 'general_info'];
 
 /**
@@ -78,7 +81,7 @@ export default function FiltersModal({
           <button
             type="button"
             onClick={handleApply}
-            className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800"
+            className={PRIMARY_BUTTON_BASE}
           >
             Apply
           </button>
@@ -87,7 +90,7 @@ export default function FiltersModal({
     >
       <div className="space-y-4">
         <div>
-          <label htmlFor="filter-state" className="mb-1 block text-sm font-medium text-neutral-700">
+          <label htmlFor="filter-state" className={FORM_LABEL}>
             State
           </label>
           <select
@@ -99,7 +102,7 @@ export default function FiltersModal({
                 seen: e.target.value === '' ? undefined : e.target.value === 'true',
               }))
             }
-            className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+            className={FILTER_SELECT}
           >
             <option value="">All</option>
             <option value="false">New</option>
@@ -108,7 +111,7 @@ export default function FiltersModal({
         </div>
 
         <div>
-          <label htmlFor="filter-category" className="mb-1 block text-sm font-medium text-neutral-700">
+          <label htmlFor="filter-category" className={FORM_LABEL}>
             Category
           </label>
           <select
@@ -120,7 +123,7 @@ export default function FiltersModal({
                 category: e.target.value === '' ? undefined : (e.target.value as Category),
               }))
             }
-            className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+            className={FILTER_SELECT}
           >
             <option value="">All</option>
             {CATEGORY_OPTIONS.map((category) => (
@@ -132,7 +135,7 @@ export default function FiltersModal({
         </div>
 
         <div>
-          <label htmlFor="filter-account" className="mb-1 block text-sm font-medium text-neutral-700">
+          <label htmlFor="filter-account" className={FORM_LABEL}>
             Account
           </label>
           <select
@@ -144,7 +147,7 @@ export default function FiltersModal({
                 accountId: e.target.value === '' ? undefined : Number(e.target.value),
               }))
             }
-            className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+            className={FILTER_SELECT}
           >
             <option value="">All</option>
             {accounts.map((account) => (
@@ -156,7 +159,7 @@ export default function FiltersModal({
         </div>
 
         <div>
-          <label htmlFor="filter-course" className="mb-1 block text-sm font-medium text-neutral-700">
+          <label htmlFor="filter-course" className={FORM_LABEL}>
             Course
           </label>
           <select
@@ -168,7 +171,7 @@ export default function FiltersModal({
                 courseId: e.target.value === '' ? undefined : Number(e.target.value),
               }))
             }
-            className="w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+            className={FILTER_SELECT}
           >
             <option value="">All</option>
             {courses.map((course) => (
@@ -180,7 +183,7 @@ export default function FiltersModal({
         </div>
 
         <div>
-          <label htmlFor="filter-sort" className="mb-1 block text-sm font-medium text-neutral-700">
+          <label htmlFor="filter-sort" className={FORM_LABEL}>
             Sort
           </label>
           <SortSelect id="filter-sort" value={draftSort} onChange={setDraftSort} />

@@ -4,6 +4,7 @@ import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
 import ErrorMessage from '../../components/ErrorMessage';
 import RunRow from './RunRow';
+import { PAGE_TITLE, TEXT_MUTED } from '../../components/styles';
 
 const HISTORY_LIMIT = 50;
 
@@ -20,12 +21,12 @@ export default function RunsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold text-neutral-900">Email runs</h1>
+      <h1 className={PAGE_TITLE}>Email runs</h1>
 
       {runsQuery.isError ? <ErrorMessage error={toCommandError(runsQuery.error)} /> : null}
 
       {runsQuery.isSuccess && runs.length === 0 ? (
-        <p className="text-sm text-neutral-500">No checks have run yet.</p>
+        <p className={TEXT_MUTED}>No checks have run yet.</p>
       ) : null}
 
       <ul className="space-y-2">

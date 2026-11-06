@@ -8,6 +8,7 @@ import TextInput from '../../components/forms/TextInput';
 import { toCommandError } from '../../lib/api/client';
 import type { PersonalTaskDto, PersonalTaskInput } from '../../lib/api/types';
 import { usePersonalTaskMutations } from './usePersonalTaskMutations';
+import { PRIMARY_BUTTON, SECONDARY_BUTTON } from '../../components/styles';
 
 export interface PersonalTaskModalProps {
   open: boolean;
@@ -17,11 +18,6 @@ export interface PersonalTaskModalProps {
   initialDate: string;
   onClose: () => void;
 }
-
-const BUTTON =
-  'rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50';
-const PRIMARY_BUTTON =
-  'rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50';
 
 /** Creates a personal task, or edits, ticks off and deletes an existing one. */
 export default function PersonalTaskModal({ open, task, initialDate, onClose }: PersonalTaskModalProps) {
@@ -87,11 +83,11 @@ function TaskForm({ task, initialDate, onClose }: TaskFormProps) {
               type="button"
               disabled={setDone.isPending}
               onClick={() => setDone.mutate({ id: task.id, value: !task.done })}
-              className={BUTTON}
+              className={SECONDARY_BUTTON}
             >
               {task.done ? 'Mark as not done' : 'Mark as done'}
             </button>
-            <button type="button" onClick={() => setConfirmingDelete(true)} className={BUTTON}>
+            <button type="button" onClick={() => setConfirmingDelete(true)} className={SECONDARY_BUTTON}>
               Delete
             </button>
           </>

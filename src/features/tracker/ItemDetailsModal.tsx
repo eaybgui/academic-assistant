@@ -10,14 +10,12 @@ import type { LmsItemDto } from '../../lib/api/types';
 import StatusPill from './StatusPill';
 import { KIND_LABELS, canMarkDone, changeText } from './labels';
 import { useItemMutations } from './useItemMutations';
+import { ITEM_TITLE, SECONDARY_BUTTON } from '../../components/styles';
 
 export interface ItemDetailsModalProps {
   item: LmsItemDto | null;
   onClose: () => void;
 }
-
-const ACTION_BUTTON =
-  'rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50';
 
 /** Full detail view of a tracker item: metadata, platform link, note editor and the hide / done actions. */
 export default function ItemDetailsModal({ item, onClose }: ItemDetailsModalProps) {
@@ -52,14 +50,14 @@ function ItemDetails({ item }: { item: LmsItemDto }) {
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <StatusPill status={item.status} />
-        {item.grade ? <span className="font-medium text-neutral-900">{item.grade.display}</span> : null}
+        {item.grade ? <span className={ITEM_TITLE}>{item.grade.display}</span> : null}
       </div>
       <p>{item.dueAt ? `Due ${formatDateTime(item.dueAt)}` : 'No date'}</p>
       {item.change ? <p className="text-amber-800">{changeText(item.change, item.dueAt)}</p> : null}
       {item.removedAt ? <p>Removed from the platform on {formatDate(item.removedAt)}</p> : null}
       {canOpen ? (
         <div>
-          <button type="button" onClick={() => void handleOpen()} className={ACTION_BUTTON}>
+          <button type="button" onClick={() => void handleOpen()} className={SECONDARY_BUTTON}>
             Open in platform
           </button>
           {openError ? <p className="mt-1 text-sm text-red-600">Couldn&apos;t open the link</p> : null}
@@ -74,7 +72,7 @@ function ItemDetails({ item }: { item: LmsItemDto }) {
           type="button"
           disabled={setNote.isPending}
           onClick={() => setNote.mutate({ id: item.id, note: note.trim() === '' ? null : note })}
-          className={ACTION_BUTTON}
+          className={SECONDARY_BUTTON}
         >
           Save note
         </button>
@@ -86,7 +84,7 @@ function ItemDetails({ item }: { item: LmsItemDto }) {
           type="button"
           disabled={setHidden.isPending}
           onClick={() => setHidden.mutate({ id: item.id, value: !item.hidden })}
-          className={ACTION_BUTTON}
+          className={SECONDARY_BUTTON}
         >
           {item.hidden ? 'Show again' : 'Hide'}
         </button>
@@ -95,7 +93,7 @@ function ItemDetails({ item }: { item: LmsItemDto }) {
             type="button"
             disabled={setDone.isPending}
             onClick={() => setDone.mutate({ id: item.id, value: !item.done })}
-            className={ACTION_BUTTON}
+            className={SECONDARY_BUTTON}
           >
             {item.done ? 'Mark as not done' : 'Mark as done'}
           </button>

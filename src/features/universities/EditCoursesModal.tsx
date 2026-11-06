@@ -8,6 +8,7 @@ import type { LmsUniversityDto } from '../../lib/api/types';
 import { useSync } from '../sync/useSync';
 import CourseSelectionList from './CourseSelectionList';
 import { useInvalidateUniversities } from './useInvalidateUniversities';
+import { PRIMARY_BUTTON, SECONDARY_BUTTON_BASE, TEXT_MUTED } from '../../components/styles';
 
 export interface EditCoursesModalProps {
   open: boolean;
@@ -71,7 +72,7 @@ export default function EditCoursesModal({ open, university, onClose }: EditCour
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+            className={SECONDARY_BUTTON_BASE}
           >
             Cancel
           </button>
@@ -79,7 +80,7 @@ export default function EditCoursesModal({ open, university, onClose }: EditCour
             type="button"
             disabled={!coursesQuery.data || saveMutation.isPending}
             onClick={() => saveMutation.mutate()}
-            className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+            className={PRIMARY_BUTTON}
           >
             {saveMutation.isPending ? 'Saving…' : 'Save'}
           </button>
@@ -87,7 +88,7 @@ export default function EditCoursesModal({ open, university, onClose }: EditCour
       }
     >
       <div className="flex flex-col gap-3">
-        {coursesQuery.isPending ? <p className="text-sm text-neutral-500">Loading courses…</p> : null}
+        {coursesQuery.isPending ? <p className={TEXT_MUTED}>Loading courses…</p> : null}
         <ErrorMessage error={coursesQuery.data?.fetchError ?? null} />
         <ErrorMessage error={coursesQuery.error ? toCommandError(coursesQuery.error) : null} />
         {coursesQuery.data ? (

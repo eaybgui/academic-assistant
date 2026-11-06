@@ -9,8 +9,10 @@ import FiltersModal from '../results/FiltersModal';
 import { countActiveFilters, type ResultFilters } from '../results/filterUtils';
 import ResultRow from '../results/ResultRow';
 import AnnouncementsHeader from './AnnouncementsHeader';
+import { TEXT_MUTED } from '../../components/styles';
 
 const PAGE_SIZE = 25;
+const PAGINATION_BUTTON = 'rounded border border-neutral-300 px-3 py-1 disabled:opacity-40';
 const SEARCH_DEBOUNCE_MS = 300;
 
 export default function AnnouncementsPage() {
@@ -128,7 +130,7 @@ export default function AnnouncementsPage() {
       </table>
 
       {items.length === 0 && !resultsQuery.isLoading ? (
-        <p className="text-sm text-neutral-500">No results match these filters.</p>
+        <p className={TEXT_MUTED}>No results match these filters.</p>
       ) : null}
 
       <div className="flex items-center justify-between text-sm text-neutral-600">
@@ -140,7 +142,7 @@ export default function AnnouncementsPage() {
             type="button"
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={page === 0}
-            className="rounded border border-neutral-300 px-3 py-1 disabled:opacity-40"
+            className={PAGINATION_BUTTON}
           >
             Previous
           </button>
@@ -148,7 +150,7 @@ export default function AnnouncementsPage() {
             type="button"
             onClick={() => setPage((p) => (p + 1 < totalPages ? p + 1 : p))}
             disabled={page + 1 >= totalPages}
-            className="rounded border border-neutral-300 px-3 py-1 disabled:opacity-40"
+            className={PAGINATION_BUTTON}
           >
             Next
           </button>

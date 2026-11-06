@@ -10,6 +10,7 @@ import Textarea from '../../components/forms/Textarea';
 import type { CommandError } from '../../lib/api/types';
 import JevKeyModal from './JevKeyModal';
 import { buildSettingsInput, settingsToFormState, type SettingsFormState } from './settingsForm';
+import { PAGE_TITLE, SECONDARY_BUTTON, SECTION_TITLE, TEXT_BODY, TEXT_MUTED } from '../../components/styles';
 
 const PROVIDERS = [
   {
@@ -78,8 +79,8 @@ export default function SettingsPage() {
   if (!form) {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-2xl font-semibold text-neutral-900">Settings</h1>
-        {settingsQuery.isLoading ? <p className="text-sm text-neutral-500">Loading…</p> : null}
+        <h1 className={PAGE_TITLE}>Settings</h1>
+        {settingsQuery.isLoading ? <p className={TEXT_MUTED}>Loading…</p> : null}
       </div>
     );
   }
@@ -90,10 +91,10 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold text-neutral-900">Settings</h1>
+      <h1 className={PAGE_TITLE}>Settings</h1>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold text-neutral-900">AI provider</h2>
+        <h2 className={SECTION_TITLE}>AI provider</h2>
         <div role="radiogroup" aria-label="AI provider" className="grid grid-cols-2 gap-3">
           {PROVIDERS.map((provider) => (
             <button
@@ -109,7 +110,7 @@ export default function SettingsPage() {
               }`}
             >
               <p className="font-semibold text-neutral-900">{provider.title}</p>
-              <p className="text-sm text-neutral-500">{provider.description}</p>
+              <p className={TEXT_MUTED}>{provider.description}</p>
             </button>
           ))}
         </div>
@@ -162,16 +163,16 @@ export default function SettingsPage() {
             type="button"
             disabled={testProviderMutation.isPending}
             onClick={() => testProviderMutation.mutate()}
-            className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className={SECONDARY_BUTTON}
           >
             {testProviderMutation.isPending ? 'Testing…' : 'Test provider'}
           </button>
-          {testResult ? <p className="text-sm text-neutral-700">{testResult}</p> : null}
+          {testResult ? <p className={TEXT_BODY}>{testResult}</p> : null}
         </div>
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold text-neutral-900">Microsoft sign-in</h2>
+        <h2 className={SECTION_TITLE}>Microsoft sign-in</h2>
         <Field label="Entra application (client) ID" htmlFor="microsoft-client-id">
           <TextInput
             id="microsoft-client-id"
@@ -183,7 +184,7 @@ export default function SettingsPage() {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold text-neutral-900">Filters</h2>
+        <h2 className={SECTION_TITLE}>Filters</h2>
         <Field label="Blocked senders and domains (one per line)" htmlFor="blocked-senders">
           <Textarea
             id="blocked-senders"

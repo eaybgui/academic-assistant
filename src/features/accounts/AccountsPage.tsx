@@ -11,6 +11,16 @@ import { TrashIcon } from '../../components/forms/icons';
 import type { AccountDto, CommandError } from '../../lib/api/types';
 import AccountFormModal from './AccountFormModal';
 import { accountToFormState, buildAccountInput, existingTenant } from './accountForm';
+import {
+  ICON_DELETE_BUTTON,
+  ITEM_TITLE_BOLD,
+  LINK_BUTTON,
+  LIST_CARD,
+  PAGE_TITLE,
+  PRIMARY_BUTTON_BASE,
+  TEXT_MUTED,
+  TEXT_SECONDARY,
+} from '../../components/styles';
 
 function formatLastSync(account: AccountDto): { text: string; isError: boolean } {
   if (account.provider.type === 'microsoft_graph' && !account.credentialsConfigured) {
@@ -111,11 +121,11 @@ export default function AccountsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-neutral-900">Email accounts</h1>
+        <h1 className={PAGE_TITLE}>Email accounts</h1>
         <button
           type="button"
           onClick={openAddModal}
-          className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800"
+          className={PRIMARY_BUTTON_BASE}
         >
           Add account
         </button>
@@ -123,9 +133,9 @@ export default function AccountsPage() {
 
       <ErrorMessage error={rowError} />
 
-      {accountsQuery.isLoading ? <p className="text-sm text-neutral-500">Loading…</p> : null}
+      {accountsQuery.isLoading ? <p className={TEXT_MUTED}>Loading…</p> : null}
       {accountsQuery.data && accountsQuery.data.length === 0 ? (
-        <p className="text-sm text-neutral-500">No accounts yet. Add one to start syncing email.</p>
+        <p className={TEXT_MUTED}>No accounts yet. Add one to start syncing email.</p>
       ) : null}
 
       <ul className="flex flex-col gap-2">
@@ -138,23 +148,23 @@ export default function AccountsPage() {
           const isToggling = toggleMutation.isPending && toggleMutation.variables?.id === account.id;
 
           return (
-            <li key={account.id} className="rounded border border-neutral-200 bg-white px-4 py-3">
+            <li key={account.id} className={LIST_CARD}>
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-start gap-3">
                   <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-sm font-semibold text-neutral-600">
                     {account.name.slice(0, 1).toUpperCase() || '?'}
                   </span>
                   <div>
-                    <p className="font-bold text-neutral-900">{account.name}</p>
-                    <p className="text-sm text-neutral-500">
+                    <p className={ITEM_TITLE_BOLD}>{account.name}</p>
+                    <p className={TEXT_MUTED}>
                       {providerLabel} · {account.emailAddress} · {uniName} · {account.folders.join(', ')} ·{' '}
                       <span className={sync.isError ? 'text-red-600' : ''}>{sync.text}</span>
                     </p>
                     {testResults[account.id] ? (
-                      <p className="text-sm text-neutral-600">{testResults[account.id]}</p>
+                      <p className={TEXT_SECONDARY}>{testResults[account.id]}</p>
                     ) : null}
                     {isSigningIn ? (
-                      <p className="text-sm text-neutral-600">Waiting for sign-in in your browser…</p>
+                      <p className={TEXT_SECONDARY}>Waiting for sign-in in your browser…</p>
                     ) : null}
                   </div>
                 </div>
@@ -164,14 +174,14 @@ export default function AccountsPage() {
                     type="button"
                     onClick={() => testMutation.mutate(account.id)}
                     disabled={testMutation.isPending}
-                    className="text-sm text-neutral-700 hover:underline"
+                    className={LINK_BUTTON}
                   >
                     Test
                   </button>
                   <button
                     type="button"
                     onClick={() => openEditModal(account)}
-                    className="text-sm text-neutral-700 hover:underline"
+                    className={LINK_BUTTON}
                   >
                     Edit
                   </button>
@@ -180,7 +190,7 @@ export default function AccountsPage() {
                       type="button"
                       onClick={() => signInMutation.mutate(account.id)}
                       disabled={signInMutation.isPending}
-                      className="text-sm text-neutral-700 hover:underline"
+                      className={LINK_BUTTON}
                     >
                       {account.credentialsConfigured ? 'Reconnect' : 'Sign in'}
                     </button>
@@ -195,7 +205,7 @@ export default function AccountsPage() {
                     type="button"
                     aria-label={`Delete ${account.name}`}
                     onClick={() => openDeleteConfirm(account)}
-                    className="text-neutral-400 hover:text-red-600"
+                    className={ICON_DELETE_BUTTON}
                   >
                     <TrashIcon />
                   </button>

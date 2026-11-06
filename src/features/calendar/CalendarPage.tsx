@@ -11,12 +11,10 @@ import { useOpenEntry } from '../tracker/useOpenEntry';
 import CalendarGrid from './CalendarGrid';
 import DayList from './DayList';
 import { entriesByDay, monthGrid } from './monthGrid';
+import { PAGE_TITLE, SECONDARY_BUTTON_BASE, TEXT_MUTED } from '../../components/styles';
 
 /** Same query as the dashboard's All tab, so both screens share one cache entry. */
 const ALL: TrackerQuery = { universityId: null, includeHidden: false, includeRemoved: false };
-
-const NAV_BUTTON =
-  'rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50';
 
 interface ViewedMonth {
   year: number;
@@ -54,7 +52,7 @@ export default function CalendarPage() {
   const { openEntry, open, close } = useOpenEntry(entries, false);
 
   if (error && !data) return <ErrorMessage error={toCommandError(error)} />;
-  if (!data) return <p className="text-sm text-neutral-500">Loading…</p>;
+  if (!data) return <p className={TEXT_MUTED}>Loading…</p>;
 
   function goToToday() {
     setViewed(monthOf(today));
@@ -64,13 +62,13 @@ export default function CalendarPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-neutral-900">Calendar</h1>
+        <h1 className={PAGE_TITLE}>Calendar</h1>
         <div className="flex items-center gap-2">
           <button
             type="button"
             aria-label="Previous month"
             onClick={() => setViewed(shiftMonth(viewed, -1))}
-            className={NAV_BUTTON}
+            className={SECONDARY_BUTTON_BASE}
           >
             ‹
           </button>
@@ -81,11 +79,11 @@ export default function CalendarPage() {
             type="button"
             aria-label="Next month"
             onClick={() => setViewed(shiftMonth(viewed, 1))}
-            className={NAV_BUTTON}
+            className={SECONDARY_BUTTON_BASE}
           >
             ›
           </button>
-          <button type="button" onClick={goToToday} className={NAV_BUTTON}>
+          <button type="button" onClick={goToToday} className={SECONDARY_BUTTON_BASE}>
             Today
           </button>
         </div>

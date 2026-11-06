@@ -6,6 +6,7 @@ import { toCommandError } from '../../lib/api/client';
 import type { TrackerEntry } from '../tracker/entries';
 import EntryRow from '../tracker/EntryRow';
 import { usePersonalTaskMutations } from '../tracker/usePersonalTaskMutations';
+import { PRIMARY_BUTTON, SUBSECTION_TITLE, TEXT_MUTED } from '../../components/styles';
 
 export interface DayListProps {
   /** Local `YYYY-MM-DD` of the selected day. */
@@ -26,9 +27,9 @@ export default function DayList({ day, entries, onOpen }: DayListProps) {
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-neutral-900">{formatLongDay(day)}</h2>
+      <h2 className={SUBSECTION_TITLE}>{formatLongDay(day)}</h2>
       {entries.length === 0 ? (
-        <p className="text-sm text-neutral-500">Nothing on this day.</p>
+        <p className={TEXT_MUTED}>Nothing on this day.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {entries.map((entry) => (
@@ -47,7 +48,7 @@ export default function DayList({ day, entries, onOpen }: DayListProps) {
         <button
           type="submit"
           disabled={create.isPending}
-          className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+          className={PRIMARY_BUTTON}
         >
           Add
         </button>

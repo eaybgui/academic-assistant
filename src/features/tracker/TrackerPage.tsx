@@ -14,6 +14,15 @@ import PersonalTaskModal from './PersonalTaskModal';
 import SyncBanners from './SyncBanners';
 import { useOpenEntry } from './useOpenEntry';
 import { usePersistentState } from './usePersistentState';
+import {
+  PAGE_TITLE,
+  PRIMARY_BUTTON,
+  SECONDARY_BUTTON_BASE,
+  SECTION_TITLE,
+  TEXT_MUTED,
+  TEXT_MUTED_XS,
+  TEXT_SECONDARY,
+} from '../../components/styles';
 
 const TAB_KEY = 'academic-assistant.tracker-tab';
 const GROUP_KEY = 'academic-assistant.tracker-group';
@@ -24,11 +33,6 @@ const GROUP_LABELS: Record<GroupBy, string> = {
 };
 
 const CARD = 'rounded-lg border border-neutral-200 bg-white p-6';
-const PRIMARY_BUTTON =
-  'rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50';
-
-const SECONDARY_BUTTON =
-  'rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50';
 
 function isTabValue(value: string): value is string {
   return value === 'all' || /^\d+$/.test(value);
@@ -82,15 +86,15 @@ export default function TrackerPage() {
   const { openEntry, open, close } = useOpenEntry(entries, isPlaceholderData);
 
   if (error && !data) return <ErrorMessage error={toCommandError(error)} />;
-  if (!data || !entries) return <p className="text-sm text-neutral-500">Loading…</p>;
+  if (!data || !entries) return <p className={TEXT_MUTED}>Loading…</p>;
 
   const { universities, syncRunning } = data;
 
   if (universities.length === 0) {
     return (
       <div className={`${CARD} flex max-w-xl flex-col items-start gap-3`}>
-        <h1 className="text-lg font-semibold text-neutral-900">Track your deliverables</h1>
-        <p className="text-sm text-neutral-600">
+        <h1 className={SECTION_TITLE}>Track your deliverables</h1>
+        <p className={TEXT_SECONDARY}>
           Add your university to see assignments, exams and course events in one place.
         </p>
         <button
@@ -107,8 +111,8 @@ export default function TrackerPage() {
   if (universities.every((u) => u.courses.tracked === 0)) {
     return (
       <div className={`${CARD} flex max-w-xl flex-col items-start gap-3`}>
-        <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
-        <p className="text-sm text-neutral-600">No courses are tracked yet.</p>
+        <h1 className={PAGE_TITLE}>Dashboard</h1>
+        <p className={TEXT_SECONDARY}>No courses are tracked yet.</p>
         <button
           type="button"
           onClick={() => void navigate('/universities')}
@@ -128,16 +132,16 @@ export default function TrackerPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-neutral-900">Dashboard</h1>
+        <h1 className={PAGE_TITLE}>Dashboard</h1>
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-3">
             {lastSyncAt ? (
-              <span className="text-xs text-neutral-500">
+              <span className={TEXT_MUTED_XS}>
                 Last synced {formatLastSynced(lastSyncAt)}
               </span>
             ) : null}
             {tab === 'all' ? (
-              <button type="button" onClick={() => setAddingTask(true)} className={SECONDARY_BUTTON}>
+              <button type="button" onClick={() => setAddingTask(true)} className={SECONDARY_BUTTON_BASE}>
                 Add task
               </button>
             ) : null}
@@ -220,7 +224,7 @@ export default function TrackerPage() {
       <SyncBanners universities={shown} />
       {entries.length === 0 && selectedUntracked ? (
         <div className="flex flex-col items-start gap-2">
-          <p className="text-sm text-neutral-500">
+          <p className={TEXT_MUTED}>
             No courses are tracked for {selectedUntracked.name}.
           </p>
           <button

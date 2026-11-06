@@ -7,6 +7,7 @@ import TextInput from '../../components/forms/TextInput';
 import { api, toCommandError } from '../../lib/api/client';
 import { queryKeys } from '../../lib/api/queryKeys';
 import type { CommandError } from '../../lib/api/types';
+import { PRIMARY_BUTTON, SECONDARY_BUTTON_BASE } from '../../components/styles';
 
 export interface JevKeyModalProps {
   open: boolean;
@@ -58,7 +59,7 @@ export default function JevKeyModal({ open, onClose }: JevKeyModalProps) {
           <button
             type="button"
             onClick={handleClose}
-            className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+            className={SECONDARY_BUTTON_BASE}
           >
             Cancel
           </button>
@@ -66,7 +67,7 @@ export default function JevKeyModal({ open, onClose }: JevKeyModalProps) {
             type="button"
             disabled={saveMutation.isPending}
             onClick={handleSubmit}
-            className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+            className={PRIMARY_BUTTON}
           >
             {saveMutation.isPending ? 'Saving…' : 'Save'}
           </button>

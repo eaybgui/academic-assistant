@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { SECTION_TITLE } from './styles';
 
 export interface ModalProps {
   open: boolean;
@@ -89,7 +90,7 @@ export default function Modal({ open, title, onClose, children, footer }: ModalP
       {open ? (
         <div className="flex min-h-0 flex-1 flex-col" onClick={(e) => e.stopPropagation()}>
           <header className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-5 py-4">
-            <h2 id={titleId} className="text-lg font-semibold text-neutral-900">
+            <h2 id={titleId} className={SECTION_TITLE}>
               {title}
             </h2>
             <button

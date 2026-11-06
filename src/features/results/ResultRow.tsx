@@ -6,6 +6,7 @@ import ResultActions from '../../components/results/ResultActions';
 import ResultFlags from '../../components/results/ResultFlags';
 import ErrorMessage from '../../components/ErrorMessage';
 import { formatDate, formatDateTime, formatResultDate, todayLocalIso } from '../../components/results/format';
+import { ITEM_TITLE, TEXT_MUTED_XS } from '../../components/styles';
 
 export interface ResultRowProps {
   result: ResultDto;
@@ -53,8 +54,8 @@ export default function ResultRow({
         </td>
         <td className="py-2 pr-4">
           <button type="button" onClick={onToggle} aria-expanded={expanded} className="w-full text-left">
-            <p className="font-medium text-neutral-900">{result.subject}</p>
-            <p className="text-xs text-neutral-500">
+            <p className={ITEM_TITLE}>{result.subject}</p>
+            <p className={TEXT_MUTED_XS}>
               {result.senderName ?? result.senderEmail}
               {result.courseName ? ` · ${result.courseName}` : ''} · received {formatDate(result.receivedAt)}
             </p>
