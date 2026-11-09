@@ -90,6 +90,21 @@ See [architecture.md](architecture.md).
 - **Documentation**: each component has a Markdown file that describes what exists (purpose,
   API, behavior, errors, how to test, limitations). Update it in the same change as the code.
 
+## Email section switch
+
+The email section (Announcements, Email accounts, Email runs, Settings) is hidden by default behind
+the build-time switch `VITE_EMAIL_FEATURES` (`src/config/features.ts`). To work on it, enable it:
+
+```powershell
+$env:VITE_EMAIL_FEATURES='true'; npm run tauri dev
+```
+
+```bash
+VITE_EMAIL_FEATURES=true npm run tauri dev
+```
+
+Release builds ship with it off. Do not commit `.env` files.
+
 ## Quality gates
 
 Run all that apply before considering a change done. From the repository root:
