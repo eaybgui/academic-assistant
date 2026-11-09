@@ -1,4 +1,5 @@
 import type { CommandError } from '../lib/api/types';
+import { TEXT_ERROR } from './styles';
 
 export interface ErrorMessageProps {
   error: CommandError | null;
@@ -9,7 +10,7 @@ export default function ErrorMessage({ error }: ErrorMessageProps) {
   if (!error) return null;
 
   return (
-    <p role="alert" className="text-sm text-red-600">
+    <p role="alert" className={TEXT_ERROR}>
       {error.message}
     </p>
   );

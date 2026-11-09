@@ -8,12 +8,12 @@ import { KIND_LABELS, canMarkDone, changeText, courseLabel } from './labels';
 import {
   CHECKBOX_CLASS,
   META_ROW_CLASS,
-  ROW_CLASS,
   SUBTITLE_CLASS,
   TITLE_BUTTON_CLASS,
   TITLE_ROW_CLASS,
 } from './rowStyles';
 import { useItemMutations } from './useItemMutations';
+import { CARD_ROW, ITEM_TITLE, TONE_AMBER } from '../../components/styles';
 
 export interface ItemRowProps {
   item: LmsItemDto;
@@ -29,7 +29,7 @@ export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) 
   const failed = [setDone, setHidden, dismissChange].find((mutation) => mutation.isError) ?? null;
 
   return (
-    <li className={ROW_CLASS}>
+    <li className={CARD_ROW}>
       <div className="flex items-start gap-3">
         {canMarkDone(item) ? (
           <input
@@ -63,10 +63,10 @@ export default function ItemRow({ item, showUniversity, onOpen }: ItemRowProps) 
           </p>
           <div className={META_ROW_CLASS}>
             <StatusPill status={item.status} />
-            {item.grade ? <span className="font-medium text-neutral-900">{item.grade.display}</span> : null}
+            {item.grade ? <span className={ITEM_TITLE}>{item.grade.display}</span> : null}
             <span>{item.dueAt ? formatDateTime(item.dueAt) : 'No date'}</span>
             {item.change ? (
-              <span className={`inline-flex items-center gap-1 ${CHIP} bg-amber-100 text-amber-800`}>
+              <span className={`inline-flex items-center gap-1 ${CHIP} ${TONE_AMBER}`}>
                 {changeText(item.change, item.dueAt)}
                 <button
                   type="button"

@@ -6,13 +6,13 @@ import NoteIndicator from './NoteIndicator';
 import {
   CHECKBOX_CLASS,
   META_ROW_CLASS,
-  ROW_CLASS,
   SUBTITLE_CLASS,
   TITLE_BUTTON_CLASS,
   TITLE_ROW_CLASS,
 } from './rowStyles';
 import StatusPill from './StatusPill';
 import { usePersonalTaskMutations } from './usePersonalTaskMutations';
+import { CARD_ROW } from '../../components/styles';
 
 export interface PersonalTaskRowProps {
   entry: Extract<TrackerEntry, { kind: 'personal' }>;
@@ -25,7 +25,7 @@ export default function PersonalTaskRow({ entry, onOpen }: PersonalTaskRowProps)
   const { setDone } = usePersonalTaskMutations();
 
   return (
-    <li className={ROW_CLASS}>
+    <li className={CARD_ROW}>
       <div className="flex items-start gap-3">
         <input
           type="checkbox"

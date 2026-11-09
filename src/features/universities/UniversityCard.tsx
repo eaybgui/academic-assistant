@@ -11,6 +11,7 @@ import EditCoursesModal from './EditCoursesModal';
 import { PLATFORM_LABELS, connectionStatusText } from './labels';
 import RenameUniversityModal from './RenameUniversityModal';
 import { useInvalidateUniversities } from './useInvalidateUniversities';
+import { ICON_DELETE_BUTTON, ITEM_TITLE_BOLD, LIST_CARD, TEXT_ERROR, TEXT_MUTED } from '../../components/styles';
 
 export interface UniversityCardProps {
   university: LmsUniversityDto;
@@ -76,18 +77,18 @@ export default function UniversityCard({ university }: UniversityCardProps) {
   }
 
   return (
-    <li className="rounded border border-neutral-200 bg-white px-4 py-3">
+    <li className={LIST_CARD}>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="font-bold text-neutral-900">{name}</p>
-          <p className="text-sm text-neutral-500">
+          <p className={ITEM_TITLE_BOLD}>{name}</p>
+          <p className={TEXT_MUTED}>
             {PLATFORM_LABELS[university.platform]} · {university.baseUrl}
           </p>
           <p className={`text-sm ${loginState === 'ok' ? 'text-neutral-600' : 'text-red-600'}`}>
             {connectionStatusText(loginState, university.accountLabel)}
           </p>
           {courses.total > 0 ? (
-            <p className="text-sm text-neutral-500">
+            <p className={TEXT_MUTED}>
               {courses.tracked} of {courses.total} courses tracked
             </p>
           ) : null}
@@ -97,12 +98,12 @@ export default function UniversityCard({ university }: UniversityCardProps) {
             </button>
           ) : null}
           {lastSync.at ? (
-            <p className="text-sm text-neutral-500">
+            <p className={TEXT_MUTED}>
               Last synced {formatLastSynced(lastSync.at)}
             </p>
           ) : null}
           {lastSync.outcome === 'failed' && lastSync.error ? (
-            <p className="text-sm text-red-600">{lastSync.error}</p>
+            <p className={TEXT_ERROR}>{lastSync.error}</p>
           ) : null}
           <ErrorMessage error={actionError} />
         </div>
@@ -174,7 +175,7 @@ export default function UniversityCard({ university }: UniversityCardProps) {
             type="button"
             aria-label={`Delete ${name}`}
             onClick={openDelete}
-            className="text-neutral-400 hover:text-red-600"
+            className={ICON_DELETE_BUTTON}
           >
             <TrashIcon />
           </button>

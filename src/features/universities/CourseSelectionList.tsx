@@ -1,12 +1,11 @@
 import type { LmsCourseDto } from '../../lib/api/types';
+import { LINK_BUTTON } from '../../components/styles';
 
 export interface CourseSelectionListProps {
   courses: LmsCourseDto[];
   selected: ReadonlySet<number>;
   onChange: (next: Set<number>) => void;
 }
-
-const LINK_BUTTON = 'text-sm text-neutral-700 hover:underline';
 
 /** Checkbox list used to choose which courses of a university are tracked. */
 export default function CourseSelectionList({ courses, selected, onChange }: CourseSelectionListProps) {

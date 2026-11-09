@@ -7,6 +7,7 @@ import { queryKeys } from '../../lib/api/queryKeys';
 import AddUniversityModal from './AddUniversityModal';
 import { useSync } from '../sync/useSync';
 import UniversityCard from './UniversityCard';
+import { PAGE_TITLE, PRIMARY_BUTTON_BASE, TEXT_MUTED } from '../../components/styles';
 
 /** Universities screen: LMS platforms with their sign-in state, plus the add flow. */
 export default function UniversitiesPage() {
@@ -34,7 +35,7 @@ export default function UniversitiesPage() {
     <button
       type="button"
       onClick={openAdd}
-      className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800"
+      className={PRIMARY_BUTTON_BASE}
     >
       Add university
     </button>
@@ -46,17 +47,17 @@ export default function UniversitiesPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-neutral-900">Universities</h1>
+        <h1 className={PAGE_TITLE}>Universities</h1>
         {isEmpty ? null : addButton}
       </div>
 
       <ErrorMessage error={syncError} />
       <ErrorMessage error={universitiesQuery.error ? toCommandError(universitiesQuery.error) : null} />
 
-      {universitiesQuery.isLoading ? <p className="text-sm text-neutral-500">Loading…</p> : null}
+      {universitiesQuery.isLoading ? <p className={TEXT_MUTED}>Loading…</p> : null}
       {isEmpty ? (
         <div className="flex flex-col items-start gap-3">
-          <p className="text-sm text-neutral-500">No universities yet</p>
+          <p className={TEXT_MUTED}>No universities yet</p>
           {addButton}
         </div>
       ) : null}

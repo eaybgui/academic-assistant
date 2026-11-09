@@ -12,6 +12,7 @@ import { useSync } from '../sync/useSync';
 import CourseSelectionList from './CourseSelectionList';
 import { PLATFORM_LABELS, connectionStatusText } from './labels';
 import { useInvalidateUniversities } from './useInvalidateUniversities';
+import { PRIMARY_BUTTON, SECONDARY_BUTTON_BASE, TEXT_BODY } from '../../components/styles';
 
 export interface AddUniversityModalProps {
   open: boolean;
@@ -22,9 +23,6 @@ const PLATFORM_OPTIONS = (Object.keys(PLATFORM_LABELS) as LmsPlatform[]).map((va
   value,
   label: PLATFORM_LABELS[value],
 }));
-
-const PRIMARY_BUTTON =
-  'rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50';
 
 /**
  * Three-step modal. Step 1 saves the university (the backend checks the URL belongs to the chosen
@@ -106,7 +104,7 @@ export default function AddUniversityModal({ open, onClose }: AddUniversityModal
     <button
       type="button"
       onClick={onClose}
-      className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+      className={SECONDARY_BUTTON_BASE}
     >
       Cancel
     </button>
@@ -180,12 +178,12 @@ export default function AddUniversityModal({ open, onClose }: AddUniversityModal
         <div className="flex flex-col gap-3">
           <p className="text-sm text-neutral-900">{saved.baseUrl}</p>
           {connected !== null ? (
-            <p className="text-sm text-neutral-700">
+            <p className={TEXT_BODY}>
               {connectionStatusText(connected.loginState, connected.accountLabel)}
             </p>
           ) : (
             <>
-              <p className="text-sm text-neutral-700">
+              <p className={TEXT_BODY}>
                 Sign in with your university account in the window that opens.
               </p>
               <div>

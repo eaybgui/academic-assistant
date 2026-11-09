@@ -1,6 +1,7 @@
 import Modal from '../Modal';
 import ErrorMessage from '../ErrorMessage';
 import type { CommandError } from '../../lib/api/types';
+import { SECONDARY_BUTTON, TEXT_BODY } from '../styles';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -38,7 +39,7 @@ export default function ConfirmDialog({
             type="button"
             disabled={pending}
             onClick={onCancel}
-            className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className={SECONDARY_BUTTON}
           >
             Cancel
           </button>
@@ -54,7 +55,7 @@ export default function ConfirmDialog({
       }
     >
       <div className="flex flex-col gap-2">
-        <p className="text-sm text-neutral-700">{message}</p>
+        <p className={TEXT_BODY}>{message}</p>
         <ErrorMessage error={error ?? null} />
       </div>
     </Modal>

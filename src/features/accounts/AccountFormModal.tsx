@@ -19,6 +19,13 @@ import {
   type AccountFormState,
   type ProviderType,
 } from './accountForm';
+import {
+  PRIMARY_BUTTON,
+  SECONDARY_BUTTON,
+  SECONDARY_BUTTON_BASE,
+  TEXT_BODY,
+  TEXT_SECONDARY,
+} from '../../components/styles';
 
 export interface AccountFormModalProps {
   open: boolean;
@@ -122,7 +129,7 @@ export default function AccountFormModal({ open, account, universities, onClose 
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+            className={SECONDARY_BUTTON_BASE}
           >
             Cancel
           </button>
@@ -131,7 +138,7 @@ export default function AccountFormModal({ open, account, universities, onClose 
               type="button"
               disabled={testMutation.isPending}
               onClick={() => account && testMutation.mutate(account.id)}
-              className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+              className={SECONDARY_BUTTON}
             >
               {testMutation.isPending ? 'Testing…' : 'Test connection'}
             </button>
@@ -140,7 +147,7 @@ export default function AccountFormModal({ open, account, universities, onClose 
             type="button"
             disabled={saveMutation.isPending}
             onClick={handleSubmit}
-            className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+            className={PRIMARY_BUTTON}
           >
             {saveMutation.isPending ? 'Saving…' : 'Save'}
           </button>
@@ -262,7 +269,7 @@ export default function AccountFormModal({ open, account, universities, onClose 
 
         <ErrorMessage error={saveError} />
 
-        {testResult ? <p className="text-sm text-neutral-700">{testResult}</p> : null}
+        {testResult ? <p className={TEXT_BODY}>{testResult}</p> : null}
 
         {state.providerType === 'microsoft_graph' && savedAccount ? (
           <div className="flex items-center gap-3 rounded border border-neutral-200 bg-neutral-50 px-3 py-2">
@@ -273,14 +280,14 @@ export default function AccountFormModal({ open, account, universities, onClose 
                 setSignedIn(false);
                 signInMutation.mutate(savedAccount.id);
               }}
-              className="rounded bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+              className={PRIMARY_BUTTON}
             >
               Sign in with Microsoft
             </button>
             {signInMutation.isPending ? (
-              <span className="text-sm text-neutral-600">Waiting for sign-in in your browser…</span>
+              <span className={TEXT_SECONDARY}>Waiting for sign-in in your browser…</span>
             ) : signedIn ? (
-              <span className="text-sm text-neutral-600">Signed in.</span>
+              <span className={TEXT_SECONDARY}>Signed in.</span>
             ) : null}
           </div>
         ) : null}

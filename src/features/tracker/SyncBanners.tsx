@@ -6,6 +6,7 @@ import type { CommandError, LmsSyncResultDto, LmsUniversityDto } from '../../lib
 import { useSync } from '../sync/useSync';
 
 const BANNER = 'flex flex-col gap-2 rounded-lg border px-4 py-3 text-sm';
+const NEUTRAL_BANNER = `${BANNER} border-neutral-200 bg-white text-neutral-700`;
 const ACTION_BUTTON =
   'rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50';
 
@@ -67,7 +68,7 @@ function SyncSummaryBanner() {
   if (lastResults === null) return null;
   if (lastResults.length === 0) {
     return (
-      <div role="alert" className={`${BANNER} border-neutral-200 bg-white text-neutral-700`}>
+      <div role="alert" className={NEUTRAL_BANNER}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span>The sync was interrupted. Try again.</span>
           <button type="button" onClick={clearResults} className={ACTION_BUTTON}>
@@ -83,7 +84,7 @@ function SyncSummaryBanner() {
   const failed = lastResults.filter((r) => r.outcome !== 'success');
 
   return (
-    <div role="alert" className={`${BANNER} border-neutral-200 bg-white text-neutral-700`}>
+    <div role="alert" className={NEUTRAL_BANNER}>
       <p>
         Sync finished: {total((r) => r.newItems)} new, {total((r) => r.dueChanged)} date changed,{' '}
         {total((r) => r.removed)} removed

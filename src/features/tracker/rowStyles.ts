@@ -1,5 +1,4 @@
 /** Class names shared by the tracker's entry rows so platform items and personal tasks look alike. */
-export const ROW_CLASS = 'rounded-lg border border-neutral-200 bg-white px-4 py-3';
 export const CHECKBOX_CLASS = 'mt-1 h-4 w-4';
 export const TITLE_ROW_CLASS = 'flex flex-wrap items-center gap-2';
 export const TITLE_BUTTON_CLASS = 'truncate text-left text-sm font-semibold text-neutral-900 hover:underline';

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { TEXT_ERROR, TEXT_MUTED_XS } from '../styles';
 
 export interface FieldProps {
   label: string;
@@ -17,11 +18,11 @@ export default function Field({ label, htmlFor, error, hint, children }: FieldPr
       </label>
       {children}
       {error ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className={TEXT_ERROR}>
           {error}
         </p>
       ) : hint ? (
-        <p className="text-xs text-neutral-500">{hint}</p>
+        <p className={TEXT_MUTED_XS}>{hint}</p>
       ) : null}
     </div>
   );

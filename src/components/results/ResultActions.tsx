@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { ResultDto } from '../../lib/api/types';
+import { TEXT_MUTED_XS } from '../styles';
 
 export interface ResultActionsProps {
   result: Pick<ResultDto, 'sourceUrl' | 'messageIdHeader'>;
@@ -54,7 +55,7 @@ export default function ResultActions({ result, className }: ResultActionsProps)
         <button type="button" onClick={() => void handleOpenEmail()} className={className ?? DEFAULT_CLASS_NAME}>
           Open email
         </button>
-        {feedback ? <span className="text-xs text-neutral-500">{feedback}</span> : null}
+        {feedback ? <span className={TEXT_MUTED_XS}>{feedback}</span> : null}
       </span>
     );
   }
@@ -69,7 +70,7 @@ export default function ResultActions({ result, className }: ResultActionsProps)
         >
           Copy Message-ID
         </button>
-        {feedback ? <span className="text-xs text-neutral-500">{feedback}</span> : null}
+        {feedback ? <span className={TEXT_MUTED_XS}>{feedback}</span> : null}
       </span>
     );
   }

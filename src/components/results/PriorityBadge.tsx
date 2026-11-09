@@ -1,10 +1,11 @@
 import type { Priority } from '../../lib/api/types';
 import { PRIORITY_LABELS } from './labels';
+import { PILL_BASE, TONE_AMBER, TONE_BLUE, TONE_RED } from '../styles';
 
 const PRIORITY_STYLES: Record<Priority, string> = {
-  urgent: 'bg-red-100 text-red-700',
-  high: 'bg-amber-100 text-amber-800',
-  medium: 'bg-blue-100 text-blue-700',
+  urgent: TONE_RED,
+  high: TONE_AMBER,
+  medium: TONE_BLUE,
   low: 'bg-neutral-100 text-neutral-600',
 };
 
@@ -16,7 +17,7 @@ export interface PriorityBadgeProps {
 export default function PriorityBadge({ priority }: PriorityBadgeProps) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[priority]}`}
+      className={`${PILL_BASE} ${PRIORITY_STYLES[priority]}`}
     >
       {PRIORITY_LABELS[priority]}
     </span>

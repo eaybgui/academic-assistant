@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from 'react';
 import type { TrackerEntry } from './entries';
 import EntryRow from './EntryRow';
 import { groupByStatus, groupByTime, type GroupedItems } from './grouping';
+import { SUBSECTION_TITLE, TEXT_MUTED } from '../../components/styles';
 
 export type GroupBy = 'time' | 'status';
 
@@ -25,7 +26,7 @@ export default function ItemGroups({ entries, groupBy, showUniversity, onOpen }:
 
   if (entries.length === 0) {
     return (
-      <p className="text-sm text-neutral-500">
+      <p className={TEXT_MUTED}>
         Nothing to show. Press Sync to fetch your courses&apos; items.
       </p>
     );
@@ -44,7 +45,7 @@ export default function ItemGroups({ entries, groupBy, showUniversity, onOpen }:
       {grouped.groups.map((group) => (
         <details key={group.key} open className="group flex flex-col gap-2">
           <Summary>
-            <h2 className="text-sm font-semibold text-neutral-900">
+            <h2 className={SUBSECTION_TITLE}>
               {group.label} <span className="font-normal text-neutral-500">{group.items.length}</span>
             </h2>
           </Summary>
@@ -54,7 +55,7 @@ export default function ItemGroups({ entries, groupBy, showUniversity, onOpen }:
       {grouped.completed.length > 0 ? (
         <details className="group flex flex-col gap-2">
           <Summary>
-            <span className="text-sm font-semibold text-neutral-900">
+            <span className={SUBSECTION_TITLE}>
               {completedLabel} ({grouped.completed.length})
             </span>
           </Summary>
