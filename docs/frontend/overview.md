@@ -13,7 +13,7 @@ eslint.config.js             Flat ESLint config (typescript-eslint, react-hooks,
 vitest.setup.ts              Test environment setup (jest-dom matchers, <dialog> polyfill)
 src/
   main.tsx                   App entry: QueryClientProvider + CheckRunProvider + SyncProvider + HashRouter
-  App.tsx                    Route table (`/`, `/calendar`, `/announcements`, `/universities`, `/accounts`, `/runs`, `/settings`)
+  App.tsx                    Route table (`/`, `/calendar`, `/universities`; `/announcements`, `/accounts`, `/runs`, `/settings` only when the email switch is on; unknown paths redirect to `/`)
   index.css                  Tailwind entry point (`@import "tailwindcss";`)
   components/
     Layout.tsx                Collapsible sidebar navigation + content outlet
@@ -80,6 +80,12 @@ stored in `localStorage` under `academic-assistant.sidebar-collapsed`; reads and
 in try/catch and fall back to expanded. The items are Dashboard (`/`), Calendar (`/calendar`),
 Announcements, Universities, Email accounts, Email runs and Settings; Announcements is disabled while no course is tracked (see
 [tracker-universities.md](tracker-universities.md)).
+
+The email items (Announcements, Email accounts, Email runs, Settings) and their routes exist only when
+`EMAIL_FEATURES_ENABLED` (`src/config/features.ts`, true when the build-time env var
+`VITE_EMAIL_FEATURES` is exactly `true`) is on. When off, the sidebar shows only Dashboard, Calendar and
+Universities, the Layout's email-only queries (`getDashboard`, `getUniversities`) are disabled, and
+`App.tsx` registers a catch-all route that redirects any unknown path to `/`.
 
 ## Check-run state (`src/features/check-run/`)
 

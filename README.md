@@ -60,6 +60,9 @@ npm run tauri dev
 
 Then, in the running app:
 
+> In v0.2.0 the email section (Announcements, Email accounts, Email runs and Settings) is hidden
+> from the interface. Developers can enable it, see [docs/development.md](docs/development.md).
+
 1. **Universities**: press **Add university**, enter a name, the platform and its URL, sign in in
    the window that opens, choose your courses and press **Save and sync**.
 2. **Dashboard**: review your deliverables; press **Sync** to refresh.

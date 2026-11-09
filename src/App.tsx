@@ -1,4 +1,5 @@
-import { Route, Routes } from 'react-router';
+import { Navigate, Route, Routes } from 'react-router';
+import { EMAIL_FEATURES_ENABLED } from './config/features';
 import Layout from './components/Layout';
 import TrackerPage from './features/tracker/TrackerPage';
 import CalendarPage from './features/calendar/CalendarPage';
@@ -14,11 +15,16 @@ export default function App() {
       <Routes>
         <Route path="/" element={<TrackerPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
-        <Route path="/announcements" element={<AnnouncementsPage />} />
-        <Route path="/runs" element={<RunsPage />} />
-        <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/universities" element={<UniversitiesPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        {EMAIL_FEATURES_ENABLED && (
+          <>
+            <Route path="/announcements" element={<AnnouncementsPage />} />
+            <Route path="/runs" element={<RunsPage />} />
+            <Route path="/accounts" element={<AccountsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </>
+        )}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
   );

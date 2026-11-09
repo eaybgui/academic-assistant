@@ -1,6 +1,7 @@
 import { useState, type ComponentType, type ReactNode } from 'react';
 import { NavLink } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { EMAIL_FEATURES_ENABLED } from '../config/features';
 import { api } from '../lib/api/client';
 import { queryKeys } from '../lib/api/queryKeys';
 import {
@@ -24,7 +25,7 @@ interface NavItemConfig {
   Icon: ComponentType;
 }
 
-const NAV_ITEMS: readonly NavItemConfig[] = [
+const ALL_NAV_ITEMS: readonly NavItemConfig[] = [
   { to: '/', label: 'Dashboard', end: true, Icon: DashboardIcon },
   { to: '/calendar', label: 'Calendar', end: false, Icon: CalendarIcon },
   { to: ANNOUNCEMENTS_PATH, label: 'Announcements', end: false, Icon: ResultsIcon },
@@ -33,6 +34,12 @@ const NAV_ITEMS: readonly NavItemConfig[] = [
   { to: '/runs', label: 'Email runs', end: false, Icon: RunsIcon },
   { to: '/settings', label: 'Settings', end: false, Icon: SettingsIcon },
 ];
+
+const EMAIL_ONLY_PATHS: readonly string[] = [ANNOUNCEMENTS_PATH, '/accounts', '/runs', '/settings'];
+
+function visibleNavItems(): readonly NavItemConfig[] {
+  return EMAIL_FEATURES_ENABLED ? ALL_NAV_ITEMS : ALL_NAV_ITEMS.filter((item) => !EMAIL_ONLY_PATHS.includes(item.to));
+}
 
 const ANNOUNCEMENTS_DISABLED_TITLE = 'Add a university and track courses first';
 const COLLAPSED_STORAGE_KEY = 'academic-assistant.sidebar-collapsed';
@@ -128,12 +135,14 @@ export default function Layout({ children }: LayoutProps) {
   const { data } = useQuery({
     queryKey: queryKeys.dashboard('upcoming'),
     queryFn: () => api.getDashboard('upcoming'),
+    enabled: EMAIL_FEATURES_ENABLED,
     retry: false,
   });
 
   const { data: universities } = useQuery({
     queryKey: queryKeys.universities,
     queryFn: api.getUniversities,
+    enabled: EMAIL_FEATURES_ENABLED,
     retry: false,
   });
 
@@ -167,7 +176,7 @@ export default function Layout({ children }: LayoutProps) {
           </button>
         </div>
         <ul className="space-y-1">
-          {NAV_ITEMS.map((item) => (
+          {visibleNavItems().map((item) => (
             <li key={item.to}>
               <SidebarNavItem
                 item={item}

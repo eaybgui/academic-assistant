@@ -7,9 +7,12 @@ import type { DashboardDto, LmsUniversityDto } from '../lib/api/types';
 
 const { getDashboard, getUniversities } = vi.hoisted(() => ({ getDashboard: vi.fn(), getUniversities: vi.fn() }));
 
+const features = vi.hoisted(() => ({ EMAIL_FEATURES_ENABLED: true }));
+
 vi.mock('../lib/api/client', () => ({
   api: { getDashboard, getUniversities },
 }));
+vi.mock('../config/features', () => features);
 
 const STORAGE_KEY = 'academic-assistant.sidebar-collapsed';
 const NAV_LABELS = ['Dashboard', 'Calendar', 'Announcements', 'Universities', 'Email accounts', 'Email runs', 'Settings'];
@@ -42,12 +45,34 @@ function renderLayout() {
 }
 
 beforeEach(() => {
+  features.EMAIL_FEATURES_ENABLED = true;
   localStorage.clear();
   getDashboard.mockReset().mockRejectedValue(new Error('not available outside Tauri'));
   getUniversities.mockReset().mockRejectedValue(new Error('not available outside Tauri'));
 });
 
 describe('Layout', () => {
+  describe('with the email section disabled', () => {
+    beforeEach(() => {
+      features.EMAIL_FEATURES_ENABLED = false;
+    });
+
+    it('shows only Dashboard, Calendar and Universities, in that order', () => {
+      renderLayout();
+
+      const labels = screen.getAllByRole('link').map((link) => link.textContent);
+      expect(labels).toEqual(['Dashboard', 'Calendar', 'Universities']);
+    });
+
+    it('does not run the email-only queries', async () => {
+      renderLayout();
+
+      await screen.findByText('Page content');
+      expect(getDashboard).not.toHaveBeenCalled();
+      expect(getUniversities).not.toHaveBeenCalled();
+    });
+  });
+
   it('renders the seven navigation links', () => {
     renderLayout();
 

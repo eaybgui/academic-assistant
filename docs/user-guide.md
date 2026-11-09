@@ -8,6 +8,9 @@ dates from your universities' learning platforms (Moodle and Blackboard), togeth
 tasks. The **Calendar** shows all of it by day. **Announcements** analyzes university email with
 an AI provider and is optional.
 
+> In v0.2.0 the email section (Announcements, Email accounts, Email runs and Settings) is hidden
+> from the interface. The steps and screens below that refer to email do not apply to this release.
+
 ## First-time checklist
 
 1. **Universities**: press **Add university**, enter a name, choose the platform and enter its web
