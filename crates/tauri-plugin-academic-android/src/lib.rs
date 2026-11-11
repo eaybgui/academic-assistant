@@ -1,5 +1,6 @@
 //! Android-only Tauri plugin. The Kotlin class `AcademicPlugin` keeps secrets
-//! encrypted under an Android Keystore key; Rust reaches it through the
+//! encrypted under an Android Keystore key, opens the `WebView` sign-in screen and
+//! leaves the app (Back from the first screen); Rust reaches it through the
 //! [`PluginHandle`] returned by [`handle`]. On other targets the plugin is an
 //! empty shell so the crate still builds as a workspace member.
 

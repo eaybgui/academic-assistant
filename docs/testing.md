@@ -415,7 +415,7 @@ stay on Windows; Kotlin and sign-in behaviour is verified only here.
 - [ ] The bottom tab bar is visible above the gesture handle and the status bar does not cover the content.
 
 **Universities and sign-in**
-- [ ] Add UV (Moodle) and UAH (Blackboard) with their public addresses.
+- [ ] Add UV (Moodle, `https://aulavirtual.uv.es`) and UAH (Blackboard, `https://uah.blackboard.com`).
 - [ ] Sign in to UV through its login page; the card shows "Connected as ...".
 - [ ] Sign in to UAH through the Microsoft login; the card shows connected.
 - [ ] Start a sign-in and press Back: you return to the app, sign-in is cancelled and the university is unchanged.
@@ -436,7 +436,7 @@ stay on Windows; Kotlin and sign-in behaviour is verified only here.
 - [ ] Sign out of UV: its card shows signed out and the Dashboard keeps its synced items.
 - [ ] With UV signed out, Sync still syncs UAH; then sign out of UAH and sign in to UV again: it syncs.
 - [ ] After signing out of UAH and signing in again, the Microsoft login asks for the account again (it does not sign in by itself). This checks that sign-out cleared the WebView data.
-- [ ] An expired session shows the "sign in again" banner on the university.
+- [ ] An expired session shows the "sign in again" banner on the university. There is no switch to force this: it depends on the session expiring naturally (leave a signed-in university unused until it does), so record "not observed" if it did not happen.
 - [ ] Quiet renewal: with an expired session whose login is still remembered, Sync renews it without a visible screen, and the app stays visible and touchable meanwhile.
 - [ ] Airplane mode: the Dashboard and Calendar still show the synced data; Sync shows an error and nothing is lost.
 
@@ -445,5 +445,6 @@ stay on Windows; Kotlin and sign-in behaviour is verified only here.
 - [ ] With nothing open, Back goes to the previous screen; from the first screen it leaves the app.
 
 **Phone width (emulator)**
+- [ ] Type into the Add university and sign-in fields with the keyboard open: the field and the dialog's buttons stay visible.
 - [ ] The bottom tab bar is shown and nothing scrolls sideways on any of the three screens.
 - [ ] Load several universities and items with very long titles (invented, 100+ characters) and check that Dashboard rows and personal task rows wrap, University cards and their modals fit, and the Dashboard tabs wrap or scroll within their own row, with no horizontal page scroll.
