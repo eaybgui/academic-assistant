@@ -268,7 +268,7 @@ Requirements:
 - **One sign-in at a time per app:** a second `signIn` while one is open is rejected the same way the desktop refuses a second window for the same university (same `LmsError`).
 - **`close_login_window` / `close_all_login_windows`:** call `cancelSignIn`.
 - **Cancel (Review Focus 5):** Back, closing the screen or `cancelSignIn` gives "cancelled". The university's login state and stored secret don't change, as on the desktop.
-- **Sign out:** clears all `WebView` cookies and storage (Ruling R9). The other university's stored credential stays valid; only its quiet renewal may need one interactive sign-in afterwards.
+- **Sign out:** clears all `WebView` cookies and the storage (localStorage, IndexedDB) of the origins the sign-in screen loaded, recorded as scheme+host+port only (Rulings R9 and R12; the app's own storage is untouched). The other university's stored credential stays valid; only its quiet renewal may need one interactive sign-in afterwards.
 - **No logging or UI exposure:** nothing logs or returns a token, cookie or URL query string. `SignInActivity` shows only the page and a "Sign in to {name}" title bar.
 
 - [ ] **Step 1: Write the failing Rust tests** in `sign_in_result.rs` (invented values only):

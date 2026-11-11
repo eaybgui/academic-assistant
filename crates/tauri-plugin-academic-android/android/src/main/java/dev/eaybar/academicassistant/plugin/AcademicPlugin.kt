@@ -2,9 +2,11 @@ package dev.eaybar.academicassistant.plugin
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.webkit.CookieManager
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -19,6 +21,17 @@ import javax.crypto.SecretKey
 class SecretArgs {
     lateinit var key: String
     var value: String? = null
+}
+
+@InvokeArg
+class SignInArgs {
+    lateinit var url: String
+    lateinit var title: String
+    var interceptScheme: String? = null
+    var doneUrlPrefix: String? = null
+    var cookieUrl: String? = null
+    var silent: Boolean = false
+    var timeoutMs: Long = 0
 }
 
 /**
@@ -72,6 +85,57 @@ class AcademicPlugin(private val hostActivity: Activity) : Plugin(hostActivity) 
         hostActivity.runOnUiThread {
             hostActivity.moveTaskToBack(true)
             invoke.resolve()
+        }
+    }
+
+    /** Opens the sign-in screen; the call is answered when the screen ends. */
+    @Command
+    fun signIn(invoke: Invoke) {
+        val args = invoke.parseArgs(SignInArgs::class.java)
+        hostActivity.runOnUiThread {
+            if (SignInSession.isOpen && SignInSession.activity != null) {
+                invoke.reject("A sign-in is already open")
+                return@runOnUiThread
+            }
+            // A session without a screen is stale (the screen never opened): end it first.
+            if (SignInSession.isOpen) SignInSession.cancel()
+            SignInSession.begin(
+                SignInParams(
+                    url = args.url,
+                    title = args.title,
+                    interceptScheme = args.interceptScheme,
+                    doneUrlPrefix = args.doneUrlPrefix,
+                    cookieUrl = args.cookieUrl,
+                    silent = args.silent,
+                    timeoutMs = args.timeoutMs,
+                ),
+                invoke,
+            )
+            hostActivity.startActivity(Intent(hostActivity, SignInActivity::class.java))
+        }
+    }
+
+    /** Finishes an open sign-in screen, which then answers "cancelled". */
+    @Command
+    fun cancelSignIn(invoke: Invoke) {
+        hostActivity.runOnUiThread {
+            SignInSession.cancel()
+            invoke.resolve()
+        }
+    }
+
+    /**
+     * Removes every cookie of the app's `WebView`s and the storage (localStorage, IndexedDB, ...)
+     * of the origins the sign-in screen loaded. The app's own origin and storage are untouched.
+     */
+    @Command
+    fun clearSignInData(invoke: Invoke) {
+        hostActivity.runOnUiThread {
+            SignInOrigins.clear(hostActivity.applicationContext)
+            CookieManager.getInstance().removeAllCookies {
+                CookieManager.getInstance().flush()
+                invoke.resolve()
+            }
         }
     }
 

@@ -22,8 +22,6 @@ use super::LoginMode;
 
 const AUTH_PROFILE_DIR: &str = "lms-auth";
 const LOGIN_LABEL_PREFIX: &str = "lms-login-";
-const INTERACTIVE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
-const SILENT_TIMEOUT: Duration = Duration::from_secs(20);
 const URL_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 /// Destroys the login window when dropped, so it is closed on every exit path,
@@ -148,12 +146,8 @@ pub async fn capture_credential(
         "lms sign-in window opened"
     );
 
-    let timeout = match mode {
-        LoginMode::Interactive => INTERACTIVE_TIMEOUT,
-        LoginMode::Silent => SILENT_TIMEOUT,
-    };
     let signal = tokio::time::timeout(
-        timeout,
+        mode.timeout(),
         wait_for_signal(&mut rx, &window, platform_poll_base_url(university)),
     )
     .await;

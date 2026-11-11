@@ -4,6 +4,7 @@
 //! dedicated webview window; Android has its own implementation in `android`.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use academic_core::domain::LmsUniversity;
 use academic_core::lms::{adopt_credential, SessionError};
@@ -13,21 +14,42 @@ use tauri::AppHandle;
 
 #[cfg(target_os = "android")]
 mod android;
-#[cfg(not(target_os = "android"))]
 mod capture;
+// Only the Android sign-in uses these on every path; desktop compiles them for the tests.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+mod sign_in_result;
 #[cfg(not(target_os = "android"))]
 mod window;
 
 #[cfg(target_os = "android")]
-pub use android::{capture_credential, close_all_login_windows, close_login_window};
+pub use android::{
+    capture_credential, close_all_login_windows, close_login_window, forget_sign_in,
+};
 #[cfg(not(target_os = "android"))]
 pub use window::{capture_credential, close_all_login_windows, close_login_window};
+
+const INTERACTIVE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+const SILENT_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoginMode {
     Interactive,
     Silent,
 }
+
+impl LoginMode {
+    fn timeout(self) -> Duration {
+        match self {
+            LoginMode::Interactive => INTERACTIVE_TIMEOUT,
+            LoginMode::Silent => SILENT_TIMEOUT,
+        }
+    }
+}
+
+/// Forgets the sign-in browser state when a university is signed out. The desktop
+/// keeps a separate profile per window, so there is nothing to clear.
+#[cfg(not(target_os = "android"))]
+pub fn forget_sign_in(_app: &AppHandle) {}
 
 /// Silent renewal for `ensure_session` (spec §6.5).
 pub struct TauriLmsAuthenticator {

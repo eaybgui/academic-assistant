@@ -5,6 +5,8 @@ use academic_infra::lms::blackboard::{encode_session, SessionCookie};
 use academic_infra::secrets::MAX_SECRET_BYTES;
 use rand::distr::{Alphanumeric, SampleString};
 
+use super::sign_in_result::blackboard_done_prefix;
+
 const MOODLE_TOKEN_PREFIX: &str = "moodlemobile://token=";
 const PASSPORT_LENGTH: usize = 32;
 
@@ -29,9 +31,10 @@ pub fn blackboard_start_url(base_url: &str) -> String {
 
 /// True once the window shows an Ultra page (e.g. `/ultra/stream`), which only
 /// happens after a successful sign-in. `/ultra` itself redirects to the login page.
+#[cfg_attr(target_os = "android", allow(dead_code))] // the Android screen applies the same prefix natively
 pub fn is_blackboard_signed_in(url: &str, base_url: &str) -> bool {
-    url.strip_prefix(base_url)
-        .is_some_and(|path| path.starts_with("/ultra/") && path.len() > "/ultra/".len())
+    url.strip_prefix(&blackboard_done_prefix(base_url))
+        .is_some_and(|rest| !rest.is_empty())
 }
 
 /// A cookie as read from the webview: name, value and optional domain attribute.
