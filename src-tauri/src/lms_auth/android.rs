@@ -4,6 +4,7 @@
 //! nothing in this module logs them.
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use academic_core::domain::{LmsPlatform, LmsUniversity, UniversityId};
 use academic_core::ports::LmsError;
@@ -11,10 +12,14 @@ use serde::Serialize;
 use tauri::AppHandle;
 
 use super::capture::{blackboard_start_url, moodle_launch_url, random_passport};
-use super::sign_in_result::{blackboard_done_prefix, credential_from_outcome, SignInReply};
+use super::sign_in_result::{
+    blackboard_done_prefix, credential_from_outcome, SignInOutcome, SignInReply,
+};
 use super::LoginMode;
 
 const MOODLE_SCHEME: &str = "moodlemobile";
+/// Slack over the screen's own timeout, so the plugin normally answers first.
+const PLUGIN_GRACE: Duration = Duration::from_secs(15);
 
 /// The app shows one sign-in screen at a time.
 static SIGN_IN_OPEN: AtomicBool = AtomicBool::new(false);
@@ -81,17 +86,19 @@ pub async fn capture_credential(
         ?mode,
         "lms sign-in screen opened"
     );
-    let reply: SignInReply = tauri_plugin_academic_android::handle(app)
-        .run_mobile_plugin_async("signIn", args)
-        .await
-        .map_err(|_| LmsError::Protocol("Could not open the sign-in screen".into()))?;
-    let result = credential_from_outcome(
-        reply.into_outcome()?,
-        university.platform,
-        base_url,
-        &passport,
-        mode,
-    );
+    let plugin = tauri_plugin_academic_android::handle(app);
+    let call = plugin.run_mobile_plugin_async::<SignInReply>("signIn", args);
+    let outcome = match tokio::time::timeout(mode.timeout() + PLUGIN_GRACE, call).await {
+        Ok(reply) => reply
+            .map_err(|_| LmsError::Protocol("Could not open the sign-in screen".into()))?
+            .into_outcome()?,
+        Err(_) => {
+            // The plugin never answered: close whatever it may have opened.
+            run_in_background(app, "cancelSignIn");
+            SignInOutcome::TimedOut
+        }
+    };
+    let result = credential_from_outcome(outcome, university.platform, base_url, &passport, mode);
     tracing::info!(
         university_id = university.id,
         stage = if result.is_ok() {

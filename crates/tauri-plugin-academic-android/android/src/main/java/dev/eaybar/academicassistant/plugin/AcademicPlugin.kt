@@ -7,7 +7,6 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.webkit.CookieManager
-import android.webkit.WebStorage
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -94,10 +93,12 @@ class AcademicPlugin(private val hostActivity: Activity) : Plugin(hostActivity) 
     fun signIn(invoke: Invoke) {
         val args = invoke.parseArgs(SignInArgs::class.java)
         hostActivity.runOnUiThread {
-            if (SignInSession.isOpen) {
+            if (SignInSession.isOpen && SignInSession.activity != null) {
                 invoke.reject("A sign-in is already open")
                 return@runOnUiThread
             }
+            // A session without a screen is stale (the screen never opened): end it first.
+            if (SignInSession.isOpen) SignInSession.cancel()
             SignInSession.begin(
                 SignInParams(
                     url = args.url,
@@ -123,11 +124,10 @@ class AcademicPlugin(private val hostActivity: Activity) : Plugin(hostActivity) 
         }
     }
 
-    /** Removes every cookie and stored page data of the sign-in `WebView`s. */
+    /** Removes every cookie of the app's `WebView`s (not their storage, which the main screen uses). */
     @Command
     fun clearSignInData(invoke: Invoke) {
         hostActivity.runOnUiThread {
-            WebStorage.getInstance().deleteAllData()
             CookieManager.getInstance().removeAllCookies {
                 CookieManager.getInstance().flush()
                 invoke.resolve()

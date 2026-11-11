@@ -3,8 +3,6 @@ package dev.eaybar.academicassistant.plugin
 import android.annotation.SuppressLint
 import android.graphics.Color
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -27,7 +25,6 @@ import app.tauri.plugin.JSObject
  */
 class SignInActivity : ComponentActivity() {
     private var web: WebView? = null
-    private val handler = Handler(Looper.getMainLooper())
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,7 +55,6 @@ class SignInActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = deliver("cancelled")
         })
-        handler.postDelayed({ deliver("timeout") }, params.timeoutMs)
         webView.loadUrl(params.url)
     }
 
@@ -119,7 +115,6 @@ class SignInActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
         web?.destroy()
         web = null
         // Closing the screen any other way (cancelSignIn, the system) counts as cancelled.
