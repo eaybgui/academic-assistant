@@ -54,6 +54,8 @@ object SignInSession {
 
     fun finish(reply: JSObject) {
         handler.removeCallbacksAndMessages(null)
+        // A late onDestroy of this session's screen must not answer a newer session.
+        activity = null
         pending?.resolve(reply)
         pending = null
         params = null

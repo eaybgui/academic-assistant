@@ -124,10 +124,14 @@ class AcademicPlugin(private val hostActivity: Activity) : Plugin(hostActivity) 
         }
     }
 
-    /** Removes every cookie of the app's `WebView`s (not their storage, which the main screen uses). */
+    /**
+     * Removes every cookie of the app's `WebView`s and the storage (localStorage, IndexedDB, ...)
+     * of the origins the sign-in screen loaded. The app's own origin and storage are untouched.
+     */
     @Command
     fun clearSignInData(invoke: Invoke) {
         hostActivity.runOnUiThread {
+            SignInOrigins.clear(hostActivity.applicationContext)
             CookieManager.getInstance().removeAllCookies {
                 CookieManager.getInstance().flush()
                 invoke.resolve()

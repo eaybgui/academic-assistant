@@ -135,7 +135,7 @@ pub fn close_all_login_windows(app: &AppHandle) {
     run_in_background(app, "cancelSignIn");
 }
 
-/// Removes every cookie and stored page data of the sign-in `WebView`.
+/// Removes every `WebView` cookie and the storage of the sites the sign-in screen loaded (never the app's own storage).
 pub fn forget_sign_in(app: &AppHandle) {
     run_in_background(app, "clearSignInData");
 }

@@ -1,6 +1,7 @@
 package dev.eaybar.academicassistant.plugin
 
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
@@ -94,6 +95,10 @@ class SignInActivity : ComponentActivity() {
                 return true
             }
             return false
+        }
+
+        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            SignInOrigins.record(applicationContext, url)
         }
 
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
