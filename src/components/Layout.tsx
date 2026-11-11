@@ -1,45 +1,14 @@
-import { useState, type ComponentType, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { EMAIL_FEATURES_ENABLED } from '../config/features';
+import { IS_ANDROID } from '../config/platform';
+import { useAndroidBack } from '../features/shell/useAndroidBack';
 import { api } from '../lib/api/client';
 import { queryKeys } from '../lib/api/queryKeys';
-import {
-  AccountsIcon,
-  CalendarIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  DashboardIcon,
-  ResultsIcon,
-  RunsIcon,
-  SettingsIcon,
-  UniversityIcon,
-} from './navIcons';
-
-const ANNOUNCEMENTS_PATH = '/announcements';
-
-interface NavItemConfig {
-  to: string;
-  label: string;
-  end: boolean;
-  Icon: ComponentType;
-}
-
-const ALL_NAV_ITEMS: readonly NavItemConfig[] = [
-  { to: '/', label: 'Dashboard', end: true, Icon: DashboardIcon },
-  { to: '/calendar', label: 'Calendar', end: false, Icon: CalendarIcon },
-  { to: ANNOUNCEMENTS_PATH, label: 'Announcements', end: false, Icon: ResultsIcon },
-  { to: '/universities', label: 'Universities', end: false, Icon: UniversityIcon },
-  { to: '/accounts', label: 'Email accounts', end: false, Icon: AccountsIcon },
-  { to: '/runs', label: 'Email runs', end: false, Icon: RunsIcon },
-  { to: '/settings', label: 'Settings', end: false, Icon: SettingsIcon },
-];
-
-const EMAIL_ONLY_PATHS: readonly string[] = [ANNOUNCEMENTS_PATH, '/accounts', '/runs', '/settings'];
-
-function visibleNavItems(): readonly NavItemConfig[] {
-  return EMAIL_FEATURES_ENABLED ? ALL_NAV_ITEMS : ALL_NAV_ITEMS.filter((item) => !EMAIL_ONLY_PATHS.includes(item.to));
-}
+import BottomTabBar from './BottomTabBar';
+import { ChevronLeftIcon, ChevronRightIcon } from './navIcons';
+import { ANNOUNCEMENTS_PATH, visibleNavItems, type NavItemConfig } from './navItems';
 
 const ANNOUNCEMENTS_DISABLED_TITLE = 'Add a university and track courses first';
 const COLLAPSED_STORAGE_KEY = 'academic-assistant.sidebar-collapsed';
@@ -131,6 +100,7 @@ export interface LayoutProps {
  * The collapsed preference is kept in `localStorage`.
  */
 export default function Layout({ children }: LayoutProps) {
+  useAndroidBack();
   const [collapsed, setCollapsed] = useState(readCollapsedPreference);
   const { data } = useQuery({
     queryKey: queryKeys.dashboard('upcoming'),
@@ -161,7 +131,7 @@ export default function Layout({ children }: LayoutProps) {
       <nav
         className={`shrink-0 border-r border-neutral-200 bg-white px-3 py-4 transition-[width] ${
           collapsed ? 'w-16' : 'w-56'
-        }`}
+        }${IS_ANDROID ? ' hidden md:block' : ''}`}
       >
         <div className={`mb-4 flex items-center ${collapsed ? 'justify-center' : 'justify-between gap-2'}`}>
           {collapsed ? null : <p className="px-2 text-sm font-semibold text-neutral-900">Academic Assistant</p>}
@@ -188,7 +158,8 @@ export default function Layout({ children }: LayoutProps) {
           ))}
         </ul>
       </nav>
-      <main className="min-w-0 flex-1 px-8 py-6">{children}</main>
+      <main className={`min-w-0 flex-1 ${IS_ANDROID ? 'px-4 pb-24 pt-6 md:px-8 md:pb-6' : 'px-8 py-6'}`}>{children}</main>
+      {IS_ANDROID ? <BottomTabBar /> : null}
     </div>
   );
 }
