@@ -5,16 +5,26 @@
 //! DTOs are built from domain types; input DTOs are validated by
 //! [`crate::validation`] before they reach the domain.
 
+#[cfg(not(target_os = "android"))]
 mod accounts;
+#[cfg(not(target_os = "android"))]
 mod catalog;
 mod lms;
+#[cfg(not(target_os = "android"))]
 mod results;
+#[cfg(not(target_os = "android"))]
 mod runs;
+#[cfg(not(target_os = "android"))]
 mod settings;
 
+#[cfg(not(target_os = "android"))]
 pub use accounts::*;
+#[cfg(not(target_os = "android"))]
 pub use catalog::*;
 pub use lms::*;
+#[cfg(not(target_os = "android"))]
 pub use results::*;
+#[cfg(not(target_os = "android"))]
 pub use runs::*;
+#[cfg(not(target_os = "android"))]
 pub use settings::*;
