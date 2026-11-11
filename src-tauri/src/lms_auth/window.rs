@@ -3,14 +3,11 @@
 //! Never logs URLs seen in the window.
 
 use std::ops::Deref;
-use std::sync::Arc;
 use std::time::Duration;
 
 use academic_core::domain::{LmsPlatform, LmsUniversity, UniversityId};
-use academic_core::lms::{adopt_credential, SessionError};
-use academic_core::ports::{LmsAuthenticator, LmsClientFactory, LmsError, SecretStore};
+use academic_core::ports::LmsError;
 use academic_infra::lms::moodle::decode_launch_token;
-use async_trait::async_trait;
 use tauri::webview::PageLoadEvent;
 use tauri::{
     AppHandle, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
@@ -21,18 +18,13 @@ use super::capture::{
     blackboard_start_url, encode_session_cookies, is_blackboard_signed_in, moodle_launch_url,
     moodle_token_payload, random_passport, CookieCaptureError, RawCookie,
 };
+use super::LoginMode;
 
 const AUTH_PROFILE_DIR: &str = "lms-auth";
 const LOGIN_LABEL_PREFIX: &str = "lms-login-";
 const INTERACTIVE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const SILENT_TIMEOUT: Duration = Duration::from_secs(20);
 const URL_POLL_INTERVAL: Duration = Duration::from_millis(500);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LoginMode {
-    Interactive,
-    Silent,
-}
 
 /// Destroys the login window when dropped, so it is closed on every exit path,
 /// including the `capture_credential` future being dropped before it completes.
@@ -247,44 +239,4 @@ async fn read_session(window: &WebviewWindow, base_url: &str) -> Result<String, 
         }
         LmsError::Auth(error.to_string())
     })
-}
-
-/// Silent renewal for `ensure_session` (spec §6.5).
-pub struct TauriLmsAuthenticator {
-    app: AppHandle,
-    factory: Arc<dyn LmsClientFactory>,
-    secrets: Arc<dyn SecretStore>,
-}
-
-impl TauriLmsAuthenticator {
-    pub fn new(
-        app: AppHandle,
-        factory: Arc<dyn LmsClientFactory>,
-        secrets: Arc<dyn SecretStore>,
-    ) -> Self {
-        Self {
-            app,
-            factory,
-            secrets,
-        }
-    }
-}
-
-#[async_trait]
-impl LmsAuthenticator for TauriLmsAuthenticator {
-    async fn renew_silently(&self, university: &LmsUniversity) -> Result<(), LmsError> {
-        let credential = capture_credential(&self.app, university, LoginMode::Silent).await?;
-        adopt_credential(
-            university,
-            &credential,
-            self.factory.as_ref(),
-            self.secrets.as_ref(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(|error| match error {
-            SessionError::Lms(e) => e,
-            other => LmsError::Protocol(other.to_string()),
-        })
-    }
 }

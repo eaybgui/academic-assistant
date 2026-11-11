@@ -69,6 +69,7 @@ impl CommandError {
     }
 
     /// Logs `log_message` instead of the user-facing message.
+    #[cfg(not(target_os = "android"))]
     pub fn with_log_message(mut self, log_message: impl Into<String>) -> Self {
         self.log_message = Some(log_message.into());
         self

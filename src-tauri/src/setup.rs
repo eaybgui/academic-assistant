@@ -5,10 +5,17 @@ use std::error::Error;
 use std::path::Path;
 use std::sync::Arc;
 
-use academic_core::ports::{Clock, RunRepository, SecretStore, SystemClock};
+#[cfg(not(target_os = "android"))]
+use academic_core::ports::RunRepository;
+use academic_core::ports::{Clock, SecretStore, SystemClock};
 use academic_infra::db::Database;
-use academic_infra::factory::{http_client, DefaultEmailProviderFactory, DefaultModelProvider};
+use academic_infra::factory::http_client;
+#[cfg(not(target_os = "android"))]
+use academic_infra::factory::{DefaultEmailProviderFactory, DefaultModelProvider};
 use academic_infra::lms::factory::DefaultLmsClientFactory;
+#[cfg(target_os = "android")]
+use academic_infra::secrets::InMemorySecretStore;
+#[cfg(not(target_os = "android"))]
 use academic_infra::secrets::KeyringSecretStore;
 use tauri::{App, Manager};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -19,6 +26,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 use crate::lms_auth::TauriLmsAuthenticator;
 use crate::lms_observer::TauriLmsSyncObserver;
+#[cfg(not(target_os = "android"))]
 use crate::observer::TauriRunObserver;
 use crate::state::{AppState, Collaborators};
 
@@ -37,7 +45,8 @@ const RELEASE_DEPENDENCY_DIRECTIVES: [&str; 5] = [
 ];
 
 /// Resolves the app data directory, starts logging, opens the database, marks
-/// runs interrupted by a previous crash as failed and manages the [`AppState`].
+/// runs interrupted by a previous crash as failed (desktop) and manages the
+/// [`AppState`].
 pub fn initialize(app: &App) -> Result<(), Box<dyn Error>> {
     let data_dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&data_dir)?;
@@ -53,18 +62,27 @@ fn build_state(app: &App, data_dir: &Path) -> Result<AppState, Box<dyn Error>> {
     let db = Arc::new(Database::open(&data_dir.join(DATABASE_FILE))?);
     let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
-    let interrupted = db.mark_interrupted(clock.now())?;
-    if interrupted > 0 {
-        tracing::warn!(interrupted, "marked interrupted runs as failed");
+    #[cfg(not(target_os = "android"))]
+    {
+        let interrupted = db.mark_interrupted(clock.now())?;
+        if interrupted > 0 {
+            tracing::warn!(interrupted, "marked interrupted runs as failed");
+        }
     }
 
     let http = http_client();
+    #[cfg(not(target_os = "android"))]
     let secrets: Arc<dyn SecretStore> = Arc::new(KeyringSecretStore);
+    // Placeholder until the Keystore-backed store replaces it: nothing persists.
+    #[cfg(target_os = "android")]
+    let secrets: Arc<dyn SecretStore> = Arc::new(InMemorySecretStore::default());
+    #[cfg(not(target_os = "android"))]
     let factory = Arc::new(DefaultEmailProviderFactory::new(
         secrets.clone(),
         db.clone(),
         http.clone(),
     ));
+    #[cfg(not(target_os = "android"))]
     let models = Arc::new(DefaultModelProvider::new(secrets.clone(), http.clone()));
     let lms_factory = Arc::new(DefaultLmsClientFactory::new(secrets.clone(), http.clone()));
     let lms_authenticator = Arc::new(TauriLmsAuthenticator::new(
@@ -77,9 +95,12 @@ fn build_state(app: &App, data_dir: &Path) -> Result<AppState, Box<dyn Error>> {
         db,
         Collaborators {
             secrets,
+            #[cfg(not(target_os = "android"))]
             factory,
+            #[cfg(not(target_os = "android"))]
             models,
             http,
+            #[cfg(not(target_os = "android"))]
             observer: Arc::new(TauriRunObserver::new(app.handle().clone())),
             clock,
             lms_factory,
