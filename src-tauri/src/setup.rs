@@ -13,8 +13,6 @@ use academic_infra::factory::http_client;
 #[cfg(not(target_os = "android"))]
 use academic_infra::factory::{DefaultEmailProviderFactory, DefaultModelProvider};
 use academic_infra::lms::factory::DefaultLmsClientFactory;
-#[cfg(target_os = "android")]
-use academic_infra::secrets::InMemorySecretStore;
 #[cfg(not(target_os = "android"))]
 use academic_infra::secrets::KeyringSecretStore;
 use tauri::{App, Manager};
@@ -24,6 +22,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
 
+#[cfg(target_os = "android")]
+use crate::android_secrets::AndroidSecretStore;
 use crate::lms_auth::TauriLmsAuthenticator;
 use crate::lms_observer::TauriLmsSyncObserver;
 #[cfg(not(target_os = "android"))]
@@ -73,9 +73,10 @@ fn build_state(app: &App, data_dir: &Path) -> Result<AppState, Box<dyn Error>> {
     let http = http_client();
     #[cfg(not(target_os = "android"))]
     let secrets: Arc<dyn SecretStore> = Arc::new(KeyringSecretStore);
-    // Placeholder until the Keystore-backed store replaces it: nothing persists.
     #[cfg(target_os = "android")]
-    let secrets: Arc<dyn SecretStore> = Arc::new(InMemorySecretStore::default());
+    let secrets: Arc<dyn SecretStore> = Arc::new(AndroidSecretStore::new(
+        tauri_plugin_academic_android::handle(app),
+    ));
     #[cfg(not(target_os = "android"))]
     let factory = Arc::new(DefaultEmailProviderFactory::new(
         secrets.clone(),
