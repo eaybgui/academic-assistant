@@ -75,7 +75,8 @@ class SignInActivity : ComponentActivity() {
         root.addView(webView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or
+                    WindowInsetsCompat.Type.ime(),
             )
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             insets
@@ -118,6 +119,11 @@ class SignInActivity : ComponentActivity() {
     }
 
     private fun deliver(status: String, url: String? = null, cookieHeader: String? = null) {
+        // WebView callbacks can outlive finish(); a stale screen must never answer a newer session.
+        if (SignInSession.activity !== this) {
+            finish()
+            return
+        }
         val reply = JSObject().put("status", status)
         url?.let { reply.put("url", it) }
         cookieHeader?.let { reply.put("cookieHeader", it) }

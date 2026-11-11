@@ -10,11 +10,12 @@ class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
-    // Keep the WebView out from under the status bar, cutout and gesture/navigation bar.
+    // Keep the WebView out from under the status bar, cutout and gesture/navigation bar, and above the keyboard.
     val content = findViewById<View>(android.R.id.content)
     ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
       val bars = insets.getInsets(
-        WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+        WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or
+        WindowInsetsCompat.Type.ime()
       )
       view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
       insets
