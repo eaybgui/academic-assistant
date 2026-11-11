@@ -28,6 +28,7 @@ kotlin {
 
 dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.3")
+    implementation("androidx.activity:activity-ktx:1.10.1")
     implementation(project(":tauri-android"))
     testImplementation("junit:junit:4.13.2")
 }

@@ -12,7 +12,7 @@ use tauri::{AppHandle, State};
 use super::logged;
 use crate::dto::{LmsCourseDto, LmsUniversityDto, LmsUniversityInput, ProbeDto};
 use crate::error::CommandError;
-use crate::lms_auth::{capture_credential, close_login_window, LoginMode};
+use crate::lms_auth::{capture_credential, close_login_window, forget_sign_in, LoginMode};
 use crate::state::AppState;
 use crate::validation;
 
@@ -91,10 +91,13 @@ pub async fn lms_sign_in(
 
 #[tauri::command]
 pub async fn lms_sign_out(
+    app: AppHandle,
     state: State<'_, AppState>,
     id: UniversityId,
 ) -> Result<LmsUniversityDto, CommandError> {
-    logged("lms_sign_out", sign_out(&state, id))
+    let signed_out = logged("lms_sign_out", sign_out(&state, id))?;
+    forget_sign_in(&app);
+    Ok(signed_out)
 }
 
 #[tauri::command]
