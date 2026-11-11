@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -37,6 +38,13 @@ class SignInActivity : ComponentActivity() {
             return
         }
         SignInSession.activity = this
+        if (params.silent) {
+            // Invisible renewal: the app below stays visible and keeps receiving touches.
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            )
+        }
         val webView = WebView(this)
         web = webView
         setContentView(buildLayout(params, webView))
@@ -61,7 +69,11 @@ class SignInActivity : ComponentActivity() {
             setTextColor(Color.BLACK)
             setPadding(TITLE_PADDING, TITLE_PADDING, TITLE_PADDING, TITLE_PADDING)
         }
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        // The theme is transparent (for the silent case), so the visible screen paints its own background.
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            if (!params.silent) setBackgroundColor(Color.WHITE)
+        }
         root.addView(title)
         root.addView(webView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
