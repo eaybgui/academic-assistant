@@ -27,6 +27,11 @@ describe('api client', () => {
     expect(mockedInvoke).toHaveBeenCalledWith('check_now', {});
   });
 
+  it('androidLeaveApp → android_leave_app {}', async () => {
+    await api.androidLeaveApp();
+    expect(mockedInvoke).toHaveBeenCalledWith('android_leave_app', {});
+  });
+
   it('getDashboard(sort) → get_dashboard { sort }', async () => {
     await api.getDashboard('priority');
     expect(mockedInvoke).toHaveBeenCalledWith('get_dashboard', { sort: 'priority' });

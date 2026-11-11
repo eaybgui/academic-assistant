@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "identifier": "android",
-  "description": "Back button handling on Android: listen for it and close the window to exit",
+  "description": "Back button handling on Android",
   "platforms": ["android"],
   "windows": ["main"],
-  "permissions": ["core:app:allow-register-listener", "core:window:allow-close"]
+  "permissions": ["core:app:allow-register-listener"]
 }

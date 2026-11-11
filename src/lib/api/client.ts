@@ -140,4 +140,7 @@ export const api = {
   clearJevApiKey: () => invoke<void>('clear_jev_api_key', {}),
 
   testAiProvider: () => invoke<ConnectionTestDto>('test_ai_provider', {}),
+
+  /** Android only: sends the app to the background. */
+  androidLeaveApp: () => invoke<void>('android_leave_app', {}),
 };

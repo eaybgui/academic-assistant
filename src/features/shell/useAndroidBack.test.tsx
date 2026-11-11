@@ -4,15 +4,15 @@ import { useState } from 'react';
 import Modal from '../../components/Modal';
 import { useAndroidBack } from './useAndroidBack';
 
-const { onBackButtonPress, close, unregister } = vi.hoisted(() => ({
+const { onBackButtonPress, androidLeaveApp, unregister } = vi.hoisted(() => ({
   onBackButtonPress: vi.fn(),
-  close: vi.fn(),
+  androidLeaveApp: vi.fn(),
   unregister: vi.fn(),
 }));
 const platform = vi.hoisted(() => ({ IS_ANDROID: true }));
 
 vi.mock('@tauri-apps/api/app', () => ({ onBackButtonPress }));
-vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ close }) }));
+vi.mock('../../lib/api/client', () => ({ api: { androidLeaveApp } }));
 vi.mock('../../config/platform', () => platform);
 
 type BackHandler = (payload: { canGoBack: boolean }) => void;
@@ -46,7 +46,7 @@ async function renderAndCaptureHandler(dialogs = 0): Promise<BackHandler> {
 beforeEach(() => {
   platform.IS_ANDROID = true;
   onBackButtonPress.mockReset().mockResolvedValue({ unregister });
-  close.mockReset();
+  androidLeaveApp.mockReset().mockResolvedValue(undefined);
   unregister.mockReset();
   vi.spyOn(window.history, 'back').mockImplementation(() => {});
 });
@@ -60,7 +60,7 @@ describe('useAndroidBack', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(window.history.back).not.toHaveBeenCalled();
-    expect(close).not.toHaveBeenCalled();
+    expect(androidLeaveApp).not.toHaveBeenCalled();
   });
 
   it('closes only the topmost dialog when two are open', async () => {
@@ -78,15 +78,15 @@ describe('useAndroidBack', () => {
     handler({ canGoBack: true });
 
     expect(window.history.back).toHaveBeenCalledTimes(1);
-    expect(close).not.toHaveBeenCalled();
+    expect(androidLeaveApp).not.toHaveBeenCalled();
   });
 
-  it('exits the app when no dialog is open and the webview cannot go back', async () => {
+  it('leaves the app when no dialog is open and the webview cannot go back', async () => {
     const handler = await renderAndCaptureHandler();
 
     handler({ canGoBack: false });
 
-    expect(close).toHaveBeenCalledTimes(1);
+    expect(androidLeaveApp).toHaveBeenCalledTimes(1);
     expect(window.history.back).not.toHaveBeenCalled();
   });
 

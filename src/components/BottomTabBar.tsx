@@ -6,7 +6,7 @@ export default function BottomTabBar() {
   return (
     <nav
       aria-label="Sections"
-      className="fixed inset-x-0 bottom-0 z-10 flex border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-10 flex border-t border-neutral-200 bg-white md:hidden"
     >
       {visibleNavItems().map(({ to, label, end, Icon }) => (
         <NavLink

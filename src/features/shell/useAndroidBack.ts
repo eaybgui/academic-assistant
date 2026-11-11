@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { onBackButtonPress } from '@tauri-apps/api/app';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { IS_ANDROID } from '../../config/platform';
+import { api } from '../../lib/api/client';
 
 /** Closes the topmost open dialog by sending it the Escape key, which `Modal` already handles. */
 function closeTopmostDialog(): boolean {
@@ -17,7 +17,7 @@ function handleBack({ canGoBack }: { canGoBack: boolean }) {
   if (canGoBack) {
     window.history.back();
   } else {
-    void getCurrentWindow().close();
+    void api.androidLeaveApp();
   }
 }
 
