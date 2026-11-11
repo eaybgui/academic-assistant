@@ -78,8 +78,8 @@ export default function UniversityCard({ university }: UniversityCardProps) {
 
   return (
     <li className={LIST_CARD}>
-      <div className="flex items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0 break-words">
           <p className={ITEM_TITLE_BOLD}>{name}</p>
           <p className={TEXT_MUTED}>
             {PLATFORM_LABELS[university.platform]} · {university.baseUrl}
@@ -108,7 +108,7 @@ export default function UniversityCard({ university }: UniversityCardProps) {
           <ErrorMessage error={actionError} />
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {loginState === 'ok' ? (
             <>
               <button

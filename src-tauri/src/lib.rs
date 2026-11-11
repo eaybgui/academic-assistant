@@ -21,6 +21,8 @@ mod validation;
 
 use tauri::Manager;
 
+#[cfg(target_os = "android")]
+use commands::android;
 #[cfg(not(target_os = "android"))]
 use commands::{accounts, catalog, results, runs, settings};
 use commands::{personal, tracker, universities};
@@ -91,7 +93,7 @@ pub fn run() {
         settings::test_ai_provider,
     ));
     #[cfg(target_os = "android")]
-    let builder = builder.invoke_handler(lms_handler!());
+    let builder = builder.invoke_handler(lms_handler!(android::android_leave_app,));
     builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

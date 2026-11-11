@@ -22,14 +22,14 @@ class SecretArgs {
 }
 
 /**
- * Credentials encrypted under an Android Keystore AES key, stored in app-private
+ * Android-only helpers. Credentials encrypted under an Android Keystore AES key, stored in app-private
  * preferences. An entry that can no longer be decrypted (key removed, app data
  * restored) reads as missing and is removed.
  */
 @TauriPlugin
-class AcademicPlugin(activity: Activity) : Plugin(activity) {
+class AcademicPlugin(private val hostActivity: Activity) : Plugin(hostActivity) {
     private val prefs: SharedPreferences =
-        activity.applicationContext.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        hostActivity.applicationContext.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
     private val box: SecretBox by lazy { SecretBox(loadOrCreateKey()) }
 
     @Command
@@ -63,6 +63,15 @@ class AcademicPlugin(activity: Activity) : Plugin(activity) {
             invoke.resolve()
         } else {
             invoke.reject("Could not delete the secret")
+        }
+    }
+
+    /** Sends the app to the background, as Back does on a root screen. */
+    @Command
+    fun moveTaskToBack(invoke: Invoke) {
+        hostActivity.runOnUiThread {
+            hostActivity.moveTaskToBack(true)
+            invoke.resolve()
         }
     }
 

@@ -134,7 +134,7 @@ export default function TrackerPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className={PAGE_TITLE}>Dashboard</h1>
         <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             {lastSyncAt ? (
               <span className={TEXT_MUTED_XS}>
                 Last synced {formatLastSynced(lastSyncAt)}
