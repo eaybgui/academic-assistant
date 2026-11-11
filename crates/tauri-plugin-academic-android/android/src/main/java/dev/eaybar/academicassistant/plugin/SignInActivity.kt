@@ -89,6 +89,7 @@ class SignInActivity : ComponentActivity() {
     private fun clientFor(params: SignInParams) = object : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url.toString()
+            if (request.isForMainFrame) SignInOrigins.record(applicationContext, url)
             val scheme = params.interceptScheme
             if (scheme != null && url.startsWith("$scheme://")) {
                 deliver("redirect", url = url)
@@ -101,7 +102,12 @@ class SignInActivity : ComponentActivity() {
             SignInOrigins.record(applicationContext, url)
         }
 
+        override fun onPageFinished(view: WebView, url: String) {
+            SignInOrigins.record(applicationContext, url)
+        }
+
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+            SignInOrigins.record(applicationContext, url)
             val prefix = params.doneUrlPrefix ?: return
             if (url.startsWith(prefix) && url.length > prefix.length) {
                 val cookies = CookieManager.getInstance()
