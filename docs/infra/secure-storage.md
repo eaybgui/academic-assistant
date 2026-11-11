@@ -61,6 +61,17 @@ by the real application. A second `#[ignore]`d test,
 verify `set_secret`/`get_secret` isn't limited to the 1280-char cap `set_password` would
 impose.
 
+## Android store
+
+On Android `KeyringSecretStore` is not compiled; the `SecretStore` is implemented over the Kotlin
+`AcademicPlugin`. Each value is sealed with AES-256-GCM under a key held in the Android Keystore
+(the key never leaves it), and the result (`base64(12-byte IV + ciphertext + tag)`) is kept in
+app-private `SharedPreferences`. Nothing is written in plain text. A value that can no longer be
+decrypted (key removed, app data restored) reads as absent, so the university shows as not signed in and
+the app does not crash. A Blackboard cookie header (about 1.1 KB) fits comfortably.
+`InMemorySecretStore` is unchanged. The Kotlin unit tests for the sealing run with Gradle; the real round
+trip is on the acceptance checklist in [../testing.md](../testing.md#android-acceptance-checklist-manual).
+
 ## When secrets are written and removed
 
 The store itself is passive; the Tauri commands ([../app/tauri-commands.md](../app/tauri-commands.md))

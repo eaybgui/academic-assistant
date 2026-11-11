@@ -38,6 +38,22 @@ The ports (traits) that connect the layers are: `EmailProvider` and `EmailProvid
 `PersonalTaskRepository`), `Clock`,
 `RunObserver` and `LmsSyncObserver`. See [core/domain-and-ports.md](core/domain-and-ports.md).
 
+## Android composition
+
+The Android app reuses `core`, `infra` and the React frontend, composed differently by `src-tauri`
+(selected with `#[cfg(target_os = "android")]`):
+
+- **Included:** the LMS tracker, calendar and personal tasks. **Excluded:** email, AI and Settings.
+- **Secrets:** `SecretStore` is backed by a Keystore-sealed store through the Kotlin plugin
+  `crates/tauri-plugin-academic-android/` ([secure-storage](infra/secure-storage.md)).
+- **Sign-in:** the plugin opens a separate screen with a `WebView`. UV (Moodle) captures the
+  `moodlemobile://` redirect; UAH (Blackboard) reads the session cookies after the Microsoft login. Rust decodes
+  the result and stores it as on the desktop. Quiet renewal uses the same screen, invisible. Signing out clears
+  the `WebView` cookies and the storage of the sign-in origins.
+- **HTTP:** `http_client()` uses bundled root certificates on Android.
+- **Frontend:** `IS_ANDROID` hides the email routes and shows a bottom tab bar on narrow screens; the Back
+  button closes dialogs, goes back, and leaves the app only from the first screen.
+
 ## Data flow of a "Sync" (LMS tracker)
 
 ```mermaid
