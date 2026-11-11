@@ -15,8 +15,8 @@ use tauri::{
 use tokio::sync::mpsc;
 
 use super::capture::{
-    blackboard_start_url, encode_session_cookies, is_blackboard_signed_in, moodle_launch_url,
-    moodle_token_payload, random_passport, CookieCaptureError, RawCookie,
+    blackboard_start_url, is_blackboard_signed_in, moodle_launch_url, moodle_token_payload,
+    random_passport, session_credential, RawCookie,
 };
 use super::LoginMode;
 
@@ -227,10 +227,5 @@ async fn read_session(window: &WebviewWindow, base_url: &str) -> Result<String, 
             domain: c.domain().map(str::to_string),
         })
         .collect();
-    encode_session_cookies(raw, &host).map_err(|error| {
-        if let CookieCaptureError::TooLarge(names) = &error {
-            tracing::warn!(cookie_names = ?names, "blackboard session exceeds the secret size limit");
-        }
-        LmsError::Auth(error.to_string())
-    })
+    session_credential(raw, &host)
 }

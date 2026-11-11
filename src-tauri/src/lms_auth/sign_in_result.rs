@@ -2,13 +2,15 @@
 //! Target-independent so it is tested on every platform. Nothing here logs or
 //! returns a token, cookie or URL.
 
+use std::fmt;
+
 use academic_core::domain::LmsPlatform;
 use academic_core::ports::LmsError;
 use academic_infra::lms::moodle::decode_launch_token;
 use serde::Deserialize;
 use tauri::Url;
 
-use super::capture::{encode_session_cookies, moodle_token_payload, CookieCaptureError, RawCookie};
+use super::capture::{moodle_token_payload, session_credential, RawCookie};
 use super::LoginMode;
 
 fn unexpected() -> LmsError {
@@ -16,7 +18,7 @@ fn unexpected() -> LmsError {
 }
 
 /// How the sign-in screen ended.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub enum SignInOutcome {
     /// Moodle: the intercepted `moodlemobile://` redirect.
     Redirect(String),
@@ -24,6 +26,18 @@ pub enum SignInOutcome {
     SignedIn(String),
     Cancelled,
     TimedOut,
+}
+
+/// Debug shows the variant and the payload length only: the payloads are secrets.
+impl fmt::Debug for SignInOutcome {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Redirect(url) => write!(f, "Redirect(<{} bytes>)", url.len()),
+            Self::SignedIn(header) => write!(f, "SignedIn(<{} bytes>)", header.len()),
+            Self::Cancelled => f.write_str("Cancelled"),
+            Self::TimedOut => f.write_str("TimedOut"),
+        }
+    }
 }
 
 /// The plugin's reply to `signIn`.
@@ -92,12 +106,7 @@ pub fn credential_from_outcome(
                 .ok()
                 .and_then(|url| url.host_str().map(str::to_ascii_lowercase))
                 .ok_or_else(|| LmsError::Protocol("Invalid platform URL".into()))?;
-            encode_session_cookies(parse_cookie_header(&header), &host).map_err(|error| {
-                if let CookieCaptureError::TooLarge(names) = &error {
-                    tracing::warn!(cookie_names = ?names, "blackboard session exceeds the secret size limit");
-                }
-                LmsError::Auth(error.to_string())
-            })
+            session_credential(parse_cookie_header(&header), &host)
         }
         (SignInOutcome::Cancelled, _) => Err(LmsError::Auth("Sign-in cancelled".into())),
         (SignInOutcome::TimedOut, _) => Err(LmsError::Auth(match mode {
@@ -132,6 +141,18 @@ mod tests {
             value: value.into(),
             domain: None,
         }
+    }
+
+    #[test]
+    fn outcome_debug_never_shows_the_payload() {
+        let shown = format!(
+            "{:?} {:?} {:?}",
+            SignInOutcome::Redirect("moodlemobile://token=SECRET".into()),
+            SignInOutcome::SignedIn("sid=SECRET".into()),
+            SignInOutcome::Cancelled
+        );
+        assert!(!shown.contains("SECRET"));
+        assert_eq!(shown, "Redirect(<27 bytes>) SignedIn(<10 bytes>) Cancelled");
     }
 
     #[test]

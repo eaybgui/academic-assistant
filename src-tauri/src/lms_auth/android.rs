@@ -3,7 +3,7 @@
 //! screen never returns anything but the redirect URL or the cookie header, and
 //! nothing in this module logs them.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use academic_core::domain::{LmsPlatform, LmsUniversity, UniversityId};
@@ -21,24 +21,30 @@ const MOODLE_SCHEME: &str = "moodlemobile";
 /// Slack over the screen's own timeout, so the plugin normally answers first.
 const PLUGIN_GRACE: Duration = Duration::from_secs(15);
 
-/// The app shows one sign-in screen at a time.
-static SIGN_IN_OPEN: AtomicBool = AtomicBool::new(false);
+/// The university whose sign-in screen is open. The app shows one screen at a time.
+static OPEN_SIGN_IN: Mutex<Option<UniversityId>> = Mutex::new(None);
 
-/// Marks the sign-in screen as open until dropped, on every exit path.
+fn open_sign_in() -> MutexGuard<'static, Option<UniversityId>> {
+    OPEN_SIGN_IN.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Marks a university's sign-in screen as open until dropped, on every exit path.
 struct OpenGuard;
 
 impl OpenGuard {
-    fn acquire() -> Option<Self> {
-        SIGN_IN_OPEN
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .ok()
-            .map(|_| Self)
+    fn acquire(id: UniversityId) -> Option<Self> {
+        let mut open = open_sign_in();
+        if open.is_some() {
+            return None;
+        }
+        *open = Some(id);
+        Some(Self)
     }
 }
 
 impl Drop for OpenGuard {
     fn drop(&mut self) {
-        SIGN_IN_OPEN.store(false, Ordering::Release);
+        *open_sign_in() = None;
     }
 }
 
@@ -59,10 +65,10 @@ pub async fn capture_credential(
     university: &LmsUniversity,
     mode: LoginMode,
 ) -> Result<String, LmsError> {
-    let Some(_open) = OpenGuard::acquire() else {
+    let Some(_open) = OpenGuard::acquire(university.id) else {
         return Err(LmsError::Auth(match mode {
             LoginMode::Silent => "Sign-in required".into(),
-            LoginMode::Interactive => "A sign-in window for this university is already open".into(),
+            LoginMode::Interactive => "A sign-in window is already open".into(),
         }));
     };
     let base_url = university.base_url.as_str();
@@ -125,10 +131,12 @@ fn run_in_background(app: &AppHandle, command: &'static str) {
     });
 }
 
-/// Finishes the open sign-in screen, which then reports "cancelled". There is only
-/// one screen, so the university id is not needed.
-pub fn close_login_window(app: &AppHandle, _id: UniversityId) {
-    run_in_background(app, "cancelSignIn");
+/// Finishes the open sign-in screen, which then reports "cancelled", but only when it
+/// belongs to university `id`: another university's sign-in is left alone.
+pub fn close_login_window(app: &AppHandle, id: UniversityId) {
+    if *open_sign_in() == Some(id) {
+        run_in_background(app, "cancelSignIn");
+    }
 }
 
 pub fn close_all_login_windows(app: &AppHandle) {

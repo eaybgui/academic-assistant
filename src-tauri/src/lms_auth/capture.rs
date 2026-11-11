@@ -1,6 +1,7 @@
 //! Pure helpers for the LMS login window: start URLs, redirect/landing detection,
 //! and turning captured cookies into the stored session (spec §6).
 
+use academic_core::ports::LmsError;
 use academic_infra::lms::blackboard::{encode_session, SessionCookie};
 use academic_infra::secrets::MAX_SECRET_BYTES;
 use rand::distr::{Alphanumeric, SampleString};
@@ -76,6 +77,17 @@ pub fn encode_session_cookies(
         ));
     }
     Ok(encoded)
+}
+
+/// [`encode_session_cookies`] with the failure mapped to the sign-in error. The log
+/// line for an oversized session carries cookie names only.
+pub fn session_credential(cookies: Vec<RawCookie>, host: &str) -> Result<String, LmsError> {
+    encode_session_cookies(cookies, host).map_err(|error| {
+        if let CookieCaptureError::TooLarge(names) = &error {
+            tracing::warn!(cookie_names = ?names, "blackboard session exceeds the secret size limit");
+        }
+        LmsError::Auth(error.to_string())
+    })
 }
 
 fn domain_matches(domain: Option<&str>, host: &str) -> bool {
@@ -167,5 +179,18 @@ mod tests {
             encode_session_cookies(vec![raw("BbRouter", &big, None)], "uah.blackboard.com"),
             Err(CookieCaptureError::TooLarge(vec!["BbRouter".into()]))
         );
+    }
+
+    #[test]
+    fn session_credential_maps_failures_to_auth_errors() {
+        let empty = session_credential(vec![], "uah.blackboard.com").unwrap_err();
+        assert!(matches!(&empty, LmsError::Auth(_)));
+        assert_eq!(empty.to_string(), CookieCaptureError::Empty.to_string());
+        let big = "v".repeat(MAX_SECRET_BYTES);
+        let too_large = session_credential(vec![raw("BbRouter", &big, None)], "uah.blackboard.com")
+            .unwrap_err();
+        assert!(matches!(&too_large, LmsError::Auth(_)));
+        assert!(!too_large.to_string().contains(&big));
+        assert!(session_credential(vec![raw("a", "b", None)], "uah.blackboard.com").is_ok());
     }
 }
