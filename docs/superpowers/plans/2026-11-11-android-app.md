@@ -209,25 +209,80 @@ Requirements:
 
 ---
 
-### Task 5: Android sign-in (specified after Task 1)
+### Task 5: Android sign-in (written from the gate results)
 
-**This task's steps are written from the gate report before it runs.** Fixed now:
+**Gate results (2026-11-11, Xiaomi Pad 7, Android 16 / API 36, arm64-v8a).** All checks passed:
+- **Moodle:** the token was captured, decoded, stored and used.
+- **Blackboard:** 1,109 bytes of cookies via `CookieManager.getCookie`; a real request succeeded.
+- **Restart:** both credentials survived it.
+- **Quiet renewal:** an invisible `WebView` using the remembered login session succeeded silently for **both** platforms.
 
-**Files:** `src-tauri/src/lms_auth/android.rs` (replaces the Task 2 stub), `SignInActivity.kt` and `signIn` / `signOut` commands in the Task 3 plugin.
+The approach that worked was the spike's `SignInActivity`: a separate `ComponentActivity` with a `WebView` (JavaScript and DOM storage on, third-party cookies accepted). It intercepts `moodlemobile://` in `shouldOverrideUrlLoading`. For Blackboard it watches `doUpdateVisitedHistory` for the `is_blackboard_signed_in` rule, then flushes and reads `CookieManager.getCookie(baseUrl)`. Back delivers "cancelled". Reference: `git show spike/android-signin:src-tauri/gen/android/app/src/main/java/dev/eaybar/academic_assistant/SignInActivity.kt`. Rebuild it to this task's contract; never merge the spike.
 
-**Interfaces:** implements the names listed in Task 2's Interfaces block. Reuses `moodle_launch_url`, `blackboard_start_url`, `moodle_token_payload`, `is_blackboard_signed_in`, `encode_session_cookies` and `decode_launch_token` rather than copying them; move them out of `window.rs` into shared code if needed.
+**Files:**
+- Create: `crates/tauri-plugin-academic-android/android/src/main/java/.../SignInActivity.kt`, declared in the plugin's `AndroidManifest.xml`.
+- Modify: `AcademicPlugin.kt` (commands below).
+- Create: `src-tauri/src/lms_auth/sign_in_result.rs` (target-independent, unit-tested on Windows).
+- Replace: `src-tauri/src/lms_auth/android.rs` (the Task 2 stub).
+- Modify: `src-tauri/src/lms_auth/capture.rs`, `src-tauri/src/lms_auth/mod.rs`, `src-tauri/src/commands/universities.rs` (sign-out hook), and `src-tauri/src/lms_auth/window.rs` (only to share the timeout constants).
+
+**Interfaces:**
+- Consumes: Task 2's `lms_auth` names, Task 3's plugin and `AndroidSecretStore`, and the pure helpers in `capture.rs` (`moodle_launch_url`, `blackboard_start_url`, `moodle_token_payload`, `is_blackboard_signed_in`, `encode_session_cookies`, `RawCookie`), plus `decode_launch_token`.
+- Produces:
+
+```kotlin
+// AcademicPlugin commands (Invoke payloads are JSON objects):
+signIn({ url: String, interceptScheme: String?, doneUrlPrefix: String?, cookieUrl: String?, silent: Boolean, timeoutMs: Long })
+  -> { status: "redirect" | "signedIn" | "cancelled" | "timeout", url: String?, cookieHeader: String? }
+cancelSignIn() -> {}            // finishes an open SignInActivity, which then resolves "cancelled"
+clearSignInData() -> {}         // CookieManager.removeAllCookies + WebStorage.deleteAllData
+```
+
+```rust
+// src-tauri/src/lms_auth/sign_in_result.rs (no cfg: tested on Windows)
+pub enum SignInOutcome { Redirect(String), SignedIn(String /* cookie header */), Cancelled, TimedOut }
+pub fn parse_cookie_header(header: &str) -> Vec<RawCookie>;   // "a=b; c=d=e" -> [a=b, c=d=e], domain None, skips empty/invalid parts
+pub fn credential_from_outcome(outcome: SignInOutcome, platform: LmsPlatform, base_url: &str, passport: &str, mode: LoginMode)
+    -> Result<String, LmsError>;
+// Redirect + Moodle -> moodle_token_payload + decode_launch_token; SignedIn + Blackboard -> parse_cookie_header + encode_session_cookies(host of base_url);
+// Cancelled / TimedOut / mismatched -> exactly the LmsError values the desktop's capture_credential returns for a closed window / timeout in that mode.
+pub fn blackboard_done_prefix(base_url: &str) -> String;     // "{base}/ultra/" — is_blackboard_signed_in must use it too (one source of the rule)
+```
+
+`lms_auth` adds, on both targets:
+
+```rust
+pub fn forget_sign_in(app: &AppHandle);
+// desktop: does nothing (desktop behaviour unchanged); android: plugin clearSignInData
+```
+
+`lms_sign_out` gains an `app: AppHandle` parameter and calls it after the existing sign-out succeeds.
 
 Requirements:
-- A separate Android screen hosts a `WebView` (spec §9). Moodle: intercept the `moodlemobile://` redirect and never navigate to it. Blackboard: read `CookieManager` once signed in.
-- **Interactive:** visible. **Silent:** no user interaction, using the WebView's remembered session; if it can't finish within the desktop's silent timeout, it fails and the existing "sign in again" banner shows.
-- **Cancel:** Back or close returns `LmsError` with the same cancelled outcome the desktop gets when its window closes. The university's state doesn't change (Review Focus 5).
-- **Sign out** clears that platform's cookies from the sign-in `WebView` (spec §9).
-- A second concurrent sign-in for the same university is refused the way the desktop does.
-- No token or cookie is ever logged or passed to the UI.
+- **Sign-in parameters:**
+  - Moodle: `interceptScheme = "moodlemobile"`.
+  - Blackboard: `doneUrlPrefix = blackboard_done_prefix(base)` and `cookieUrl = base`.
+  - `timeoutMs` comes from the desktop's `INTERACTIVE_TIMEOUT` / `SILENT_TIMEOUT`. Move the constants to `mod.rs` so both targets share them.
+  - `silent` is `mode == LoginMode::Silent`, which makes the `WebView` invisible.
+- **Threading:** the plugin call is async (`run_mobile_plugin_async`) and never blocks the main thread.
+- **One sign-in at a time per app:** a second `signIn` while one is open is rejected the same way the desktop refuses a second window for the same university (same `LmsError`).
+- **`close_login_window` / `close_all_login_windows`:** call `cancelSignIn`.
+- **Cancel (Review Focus 5):** Back, closing the screen or `cancelSignIn` gives "cancelled". The university's login state and stored secret don't change, as on the desktop.
+- **Sign out:** clears all `WebView` cookies and storage (Ruling R9). The other university's stored credential stays valid; only its quiet renewal may need one interactive sign-in afterwards.
+- **No logging or UI exposure:** nothing logs or returns a token, cookie or URL query string. `SignInActivity` shows only the page and a "Sign in to {name}" title bar.
 
-**Verification:** the user signs in to UV and UAH on the tablet with the Task 6 checklist.
-
-Commit: `feat(android): sign in to Moodle and Blackboard on Android`.
+- [ ] **Step 1: Write the failing Rust tests** in `sign_in_result.rs` (invented values only):
+  - `parse_cookie_header_splits_and_trims`: `"a=1; b=2=3; ;c"` gives `[("a","1"), ("b","2=3")]`.
+  - `blackboard_signed_in_outcome_encodes_the_session`: `SignedIn("BbRouter=x; JSESSIONID=y")` for `https://campus.demo.example` gives `Ok(credential)` equal to `encode_session_cookies` of the same two cookies.
+  - `moodle_redirect_outcome_decodes_the_token`: a `moodlemobile://token=` URL built with the test helpers already used in `capture.rs`/`moodle.rs` tests gives the decoded token.
+  - `cancelled_and_timed_out_map_like_the_desktop`: they give the same `LmsError` kinds/messages as `window.rs` for Interactive and Silent.
+  - `mismatched_outcome_is_a_protocol_error`: a `Redirect` for Blackboard gives `LmsError::Protocol`.
+  - `is_blackboard_signed_in_uses_the_done_prefix`: the existing `capture.rs` tests still pass, plus one asserting `blackboard_done_prefix("https://x.example") == "https://x.example/ultra/"`.
+- [ ] **Step 2:** `cargo test -p academic-assistant sign_in_result`. Expect FAIL.
+- [ ] **Step 3:** Implement the Rust side, `SignInActivity`, the plugin commands and the sign-out hook.
+- [ ] **Step 4:** Windows gates pass and the desktop sign-in tests are unchanged. Android check builds. On the emulator: start a sign-in to a university and press Back, and the university stays unchanged. Silent mode with no remembered session returns the timeout error within `SILENT_TIMEOUT`.
+- [ ] **Step 5: Tablet (user).** Install the debug APK. Add UV and UAH, sign in to each, sync, restart the app, sync again. Sign out of UV and check that UAH still syncs. Record PASS or FAIL in the report; no secrets.
+- [ ] **Step 6:** Commit: `feat(android): sign in to Moodle and Blackboard on Android`.
 
 ---
 
