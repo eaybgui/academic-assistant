@@ -4,6 +4,8 @@
 
 #[cfg(not(target_os = "android"))]
 mod account_status;
+#[cfg(target_os = "android")]
+mod android_secrets;
 mod commands;
 mod dto;
 mod error;
@@ -57,8 +59,10 @@ macro_rules! lms_handler {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(tauri_plugin_academic_android::init());
+    let builder = builder
         .setup(|app| setup::initialize(app))
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {

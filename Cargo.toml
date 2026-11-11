@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/infra", "src-tauri"]
+members = ["crates/core", "crates/infra", "crates/tauri-plugin-academic-android", "src-tauri"]
 
 [workspace.package]
 edition = "2021"
@@ -34,9 +34,11 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tracing-appender = "0.2.5"
 tauri = "2.12.0"
 tauri-build = "2.7.0"
+tauri-plugin = { version = "2.7.0", features = ["build"] }
 tauri-plugin-opener = "2.6.0"
 wiremock = "0.6.5"
 tempfile = "3.27.0"
 
 academic-core = { path = "crates/core" }
 academic-infra = { path = "crates/infra" }
+tauri-plugin-academic-android = { path = "crates/tauri-plugin-academic-android" }
