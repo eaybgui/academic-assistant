@@ -125,3 +125,23 @@ If any of checks 1 to 4 fails, stop and bring the options to the user before bui
 - Existing Rust and frontend suites stay green, and the desktop build still passes.
 - New unit tests for the Android-independent logic added (navigation filtering, layout switching at the breakpoint).
 - Kotlin and sign-in behaviour is verified on the real tablet with a manual acceptance checklist in `docs/testing.md`, covering sign-in to both universities, sync, Dashboard, Calendar, personal tasks, restart persistence, phone-width layout (emulator), and the absence of any email or AI section.
+
+## 11. As built
+
+What was shipped, and where it differs from the sections above. Values are invented or public.
+
+**Gate (Xiaomi Pad 7, Android 16 / API 36, arm64-v8a).** Moodle (UV): the `WebView` captured the `moodlemobile://` redirect, the token decoded and an authenticated request worked. Blackboard (UAH): the Microsoft login completed in the `WebView`, `CookieManager` returned the session cookies (about 1.1 KB, under the store's limit) and an authenticated request worked. The Keystore store survived a force-stop and relaunch, and quiet renewal captured a fresh credential silently for both. Backing out of the sign-in screen returned "cancelled" (verified on the emulator).
+
+**Deviations and rulings.**
+
+- **R2, TLS roots:** on Android `http_client()` uses bundled `webpki-roots` through `reqwest::ClientBuilder::use_preconfigured_tls`, as the IMAP code already does, because the default platform verifier panics without JNI initialisation. Cost: new CA roots need an app update and user-installed CAs are not honoured.
+- **R3, SDK level:** `compileSdk` and `targetSdk` are 36 (installed) instead of the template's 37.
+- **R4, Windows build:** `tauri android build` fails on Windows without Developer Mode because it creates a symbolic link; the manual steps in `docs/development.md` build the same APK.
+- **R6, leaving the app:** the root screen's Back button calls the Android-only command `android_leave_app` (Kotlin `moveTaskToBack`), because closing the Tauri window does not leave the app.
+- **R7, insets:** `MainActivity` applies the system-bar and cutout insets as padding, because CSS `env(safe-area-inset-*)` is 0 in this `WebView`. `MainActivity.kt` is generated, so re-apply the change after a new `tauri android init`.
+- **R9 / R12, sign-out:** signing out clears the sign-in `WebView`'s cookies (shared by both universities) and the storage of the origins the sign-in screen visited (recorded as scheme, host and port only), never the app's own origin. The other university's next quiet renewal may therefore need one interactive sign-in.
+- **R11, quiet renewal:** the invisible sign-in screen is translucent, not touchable and not focusable, so it never covers the app while it runs (up to 20 seconds).
+- **Identifier:** `tauri android init` turns the hyphen into an underscore: `dev.eaybar.academic_assistant`.
+- **Release signing:** the key is generated with `keytool` outside the repository; `src-tauri/gen/android/keystore.properties` (git-ignored) points to it. Without that file the release build is unsigned and says so.
+
+**Not verified:** the Microsoft login's origins were not recorded on the emulator (the same mechanism was verified with another single sign-on host); IME insets; a physical phone.

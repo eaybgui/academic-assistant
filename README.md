@@ -40,6 +40,12 @@ in Settings.
   is tracked, because the tracked courses are its course catalog.
 - Run log and application log. Full email bodies and your university password are never stored.
 
+### Android
+
+An Android build (tablet and phone) offers the Dashboard, Calendar and Universities sections with the same
+behaviour; the email and AI sections are not included. It is installed from a signed APK built locally, see
+[docs/development.md](docs/development.md#android). It is not published on Google Play.
+
 ### Out of scope (later phases)
 
 Google Calendar export, scheduled/background sync and Windows notifications, platform
