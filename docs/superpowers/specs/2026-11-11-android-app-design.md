@@ -139,9 +139,11 @@ What was shipped, and where it differs from the sections above. Values are inven
 - **R4, Windows build:** `tauri android build` fails on Windows without Developer Mode because it creates a symbolic link; the manual steps in `docs/development.md` build the same APK.
 - **R6, leaving the app:** the root screen's Back button calls the Android-only command `android_leave_app` (Kotlin `moveTaskToBack`), because closing the Tauri window does not leave the app.
 - **R7, insets:** `MainActivity` applies the system-bar and cutout insets as padding, because CSS `env(safe-area-inset-*)` is 0 in this `WebView`. `MainActivity.kt` is generated, so re-apply the change after a new `tauri android init`.
+- **R7b, insets and keyboard:** the inset padding in `MainActivity` and `SignInActivity` also includes the keyboard (IME) inset, because edge-to-edge no longer lets `adjustResize` shrink the window.
+- **F3, no backup:** `AndroidManifest.xml` sets `allowBackup="false"`, `fullBackupContent="false"` and `dataExtractionRules="@xml/data_extraction_rules"` (`res/xml/data_extraction_rules.xml` excludes every domain from cloud backup and device transfer), so the WebView cookie store and the sealed preferences never leave the device. Both files are generated: re-apply them after a new `tauri android init`.
 - **R9 / R12, sign-out:** signing out clears the sign-in `WebView`'s cookies (shared by both universities) and the storage of the origins the sign-in screen visited (recorded as scheme, host and port only), never the app's own origin. The other university's next quiet renewal may therefore need one interactive sign-in.
 - **R11, quiet renewal:** the invisible sign-in screen is translucent, not touchable and not focusable, so it never covers the app while it runs (up to 20 seconds).
 - **Identifier:** `tauri android init` turns the hyphen into an underscore: `dev.eaybar.academic_assistant`.
 - **Release signing:** the key is generated with `keytool` outside the repository; `src-tauri/gen/android/keystore.properties` (git-ignored) points to it. Without that file the release build is unsigned and says so.
 
-**Not verified:** the Microsoft login's origins were not recorded on the emulator (the same mechanism was verified with another single sign-on host); IME insets; a physical phone.
+**Not verified:** the Microsoft login's origins were not recorded on the emulator (the same mechanism was verified with another single sign-on host); a physical phone.
