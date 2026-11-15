@@ -3,6 +3,7 @@ import { EMAIL_FEATURES_ENABLED } from './config/features';
 import Layout from './components/Layout';
 import TrackerPage from './features/tracker/TrackerPage';
 import CalendarPage from './features/calendar/CalendarPage';
+import MarksPage from './features/marks/MarksPage';
 import AnnouncementsPage from './features/announcements/AnnouncementsPage';
 import RunsPage from './features/runs/RunsPage';
 import AccountsPage from './features/accounts/AccountsPage';
@@ -15,6 +16,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<TrackerPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/marks" element={<MarksPage />} />
         <Route path="/universities" element={<UniversitiesPage />} />
         {EMAIL_FEATURES_ENABLED && (
           <>

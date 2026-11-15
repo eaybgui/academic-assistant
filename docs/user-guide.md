@@ -26,7 +26,7 @@ an AI provider and is optional.
 ## The screens
 
 The left sidebar (collapse it to icons with the arrow button at its top; the app remembers your
-choice) links to Dashboard, Calendar, Announcements (with a badge showing the number of unseen results),
+choice) links to Dashboard, Calendar, Marks, Announcements (with a badge showing the number of unseen results),
 Universities, Email accounts, Email runs and Settings. Announcements is greyed out, with the hint
 "Add a university and track courses first", until at least one course is tracked.
 
@@ -110,6 +110,19 @@ tasks, all at once. It opens on the current month with today selected.
   on the Dashboard, and a box "Add a task for this day" with an **Add** button.
 - The Calendar works even when you have not added a university: you can use it only for personal
   tasks.
+
+### Marks
+
+Every graded item of the courses you track, in one place. Items are grouped by university and then
+by course; each course can be collapsed and shows how many marks it has.
+
+- Each row shows the title (click it to open the details), the kind, the due date or "No date",
+  and the mark exactly as the platform reports it, whatever its scale (for example `8.5 / 10` or
+  `Apto`).
+- Hidden items with a mark are included; items removed from the platform are not.
+- Courses are sorted by name and rows by due date, with undated ones last.
+- With no university the page offers **Add a university**; with universities but no marks it says
+  "No marks yet. Graded work appears here after a sync."
 
 ### Universities
 

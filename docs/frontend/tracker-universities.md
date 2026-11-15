@@ -1,4 +1,4 @@
-# Dashboard (tracker), Calendar, Universities and sync state
+# Dashboard (tracker), Calendar, Marks, Universities and sync state
 
 The Phase 2 and 3 screens built on the API client from `src/lib/api/` (see [overview.md](overview.md)):
 the tracker **Dashboard** (`/`), the **Calendar** (`/calendar`) with the user's personal tasks, the
@@ -170,6 +170,23 @@ university plus the personal tasks, without tabs.
   did not succeed (`<name>: <error>`), **Dismiss all changes** (`dismiss_all_changes(null)`) and
   **Close**. After an interrupted sync: "The sync was interrupted. Try again."
 
+## Marks (`src/features/marks/`)
+
+`MarksPage` (route `/marks`, sidebar item after Calendar; also a tab on Android) lists the graded
+items of the tracked courses.
+
+- **Data**: `getTracker({ universityId: null, includeHidden: true, includeRemoved: false })`: hidden
+  items with a mark appear, removed ones don't. A mark is an item whose `grade` is not `null`, and
+  it is always shown through `grade.display`.
+- **Grouping** (`groupMarks.ts`): universities in the order the API returns them, then courses
+  sorted with a locale-aware collator (ties by course id), then items by `compareEntries` (earliest
+  due date first, undated last). Universities and courses without marks are omitted.
+- **Layout**: one `section` per university, one `<details open>` per course (header shared with the
+  dashboard through `CollapsibleSummary`), and rows with a title button that opens
+  `EntryDetailsModal`, the kind, the due date or "No date" and the mark.
+- **Empty states**: no universities gives "No marks yet." with **Add a university**; universities
+  without marks gives "No marks yet. Graded work appears here after a sync."
+
 ## Universities (`src/features/universities/`)
 
 `UniversitiesPage` lists the universities (`getUniversities`) as `UniversityCard`s and opens the
@@ -229,7 +246,7 @@ university or course change.
 
 ## Navigation (`src/components/Layout.tsx`)
 
-The sidebar items, in order: **Dashboard** (`/`), **Announcements** (`/announcements`),
+The sidebar items, in order: **Dashboard** (`/`), **Calendar** (`/calendar`), **Marks** (`/marks`), **Announcements** (`/announcements`),
 **Universities**, **Email accounts** (`/accounts`), **Email runs** (`/runs`), **Settings**.
 Announcements is rendered disabled, with the tooltip "Add a university and track courses first",
 while the universities query has loaded and no course is tracked. The unseen-results badge on

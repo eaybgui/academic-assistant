@@ -18,7 +18,7 @@ vi.mock('../config/platform', () => platform);
 vi.mock('../features/shell/useAndroidBack', () => ({ useAndroidBack: vi.fn() }));
 
 const STORAGE_KEY = 'academic-assistant.sidebar-collapsed';
-const NAV_LABELS = ['Dashboard', 'Calendar', 'Announcements', 'Universities', 'Email accounts', 'Email runs', 'Settings'];
+const NAV_LABELS = ['Dashboard', 'Calendar', 'Marks', 'Announcements', 'Universities', 'Email accounts', 'Email runs', 'Settings'];
 const DISABLED_TITLE = 'Add a university and track courses first';
 
 function universityFixture(tracked: number): LmsUniversityDto {
@@ -72,13 +72,14 @@ describe('Layout', () => {
       features.EMAIL_FEATURES_ENABLED = false;
     });
 
-    it('shows the Dashboard, Calendar and Universities tabs in a bottom bar', () => {
+    it('shows the Dashboard, Calendar, Marks and Universities tabs in a bottom bar', () => {
       renderLayout();
 
       const bar = screen.getByRole('navigation', { name: 'Sections' });
       expect(Array.from(bar.querySelectorAll('a')).map((link) => link.textContent)).toEqual([
         'Dashboard',
         'Calendar',
+        'Marks',
         'Universities',
       ]);
       expect(bar).toHaveClass('md:hidden');
@@ -98,11 +99,11 @@ describe('Layout', () => {
       features.EMAIL_FEATURES_ENABLED = false;
     });
 
-    it('shows only Dashboard, Calendar and Universities, in that order', () => {
+    it('shows only Dashboard, Calendar, Marks and Universities, in that order', () => {
       renderLayout();
 
       const labels = screen.getAllByRole('link').map((link) => link.textContent);
-      expect(labels).toEqual(['Dashboard', 'Calendar', 'Universities']);
+      expect(labels).toEqual(['Dashboard', 'Calendar', 'Marks', 'Universities']);
     });
 
     it('does not run the email-only queries', async () => {
