@@ -234,3 +234,94 @@ with `wiremock` and invented JSON; use the capture tool only to look at real res
    `SettingsInput` and the Settings screen. Keep secrets in `SecretStore`.
 3. Test with `wiremock` and add an `#[ignore]` live test that reads its configuration from
    environment variables. Update [infra/ai-providers.md](infra/ai-providers.md).
+
+## Android
+
+The Android app is the same React frontend and Rust backend, built as an APK. Only the Dashboard,
+Calendar and Universities sections exist there (no email or AI). Android code is selected with
+`#[cfg(target_os = "android")]` in Rust and `IS_ANDROID` (`src/config/platform.ts`) in the frontend.
+
+### Toolchain
+
+Install separately: JDK 17, the Android SDK (platform 36, build-tools, platform-tools) and NDK 27, and
+the Rust targets `aarch64-linux-android` (tablet and phones) and `x86_64-linux-android` (emulator):
+
+```powershell
+rustup target add aarch64-linux-android x86_64-linux-android
+```
+
+Set `JAVA_HOME`, `ANDROID_HOME` and `NDK_HOME` (user environment variables). If a shell started before
+you set them, restart it. The generated Gradle project is `src-tauri/gen/android/`; the Kotlin plugin
+is `crates/tauri-plugin-academic-android/`.
+
+### Build and install
+
+Debug APK (large, about 460 MB because of debug symbols), emulator or tablet:
+
+```powershell
+npm run tauri -- android build --debug --apk --target aarch64   # tablet
+npm run tauri -- android build --debug --apk --target x86_64    # emulator
+```
+
+Release APK (small, about 24 MB), signed when `keystore.properties` exists (see Signing):
+
+```powershell
+npm run tauri -- android build --apk --target aarch64
+```
+
+The output is under `src-tauri/gen/android/app/build/outputs/apk/<abi>/<type>/`.
+
+**Windows and symbolic links.** `tauri android build` links the Rust library into `jniLibs` with a
+symbolic link, which Windows only allows in Developer Mode (Settings > System > For developers, or
+the `SeCreateSymbolicLinkPrivilege` policy). With Developer Mode on, the commands above are enough.
+Without it the command compiles Rust and then fails with "Creation symbolic link is not allowed". Finish
+the build by hand (Git Bash shown; use `x86_64` and `X86_64` for the emulator, `Debug` and the
+`debug` target folder for a debug build):
+
+```bash
+mkdir -p src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a
+cp target/aarch64-linux-android/release/libacademic_assistant_lib.so \
+   src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a/
+cd src-tauri/gen/android
+./gradlew assembleArm64Release -x rustBuildArm64Release
+```
+
+`jniLibs` and the build output are git-ignored. After a build, `gradlew` may show an end-of-line change;
+do not commit it.
+
+### Install with adb
+
+Enable Developer options and USB debugging on the device, connect it and check that `adb devices` lists it
+(accept the prompt on the device). Then:
+
+```powershell
+adb install -r path\to\app-arm64-release.apk
+```
+
+On Xiaomi (HyperOS/MIUI) turn on "Install via USB" in Developer options (it may ask you to sign in to a Mi
+account), or `adb install` is refused. A release-signed APK cannot update a debug-signed install, nor the
+reverse: Android reports a signature mismatch, and uninstalling to switch deletes the app's data
+(universities, tasks, notes, sign-ins). For the emulator add `-s emulator-5554`.
+
+### Signing
+
+The release APK is signed with a key kept outside the repository. Generate it once:
+
+```powershell
+keytool -genkeypair -keystore $env:USERPROFILE\.academic-assistant\android-release.jks -storetype PKCS12 `
+  -alias academic-assistant -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Then create `src-tauri/gen/android/keystore.properties` (git-ignored, as is `*.jks`) with `storeFile`
+(absolute path, forward slashes), `storePassword`, `keyAlias` and `keyPassword`. `app/build.gradle.kts` reads
+it for the release build; if the file is absent the build warns and the APK is unsigned. Back up the
+key file and its passwords: without the same key a later APK cannot update an installed one. Check the
+result with `apksigner verify --print-certs app-arm64-release.apk` (in the SDK's `build-tools`).
+
+### Android notes
+
+- **TLS:** HTTPS uses bundled root certificates, not the system store.
+- **Secrets:** stored in a Keystore-backed store, see [infra/secure-storage.md](infra/secure-storage.md).
+- **Generated files:** `MainActivity.kt` carries the inset handling; re-apply it if `tauri android init`
+  regenerates the project.
+- Manual verification: [testing.md](testing.md#android-acceptance-checklist-manual).

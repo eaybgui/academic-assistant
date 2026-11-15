@@ -8,11 +8,14 @@ import type { DashboardDto, LmsUniversityDto } from '../lib/api/types';
 const { getDashboard, getUniversities } = vi.hoisted(() => ({ getDashboard: vi.fn(), getUniversities: vi.fn() }));
 
 const features = vi.hoisted(() => ({ EMAIL_FEATURES_ENABLED: true }));
+const platform = vi.hoisted(() => ({ IS_ANDROID: false }));
 
 vi.mock('../lib/api/client', () => ({
   api: { getDashboard, getUniversities },
 }));
 vi.mock('../config/features', () => features);
+vi.mock('../config/platform', () => platform);
+vi.mock('../features/shell/useAndroidBack', () => ({ useAndroidBack: vi.fn() }));
 
 const STORAGE_KEY = 'academic-assistant.sidebar-collapsed';
 const NAV_LABELS = ['Dashboard', 'Calendar', 'Announcements', 'Universities', 'Email accounts', 'Email runs', 'Settings'];
@@ -46,12 +49,50 @@ function renderLayout() {
 
 beforeEach(() => {
   features.EMAIL_FEATURES_ENABLED = true;
+  platform.IS_ANDROID = false;
   localStorage.clear();
   getDashboard.mockReset().mockRejectedValue(new Error('not available outside Tauri'));
   getUniversities.mockReset().mockRejectedValue(new Error('not available outside Tauri'));
 });
 
 describe('Layout', () => {
+  describe('on desktop', () => {
+    it('has no bottom tab bar and keeps the sidebar always visible', () => {
+      renderLayout();
+
+      expect(screen.queryByRole('navigation', { name: 'Sections' })).not.toBeInTheDocument();
+      expect(screen.getByRole('navigation')).not.toHaveClass('hidden');
+      expect(screen.getByText('Page content').closest('main')).not.toHaveClass('pb-24');
+    });
+  });
+
+  describe('on Android', () => {
+    beforeEach(() => {
+      platform.IS_ANDROID = true;
+      features.EMAIL_FEATURES_ENABLED = false;
+    });
+
+    it('shows the Dashboard, Calendar and Universities tabs in a bottom bar', () => {
+      renderLayout();
+
+      const bar = screen.getByRole('navigation', { name: 'Sections' });
+      expect(Array.from(bar.querySelectorAll('a')).map((link) => link.textContent)).toEqual([
+        'Dashboard',
+        'Calendar',
+        'Universities',
+      ]);
+      expect(bar).toHaveClass('md:hidden');
+    });
+
+    it('hides the sidebar below the tablet breakpoint and leaves room for the bar', () => {
+      renderLayout();
+
+      const sidebar = screen.getByRole('button', { name: 'Collapse sidebar' }).closest('nav');
+      expect(sidebar).toHaveClass('hidden', 'md:block');
+      expect(screen.getByText('Page content').closest('main')).toHaveClass('pb-24');
+    });
+  });
+
   describe('with the email section disabled', () => {
     beforeEach(() => {
       features.EMAIL_FEATURES_ENABLED = false;

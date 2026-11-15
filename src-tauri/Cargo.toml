@@ -26,3 +26,6 @@ reqwest.workspace = true
 rand.workspace = true
 async-trait.workspace = true
 thiserror.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-academic-android.workspace = true

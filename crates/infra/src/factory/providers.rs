@@ -4,7 +4,6 @@
 //! messages, and how each provider kind is built).
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use academic_core::domain::{
     account_password_key, Account, AiProviderKind, ProviderConfig, Settings, JEV_API_KEY,
@@ -18,22 +17,6 @@ use crate::graph::{MicrosoftGraphEmailProvider, OAuthConfig, GRAPH_BASE_URL, LOG
 use crate::imap::ImapEmailProvider;
 use crate::jev::{JevModel, JEV_BASE_URL};
 use crate::ollama::OllamaModel;
-
-/// The `User-Agent` sent on every request made by [`http_client`]'s client.
-const USER_AGENT: &str = concat!("academic-assistant/", env!("CARGO_PKG_VERSION"));
-/// Time allowed to establish the TCP+TLS connection before giving up. Per-request
-/// timeouts (waiting for a response once connected) are set by each adapter.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-
-/// Builds the `reqwest::Client` shared by every adapter this crate constructs:
-/// rustls TLS, this app's `User-Agent`, and a 10 second connect timeout.
-pub fn http_client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .connect_timeout(CONNECT_TIMEOUT)
-        .build()
-        .expect("http client configuration is static and always valid")
-}
 
 /// Default [`EmailProviderFactory`]: builds an [`ImapEmailProvider`] or
 /// [`MicrosoftGraphEmailProvider`] from an account's [`ProviderConfig`], reading the

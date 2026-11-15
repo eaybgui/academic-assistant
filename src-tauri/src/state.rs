@@ -4,14 +4,19 @@
 use std::sync::Arc;
 
 use academic_core::lms::{LmsRepositories, LmsSyncRunner};
+#[cfg(not(target_os = "android"))]
 use academic_core::pipeline::{CheckRunner, Repositories};
+#[cfg(not(target_os = "android"))]
 use academic_core::ports::{
-    AccountRepository, CatalogRepository, Clock, CourseRepository, EmailProviderFactory,
-    LmsAuthenticator, LmsClientFactory, LmsItemRepository, LmsSyncObserver, ModelProvider,
-    PersonalTaskRepository, ResultRepository, RunObserver, RunRepository, SecretStore,
-    SettingsRepository, SyncStateRepository, UniversityRepository,
+    AccountRepository, CatalogRepository, EmailProviderFactory, ModelProvider, ResultRepository,
+    RunObserver, RunRepository, SettingsRepository, SyncStateRepository,
+};
+use academic_core::ports::{
+    Clock, CourseRepository, LmsAuthenticator, LmsClientFactory, LmsItemRepository,
+    LmsSyncObserver, PersonalTaskRepository, SecretStore, UniversityRepository,
 };
 use academic_infra::db::Database;
+#[cfg(not(target_os = "android"))]
 use chrono::NaiveDate;
 use tracing_appender::non_blocking::WorkerGuard;
 
@@ -19,9 +24,12 @@ use tracing_appender::non_blocking::WorkerGuard;
 /// separately because every repository port is implemented by it.
 pub struct Collaborators {
     pub secrets: Arc<dyn SecretStore>,
+    #[cfg(not(target_os = "android"))]
     pub factory: Arc<dyn EmailProviderFactory>,
+    #[cfg(not(target_os = "android"))]
     pub models: Arc<dyn ModelProvider>,
     pub http: reqwest::Client,
+    #[cfg(not(target_os = "android"))]
     pub observer: Arc<dyn RunObserver>,
     pub clock: Arc<dyn Clock>,
     pub lms_factory: Arc<dyn LmsClientFactory>,
@@ -30,25 +38,35 @@ pub struct Collaborators {
 }
 
 pub struct AppState {
+    #[cfg(not(target_os = "android"))]
     pub accounts: Arc<dyn AccountRepository>,
+    #[cfg(not(target_os = "android"))]
     pub catalog: Arc<dyn CatalogRepository>,
+    #[cfg(not(target_os = "android"))]
     pub sync: Arc<dyn SyncStateRepository>,
     pub universities: Arc<dyn UniversityRepository>,
     pub courses: Arc<dyn CourseRepository>,
     pub items: Arc<dyn LmsItemRepository>,
     pub personal_tasks: Arc<dyn PersonalTaskRepository>,
+    #[cfg(not(target_os = "android"))]
     pub results: Arc<dyn ResultRepository>,
+    #[cfg(not(target_os = "android"))]
     pub runs: Arc<dyn RunRepository>,
+    #[cfg(not(target_os = "android"))]
     pub settings: Arc<dyn SettingsRepository>,
     pub secrets: Arc<dyn SecretStore>,
+    #[cfg(not(target_os = "android"))]
     pub factory: Arc<dyn EmailProviderFactory>,
+    #[cfg(not(target_os = "android"))]
     pub models: Arc<dyn ModelProvider>,
     pub http: reqwest::Client,
     pub clock: Arc<dyn Clock>,
+    #[cfg(not(target_os = "android"))]
     pub observer: Arc<dyn RunObserver>,
     pub lms_factory: Arc<dyn LmsClientFactory>,
     pub lms_authenticator: Arc<dyn LmsAuthenticator>,
     pub lms_observer: Arc<dyn LmsSyncObserver>,
+    #[cfg(not(target_os = "android"))]
     pub runner: Arc<CheckRunner>,
     pub lms_sync: Arc<LmsSyncRunner>,
     /// Keeps the non-blocking log writer flushing for the lifetime of the app.
@@ -61,15 +79,19 @@ impl AppState {
     pub fn new(db: Arc<Database>, collaborators: Collaborators) -> Self {
         let Collaborators {
             secrets,
+            #[cfg(not(target_os = "android"))]
             factory,
+            #[cfg(not(target_os = "android"))]
             models,
             http,
+            #[cfg(not(target_os = "android"))]
             observer,
             clock,
             lms_factory,
             lms_authenticator,
             lms_observer,
         } = collaborators;
+        #[cfg(not(target_os = "android"))]
         let runner = Arc::new(CheckRunner::new(
             Repositories {
                 accounts: db.clone(),
@@ -97,25 +119,35 @@ impl AppState {
             clock.clone(),
         ));
         Self {
+            #[cfg(not(target_os = "android"))]
             accounts: db.clone(),
+            #[cfg(not(target_os = "android"))]
             catalog: db.clone(),
+            #[cfg(not(target_os = "android"))]
             sync: db.clone(),
             universities: db.clone(),
             courses: db.clone(),
             items: db.clone(),
             personal_tasks: db.clone(),
+            #[cfg(not(target_os = "android"))]
             results: db.clone(),
+            #[cfg(not(target_os = "android"))]
             runs: db.clone(),
+            #[cfg(not(target_os = "android"))]
             settings: db,
             secrets,
+            #[cfg(not(target_os = "android"))]
             factory,
+            #[cfg(not(target_os = "android"))]
             models,
             http,
             clock,
+            #[cfg(not(target_os = "android"))]
             observer,
             lms_factory,
             lms_authenticator,
             lms_observer,
+            #[cfg(not(target_os = "android"))]
             runner,
             lms_sync,
             _log_guard: None,
@@ -128,6 +160,7 @@ impl AppState {
     }
 
     /// The current date in the user's local time zone.
+    #[cfg(not(target_os = "android"))]
     pub fn today(&self) -> NaiveDate {
         self.clock
             .now()

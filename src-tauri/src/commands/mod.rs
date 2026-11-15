@@ -2,11 +2,18 @@
 //! wrapper: it calls a plain function that takes `&AppState` (unit-testable without
 //! a running app) and logs failures through [`logged`].
 
+#[cfg(not(target_os = "android"))]
 pub mod accounts;
+#[cfg(target_os = "android")]
+pub mod android;
+#[cfg(not(target_os = "android"))]
 pub mod catalog;
 pub mod personal;
+#[cfg(not(target_os = "android"))]
 pub mod results;
+#[cfg(not(target_os = "android"))]
 pub mod runs;
+#[cfg(not(target_os = "android"))]
 pub mod settings;
 pub mod tracker;
 pub mod universities;

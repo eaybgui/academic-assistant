@@ -12,6 +12,10 @@ import CalendarGrid from './CalendarGrid';
 import DayList from './DayList';
 import { entriesByDay, monthGrid } from './monthGrid';
 import { PAGE_TITLE, SECONDARY_BUTTON_BASE, TEXT_MUTED } from '../../components/styles';
+import { IS_ANDROID } from '../../config/platform';
+
+/** Touch-sized (36px) calendar buttons on Android. */
+const NAV_BUTTON = IS_ANDROID ? `${SECONDARY_BUTTON_BASE} h-9` : SECONDARY_BUTTON_BASE;
 
 /** Same query as the dashboard's All tab, so both screens share one cache entry. */
 const ALL: TrackerQuery = { universityId: null, includeHidden: false, includeRemoved: false };
@@ -68,7 +72,7 @@ export default function CalendarPage() {
             type="button"
             aria-label="Previous month"
             onClick={() => setViewed(shiftMonth(viewed, -1))}
-            className={SECONDARY_BUTTON_BASE}
+            className={NAV_BUTTON}
           >
             ‹
           </button>
@@ -79,11 +83,11 @@ export default function CalendarPage() {
             type="button"
             aria-label="Next month"
             onClick={() => setViewed(shiftMonth(viewed, 1))}
-            className={SECONDARY_BUTTON_BASE}
+            className={NAV_BUTTON}
           >
             ›
           </button>
-          <button type="button" onClick={goToToday} className={SECONDARY_BUTTON_BASE}>
+          <button type="button" onClick={goToToday} className={NAV_BUTTON}>
             Today
           </button>
         </div>

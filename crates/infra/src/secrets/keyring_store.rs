@@ -1,16 +1,7 @@
-//! `KeyringSecretStore` (Windows Credential Manager) and `InMemorySecretStore` (Task T7).
-//!
-//! See `docs/infra/secure-storage.md` for details.
-
-use std::collections::HashMap;
-use std::sync::Mutex;
+//! `KeyringSecretStore`: the OS credential store adapter (desktop only).
 
 use academic_core::domain::SECRET_SERVICE;
 use academic_core::ports::{SecretError, SecretStore};
-
-/// Largest secret the Windows Credential Manager accepts: its
-/// `CRED_MAX_CREDENTIAL_BLOB_SIZE`, in bytes.
-pub const MAX_SECRET_BYTES: usize = 2560;
 
 /// Secret store backed by the OS credential store. On Windows this is the Credential
 /// Manager: each key is stored as one generic credential with service `SECRET_SERVICE`
@@ -55,35 +46,4 @@ fn new_entry(key: &str) -> Result<keyring::Entry, SecretError> {
 /// message here carries no prefix of its own.
 fn map_keyring_error(err: keyring::Error) -> SecretError {
     SecretError(err.to_string())
-}
-
-/// In-memory [`SecretStore`], for tests. Used by this crate's own tests and by other
-/// tasks' tests that need a `SecretStore` without touching the OS credential store.
-#[derive(Default)]
-pub struct InMemorySecretStore {
-    values: Mutex<HashMap<String, String>>,
-}
-
-impl InMemorySecretStore {
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, String>> {
-        self.values
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-}
-
-impl SecretStore for InMemorySecretStore {
-    fn get(&self, key: &str) -> Result<Option<String>, SecretError> {
-        Ok(self.lock().get(key).cloned())
-    }
-
-    fn set(&self, key: &str, value: &str) -> Result<(), SecretError> {
-        self.lock().insert(key.to_string(), value.to_string());
-        Ok(())
-    }
-
-    fn delete(&self, key: &str) -> Result<(), SecretError> {
-        self.lock().remove(key);
-        Ok(())
-    }
 }

@@ -401,3 +401,50 @@ These cannot be covered by automated tests; check them while doing the steps abo
 8. **Saved session.** After restarting the app, signing in again to an already-signed-in IdP may complete without typing the password. Record whether it did. The `lms-auth` profile folder in the app data directory exists.
 9. **No app access from the login window.** In the login window, the developer console (if available in dev builds) shows `window.__TAURI_INTERNALS__` is undefined or invoking a command fails.
 10. **Interactive timeout.** Leave an interactive sign-in window idle for 10 minutes. It closes and the dialog shows "Sign-in timed out" (optional, record if done).
+
+## Android acceptance checklist (manual)
+
+Build and install the signed release APK as described in [development.md](development.md#android).
+Run it on the tablet with real accounts; the items marked "(emulator)" run on an emulator at phone size
+(for example 1080x2400). Record date, result and observations for each line. The Rust and frontend suites
+stay on Windows; Kotlin and sign-in behaviour is verified only here.
+
+**Install and layout**
+- [ ] Install the APK (`adb install -r`, with "Install via USB" on for Xiaomi). The app opens.
+- [ ] Only Dashboard, Calendar and Universities exist (no Announcements, Email accounts, Email runs or Settings).
+- [ ] The bottom tab bar is visible above the gesture handle and the status bar does not cover the content.
+
+**Universities and sign-in**
+- [ ] Add UV (Moodle, `https://aulavirtual.uv.es`) and UAH (Blackboard, `https://uah.blackboard.com`).
+- [ ] Sign in to UV through its login page; the card shows "Connected as ...".
+- [ ] Sign in to UAH through the Microsoft login; the card shows connected.
+- [ ] Start a sign-in and press Back: you return to the app, sign-in is cancelled and the university is unchanged.
+- [ ] Choose courses for each university and sync. Items appear.
+
+**Dashboard**
+- [ ] Tabs: All plus one per university.
+- [ ] Group by time and by status; collapse and expand sections.
+- [ ] Mark an item done, hide it, add a note, open its details.
+- [ ] "Open in platform" opens the browser; Back returns to the app.
+
+**Personal tasks and Calendar**
+- [ ] Add a personal task; edit it, mark it done, delete it; it shows on the Dashboard.
+- [ ] Calendar: dots on days with entries, tapping a day lists its entries, adding a task from a day works.
+
+**Persistence, session and offline**
+- [ ] Force-stop and reopen the app: data and sign-ins are still there.
+- [ ] Sign out of UV: its card shows signed out and the Dashboard keeps its synced items.
+- [ ] With UV signed out, Sync still syncs UAH; then sign out of UAH and sign in to UV again: it syncs.
+- [ ] After signing out of UAH and signing in again, the Microsoft login asks for the account again (it does not sign in by itself). This checks that sign-out cleared the WebView data.
+- [ ] An expired session shows the "sign in again" banner on the university. There is no switch to force this: it depends on the session expiring naturally (leave a signed-in university unused until it does), so record "not observed" if it did not happen.
+- [ ] Quiet renewal: with an expired session whose login is still remembered, Sync renews it without a visible screen, and the app stays visible and touchable meanwhile.
+- [ ] Airplane mode: the Dashboard and Calendar still show the synced data; Sync shows an error and nothing is lost.
+
+**Back button**
+- [ ] With a dialog open, Back closes the dialog and stays in the app.
+- [ ] With nothing open, Back goes to the previous screen; from the first screen it leaves the app.
+
+**Phone width (emulator)**
+- [ ] Type into the Add university and sign-in fields with the keyboard open: the field and the dialog's buttons stay visible.
+- [ ] The bottom tab bar is shown and nothing scrolls sideways on any of the three screens.
+- [ ] Load several universities and items with very long titles (invented, 100+ characters) and check that Dashboard rows and personal task rows wrap, University cards and their modals fit, and the Dashboard tabs wrap or scroll within their own row, with no horizontal page scroll.

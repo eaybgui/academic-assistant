@@ -1,9 +1,12 @@
 //! Pure helpers for the LMS login window: start URLs, redirect/landing detection,
 //! and turning captured cookies into the stored session (spec §6).
 
+use academic_core::ports::LmsError;
 use academic_infra::lms::blackboard::{encode_session, SessionCookie};
 use academic_infra::secrets::MAX_SECRET_BYTES;
 use rand::distr::{Alphanumeric, SampleString};
+
+use super::sign_in_result::blackboard_done_prefix;
 
 const MOODLE_TOKEN_PREFIX: &str = "moodlemobile://token=";
 const PASSPORT_LENGTH: usize = 32;
@@ -29,9 +32,10 @@ pub fn blackboard_start_url(base_url: &str) -> String {
 
 /// True once the window shows an Ultra page (e.g. `/ultra/stream`), which only
 /// happens after a successful sign-in. `/ultra` itself redirects to the login page.
+#[cfg_attr(target_os = "android", allow(dead_code))] // the Android screen applies the same prefix natively
 pub fn is_blackboard_signed_in(url: &str, base_url: &str) -> bool {
-    url.strip_prefix(base_url)
-        .is_some_and(|path| path.starts_with("/ultra/") && path.len() > "/ultra/".len())
+    url.strip_prefix(&blackboard_done_prefix(base_url))
+        .is_some_and(|rest| !rest.is_empty())
 }
 
 /// A cookie as read from the webview: name, value and optional domain attribute.
@@ -73,6 +77,17 @@ pub fn encode_session_cookies(
         ));
     }
     Ok(encoded)
+}
+
+/// [`encode_session_cookies`] with the failure mapped to the sign-in error. The log
+/// line for an oversized session carries cookie names only.
+pub fn session_credential(cookies: Vec<RawCookie>, host: &str) -> Result<String, LmsError> {
+    encode_session_cookies(cookies, host).map_err(|error| {
+        if let CookieCaptureError::TooLarge(names) = &error {
+            tracing::warn!(cookie_names = ?names, "blackboard session exceeds the secret size limit");
+        }
+        LmsError::Auth(error.to_string())
+    })
 }
 
 fn domain_matches(domain: Option<&str>, host: &str) -> bool {
@@ -164,5 +179,18 @@ mod tests {
             encode_session_cookies(vec![raw("BbRouter", &big, None)], "uah.blackboard.com"),
             Err(CookieCaptureError::TooLarge(vec!["BbRouter".into()]))
         );
+    }
+
+    #[test]
+    fn session_credential_maps_failures_to_auth_errors() {
+        let empty = session_credential(vec![], "uah.blackboard.com").unwrap_err();
+        assert!(matches!(&empty, LmsError::Auth(_)));
+        assert_eq!(empty.to_string(), CookieCaptureError::Empty.to_string());
+        let big = "v".repeat(MAX_SECRET_BYTES);
+        let too_large = session_credential(vec![raw("BbRouter", &big, None)], "uah.blackboard.com")
+            .unwrap_err();
+        assert!(matches!(&too_large, LmsError::Auth(_)));
+        assert!(!too_large.to_string().contains(&big));
+        assert!(session_credential(vec![raw("a", "b", None)], "uah.blackboard.com").is_ok());
     }
 }

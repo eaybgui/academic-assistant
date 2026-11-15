@@ -10,3 +10,6 @@ src-tauri/gen/schemas/
 
 # Real LMS API captures: personal data, never commit (public repo, see AGENTS.md 11.2)
 crates/infra/tests/fixtures/lms-local/
+
+# Release signing keys
+*.jks
