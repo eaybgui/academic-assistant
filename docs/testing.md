@@ -411,7 +411,7 @@ stay on Windows; Kotlin and sign-in behaviour is verified only here.
 
 **Install and layout**
 - [ ] Install the APK (`adb install -r`, with "Install via USB" on for Xiaomi). The app opens.
-- [ ] Only Dashboard, Calendar and Universities exist (no Announcements, Email accounts, Email runs or Settings).
+- [ ] Only Dashboard, Calendar, Marks and Universities exist (no Announcements, Email accounts, Email runs or Settings).
 - [ ] The bottom tab bar is visible above the gesture handle and the status bar does not cover the content.
 
 **Universities and sign-in**
@@ -430,6 +430,10 @@ stay on Windows; Kotlin and sign-in behaviour is verified only here.
 **Personal tasks and Calendar**
 - [ ] Add a personal task; edit it, mark it done, delete it; it shows on the Dashboard.
 - [ ] Calendar: dots on days with entries, tapping a day lists its entries, adding a task from a day works.
+
+**Marks**
+- [ ] The four-tab bottom bar (Dashboard, Calendar, Marks, Universities) stays usable at phone width; Marks opens its page.
+- [ ] Marks: graded items grouped by university and course, long course names wrap, a non-numeric mark (for example `Apto`) shows as given, tapping a title opens its details.
 
 **Persistence, session and offline**
 - [ ] Force-stop and reopen the app: data and sign-ins are still there.

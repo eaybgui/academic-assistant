@@ -28,6 +28,14 @@ export function DashboardIcon() {
   );
 }
 
+export function MarksIcon() {
+  return (
+    <NavSvg>
+      <path d="M12 3l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8-5.3 2.8 1-6L3.3 9.4l6-.9L12 3z" />
+    </NavSvg>
+  );
+}
+
 export function CalendarIcon() {
   return (
     <NavSvg>

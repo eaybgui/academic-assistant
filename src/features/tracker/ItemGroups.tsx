@@ -1,4 +1,5 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo } from 'react';
+import CollapsibleSummary from './CollapsibleSummary';
 import type { TrackerEntry } from './entries';
 import EntryRow from './EntryRow';
 import { groupByStatus, groupByTime, type GroupedItems } from './grouping';
@@ -44,40 +45,24 @@ export default function ItemGroups({ entries, groupBy, showUniversity, onOpen }:
     <div className="flex flex-col gap-6">
       {grouped.groups.map((group) => (
         <details key={group.key} open className="group flex flex-col gap-2">
-          <Summary>
+          <CollapsibleSummary>
             <h2 className={SUBSECTION_TITLE}>
               {group.label} <span className="font-normal text-neutral-500">{group.items.length}</span>
             </h2>
-          </Summary>
+          </CollapsibleSummary>
           {rows(group.items)}
         </details>
       ))}
       {grouped.completed.length > 0 ? (
         <details className="group flex flex-col gap-2">
-          <Summary>
+          <CollapsibleSummary>
             <span className={SUBSECTION_TITLE}>
               {completedLabel} ({grouped.completed.length})
             </span>
-          </Summary>
+          </CollapsibleSummary>
           {rows(grouped.completed)}
         </details>
       ) : null}
     </div>
-  );
-}
-
-/** Clickable section header with a chevron that turns when the section is open. */
-function Summary({ children }: { children: ReactNode }) {
-  return (
-    <summary className="mb-2 flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 12 12"
-        className="h-3 w-3 shrink-0 text-neutral-500 transition-transform group-open:rotate-90"
-      >
-        <path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      </svg>
-      {children}
-    </summary>
   );
 }

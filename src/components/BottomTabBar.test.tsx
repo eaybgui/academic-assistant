@@ -14,13 +14,14 @@ function renderBar(path: string) {
 }
 
 describe('BottomTabBar', () => {
-  it('lists the three sections in a labelled navigation', () => {
+  it('lists the four sections in a labelled navigation', () => {
     renderBar('/');
 
     const nav = screen.getByRole('navigation', { name: 'Sections' });
     expect(Array.from(nav.querySelectorAll('a')).map((link) => link.textContent)).toEqual([
       'Dashboard',
       'Calendar',
+      'Marks',
       'Universities',
     ]);
   });

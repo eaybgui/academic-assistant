@@ -13,7 +13,7 @@ eslint.config.js             Flat ESLint config (typescript-eslint, react-hooks,
 vitest.setup.ts              Test environment setup (jest-dom matchers, <dialog> polyfill)
 src/
   main.tsx                   App entry: QueryClientProvider + CheckRunProvider + SyncProvider + HashRouter
-  App.tsx                    Route table (`/`, `/calendar`, `/universities`; `/announcements`, `/accounts`, `/runs`, `/settings` only when the email switch is on; unknown paths redirect to `/`)
+  App.tsx                    Route table (`/`, `/calendar`, `/marks`, `/universities`; `/announcements`, `/accounts`, `/runs`, `/settings` only when the email switch is on; unknown paths redirect to `/`)
   index.css                  Tailwind entry point (`@import "tailwindcss";`)
   components/
     Layout.tsx                Collapsible sidebar navigation + content outlet
@@ -27,6 +27,7 @@ src/
     sync/                     App-level LMS sync state (SyncProvider, useSync)
     tracker/                  Dashboard (`/`): LMS items and personal tasks grouped by time or status, details, banners
     calendar/                 Calendar (`/calendar`): month grid with a dot per entry, selected-day list, add a personal task
+    marks/                    Marks (`/marks`): graded items grouped by university and course
     universities/             Universities page, add wizard, course selection
     announcements/            Announcements (`/announcements`): email results with the Check now header
     results/                  Result row, filters modal (used by Announcements)
@@ -77,13 +78,13 @@ sidebar to icons only (`w-16`) and hides the app title. When collapsed, each lin
 accessible name (the label is rendered `sr-only`) and a `title` tooltip, and the Announcements
 unseen badge becomes a small red dot on the icon with an `sr-only` "N unseen" text. The preference is
 stored in `localStorage` under `academic-assistant.sidebar-collapsed`; reads and writes are wrapped
-in try/catch and fall back to expanded. The items are Dashboard (`/`), Calendar (`/calendar`),
+in try/catch and fall back to expanded. The items are Dashboard (`/`), Calendar (`/calendar`), Marks (`/marks`),
 Announcements, Universities, Email accounts, Email runs and Settings; Announcements is disabled while no course is tracked (see
 [tracker-universities.md](tracker-universities.md)).
 
 The email items (Announcements, Email accounts, Email runs, Settings) and their routes exist only when
 `EMAIL_FEATURES_ENABLED` (`src/config/features.ts`, true when the build-time env var
-`VITE_EMAIL_FEATURES` is exactly `true`) is on. When off, the sidebar shows only Dashboard, Calendar and
+`VITE_EMAIL_FEATURES` is exactly `true`) is on. When off, the sidebar shows only Dashboard, Calendar, Marks and
 Universities, the Layout's email-only queries (`getDashboard`, `getUniversities`) are disabled, and
 `App.tsx` registers a catch-all route that redirects any unknown path to `/`.
 
