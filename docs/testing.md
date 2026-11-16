@@ -358,6 +358,18 @@ the first run is still a good habit.
     is as you left it, and nothing was added to or removed from the list by the sync.
 14. **Logs.** Open `%APPDATA%\dev.eaybar.academic-assistant\logs`: no task titles or notes.
 
+## Marks acceptance checklist (manual, desktop)
+
+For the user, in the running app (`npm run tauri dev`). Record date, result and observations for each line.
+
+1. **Marks in the sidebar.** **Marks** appears right after **Calendar** and opens the page.
+2. **Grouped marks.** After a sync, graded items appear grouped by university and then by course,
+   each course collapsible with its mark count. The mark reads exactly as the platform shows it,
+   whether a number (`8.5 / 10`), a letter (`B+`) or pass/fail (`Apto`).
+3. **Hidden items.** Hide a graded item on the Dashboard: its mark still appears on Marks.
+4. **Details.** Click a title: its details open.
+5. **No marks.** With no graded items, the page shows "No marks yet. Graded work appears here after a sync."
+
 ## Phase 2 · M1 sign-in gate (manual, real accounts; historical)
 
 This was the first gate of Phase 2 (sign-in only). Its lines are kept as a reference for the login
@@ -411,7 +423,7 @@ stay on Windows; Kotlin and sign-in behaviour is verified only here.
 
 **Install and layout**
 - [ ] Install the APK (`adb install -r`, with "Install via USB" on for Xiaomi). The app opens.
-- [ ] Only Dashboard, Calendar and Universities exist (no Announcements, Email accounts, Email runs or Settings).
+- [ ] Only Dashboard, Calendar, Marks and Universities exist (no Announcements, Email accounts, Email runs or Settings).
 - [ ] The bottom tab bar is visible above the gesture handle and the status bar does not cover the content.
 
 **Universities and sign-in**
@@ -430,6 +442,10 @@ stay on Windows; Kotlin and sign-in behaviour is verified only here.
 **Personal tasks and Calendar**
 - [ ] Add a personal task; edit it, mark it done, delete it; it shows on the Dashboard.
 - [ ] Calendar: dots on days with entries, tapping a day lists its entries, adding a task from a day works.
+
+**Marks**
+- [ ] The four-tab bottom bar (Dashboard, Calendar, Marks, Universities) stays usable at phone width; Marks opens its page.
+- [ ] Marks: graded items grouped by university and course, long course names wrap, a non-numeric mark (for example `Apto`) shows as given, tapping a title opens its details.
 
 **Persistence, session and offline**
 - [ ] Force-stop and reopen the app: data and sign-ins are still there.
